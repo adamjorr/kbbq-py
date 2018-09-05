@@ -11,41 +11,62 @@ import os.path
 import sys
 import re
 
-def new_count_qual_scores(samfile, ref, vcf, calibrated_quals):
-    print(ek.tstamp(), "Counting Base Quality Scores . . .", file=sys.stderr)
-    numerrors = np.zeros(43, dtype = np.uint64)
-    numtotal = np.zeros(43, dtype = np.uint64)
-    caliberrs = np.zeros(43, dtype = np.uint64)
-    calibtotal = np.zeros(43, dtype = np.uint64)
-    for read in samfile:
-        if (read.is_unmapped or read.mate_is_unmapped):
-            continue
-        if (read.is_secondary or read.is_supplementary):
-            continue
+def load_positions(posfile):
+    d = dict()
+    with open(posfile, 'r') as infh:
+        for line in infh:
+            chrom, pos = line.rstrip().split()
+            d.setdefault(chrom, list()).append(int(pos))
+    return d
 
-        refchr = read.reference_name
-        readname = read.query_name
-        assert read.is_read1 or read.is_read2
-        suffix = ("1" if read.is_read1 else "2")
-        fullname = readname + "/" + suffix
-        if not fullname in calibrated_quals.keys():
-            continue
+def find_rcorrected_sites(uncorrfile, corrfile):
+    print(ek.tstamp(), "Finding Rcorrected sites . . .", file=sys.stderr)
+    uncorr_reads = list(pysam.FastxFile(uncorrfile))
+    corr_reads = list(pysam.FastxFile(corrfile))
+    #verify the sequences are the same and can be accessed by index
+    for i in range(len(corr_reads)):
+        try:
+            assert corr_reads[i].name.startswith(uncorr_reads[i].name)
+        except AssertionError:
+            print("Corr_set[i]:",corr_reads[i])
+            print("Uncorr_Set[i]:", uncorr_reads[i])
+            raise
 
-        refpositions = read.get_reference_positions(full_length=True) #these should be 1-based positions but are actually 0-based
-        errorpositions = np.array([i for i,pos in enumerate(refpositions) if pos is None or (read.query_sequence[i] != ref[refchr][pos] and pos+1 not in vcf[refchr])], dtype=np.intp)
-        quals = np.array(read.query_qualities, dtype=np.intp)
-        cquals = calibrated_quals[fullname]
-        np.add.at(numtotal,quals,1)
-        np.add.at(numerrors,quals[errorpositions],1)
-        np.add.at(calibtotal, cquals,1)
-        np.add.at(caliberrs, cquals[errorpositions],1)
-    return numerrors, numtotal, caliberrs, calibtotal
+    names = np.zeros(len(uncorr_reads), dtype = np.unicode_)
+    seqlen = len(uncorr[0].get_quality_array())
+    rawquals = np.zeros([len(uncorr), seqlen], dtype = np.int64)
+    rcorrected = np.zeros([len(uncorr),seqlen], dtype = np.bool_)
+    for i in range(len(uncorr_reads)):
+        names[i] = uncorr_reads[i].name
+        rawquals[i,:] = uncorr_reads[i].get_quality_array()
+        uncorr_s = np.array(list(uncorr_reads[i].sequence), dtype = np.unicode_)
+        corr_s = np.array(list(corr_reads[i].sequence), dtype = np.unicode_)
+        rcorrected[i] = (uncorr_s == corr_s)
+    return names, rawquals, rcorrected, seqlen
 
-def count_quals_from_plp(plpfilename, var_pos, calibrated_quals, uncalibrated_quals, suffix):
-    numerrors = np.zeros(43, dtype = np.uint64)
-    numtotal = np.zeros(43, dtype = np.uint64)
-    caliberrs = np.zeros(43, dtype = np.uint64)
-    calibtotal = np.zeros(43, dtype = np.uint64)
+def train_regression(rawquals, rcorrected, tol = 1e-8)
+    print(ek.tstamp(), "Doing Logit Regression", file=sys.stderr)
+    lr = LR(tol = tol)
+    lr.fit(rawquals.flatten().reshape(-1,1), rcorrected.flatten())
+    return lr
+
+def recalibrate(lr, quals)
+    print(ek.tstamp(), "Recalibrating Quality Scores . . .", file = sys.stderr)
+    shape = quals.shape
+    probs = np.array(lr.predict_proba(quals.flatten().reshape(-1,1))[:,1].reshape(shape), dtype = np.longdouble)
+    q = np.array(-10.0 * np.log10(probs), dtype = np.longdouble)
+    quals = np.array(np.rint(q), dtype=np.int)
+    quals = np.clip(quals, 0, 43)
+    return quals
+
+def process_plp(plpfilename, var_pos, names, seqlen, suffix):
+    """
+    Returns an array of gatk calibrated qualities and actually erroneous sites
+    """
+    print(ek.tstamp(), "Processing Pileup" + plpfilename + ". . .", file = sys.stderr)
+    gatkcalibratedquals = np.zeros([len(names), seqlen], dtype = np.int)
+    erroneous = np.zeros([len(names), seqlen], dtype = np.bool_)
+
     numfinder = re.compile('[\+-](\d+)')
     with open(plpfilename, 'r') as infh:
         varidx = {k : 0 for k in var_pos.keys()}
@@ -67,153 +88,93 @@ def count_quals_from_plp(plpfilename, var_pos, calibrated_quals, uncalibrated_qu
             
             match = numfinder.search(bases)
             while match:
-                try:
-                    bases = bases[:match.start()] + bases[(match.end() + int(match[1])):]
-                except TypeError:
-                    print("Bases:",bases)
-                    print("Match:",match)
-                    raise
+                #remove only the specified number of bases inserted or deleted
+                bases = bases[:match.start()] + bases[(match.end() + int(match[1])):]
                 match = numfinder.search(bases)
             
-            #bases = re.sub('\+[0-9]+[ACGTNacgtn]+', '', bases)
-            #bases = re.sub('-[0-9]+[ACGTNacgtn]+', '', bases)
-            try:
-                assert len(bases) == int(depth)
-            except AssertionError:
-                print("Bases:", bases)
-                print("Depth:", depth)
-                print("File:", plpfilename)
-                print("Line:", line)
-                raise
-                
+            assert len(bases) == int(depth)
             assert len(bases) == len(quals)
+
             bases = np.array(list(bases), dtype = np.unicode_)
-            erroneous = np.array(np.logical_and(bases != '.', bases != ','))
+            errs = np.array(np.logical_and(bases != '.', bases != ','))
 
             qpos = np.array(qpos.split(','), dtype = np.int) - 1
             qname = qname.rstrip()
             qname = np.array(qname.split(','), dtype = np.unicode_)
             qname = np.core.defchararray.add(qname, suffix)
-            try:
-                quals = np.array([uncalibrated_quals[qname[i]][qpos[i]] for i in range(len(qname))], dtype = np.int)
-                calibquals = np.array([calibrated_quals[qname[i]][qpos[i]] for i in range(len(qname))], dtype = np.int)
-            except KeyError:
-                continue
-            np.add.at(numerrors, quals[erroneous], 1)
-            np.add.at(numtotal, quals, 1)
-            np.add.at(caliberrs, calibquals[erroneous], 1)
-            np.add.at(calibtotal, calibquals, 1)
-    return numerrors, numtotal, caliberrs, calibtotal
 
-def load_positions(posfile):
-    d = dict()
-    with open(posfile, 'r') as infh:
-        for line in infh:
-            chrom, pos = line.rstrip().split()
-            d.setdefault(chrom, list()).append(int(pos))
-    return d
+            quals = np.array(list(quals), dtype = np.unicode_)
+            quals = np.array(quals.view(np.uint32) - 33, dtype = np.uint32)
+            ##here
+            gatkcalibratedquals[names == qname, qpos] = quals
+            erroneous[names == qname, qpos] = errs
 
-def find_rcorrected_sites(uncorrfile, corrfile):
-    print(ek.tstamp(), "Finding Rcorrected sites", file=sys.stderr)
-    uncorr_set = list(pysam.FastxFile(uncorrfile))
-    corr_set = list(pysam.FastxFile(corrfile))
-    #verify the sequences are the same and can be accessed by index
-    for i in range(len(corr_set)):
-        try:
-            assert corr_set[i].name.startswith(uncorr_set[i].name)
-        except AssertionError:
-            print("Corr_set[i]:",corr_set[i])
-            print("Uncorr_Set[i]:", uncorr_set[i])
-            raise
+    return gatkcalibratedquals.copy(), erroneous.copy()
 
+def plot_qual_scores(numerrors, numtotal, plotname, plottitle = None):
+    print(ek.tstamp(), "Making Base Quality Score Plot . . .", file=sys.stderr)
+    plottitle = (plottitle if plottitle is not None else plotname)
+    numtotal = np.ma.masked_array(numtotal, mask = (numtotal == 0))
+    #numtotal[numtotal == 0] = np.nan #don't divide by 0
+    p = numerrors/numtotal
+    #p[p == 0] = 1e-4 #1e-4 is the largest quality score, 40
+    q = -10.0*np.ma.log10(p)
+    q = np.ma.masked_array(np.rint(q), dtype=np.int)
+    q = np.clip(q, 0, 42)
+    x = np.arange(len(p))
+    mse = np.mean(np.square(x - q))
     
+    sns.set()
+    qualplot = plt.figure()
+    ax = qualplot.add_subplot(111)
+    qualplot.suptitle(plottitle)
+    plt.plot(x)
+    plt.plot(np.arange(len(q))[np.logical_not(q.mask)], q[np.logical_not(q.mask)] , 'o-')
+    plt.xlabel("Predicted Quality Score")
+    plt.ylabel("Actual Quality Score")
+    plt.legend(labels = ["Perfect","Estimated"], loc = "upper left")
+    plt.text(0.5,0.01, "Mean squared error: " + str(mse),
+        horizontalalignment = 'center', verticalalignment = 'bottom',
+        transform = ax.transAxes)
+    qualplot.savefig(plotname)
 
 def main():
     np.seterr(all = 'raise')
     print(ek.tstamp(), "Starting . . .", file=sys.stderr)
     uncorrfile = "reads.fq"
     corrfile = "nospace.reads.cor.fq"
+    names, rawquals, rcorrected, seqlen = find_rcorrected_sites(uncorrfile, corrfile)
+    lr = train_regression(rawquals, rcorrected)
+    calibquals = recalibrate(lr, rawquals)
 
-    uncorr_set = list(pysam.FastxFile(uncorrfile))
-    corr_set = list(pysam.FastxFile(corrfile))
-    #verify the sequences are the same and can be accessed by index
-    for i in range(len(corr_set)):
-        try:
-            assert corr_set[i].name.startswith(uncorr_set[i].name)
-        except AssertionError:
-            print("Corr_set[i]:",corr_set[i])
-            print("Uncorr_Set[i]:", uncorr_set[i])
-            raise
-    print(ek.tstamp(),"1")
-    uncorr_reads, corr_reads = uncorr_set, corr_set
-    
-    names = np.array([r.name for r in uncorr_reads], dtype = np.unicode_)
-    uncorr_seqs = np.array([str(r.sequence) for r in uncorr_reads], dtype = np.unicode_)
-    uncorr_quals = np.array([r.get_quality_array() for r in uncorr_reads], dtype = np.int)
-    corr_seqs = np.array([str(r.sequence) for r in corr_reads], dtype = np.unicode_)
-
-    print(ek.tstamp(),"2")
-
-    nonerroneous_scores = np.zeros(43, dtype = np.int)
-    erroneous_scores = np.zeros(43, dtype = np.int)
-    for i in range(len(corr_seqs)):
-        uncorr_s = uncorr_seqs[i]
-        corr_s = corr_seqs[i]
-        sites_corrected = np.array([uncorr_s[j] != corr_s[j] for j in range(len(uncorr_s))])
-        np.add.at(nonerroneous_scores, uncorr_quals[i][np.logical_not(sites_corrected)].flatten(), 1)
-        np.add.at(erroneous_scores, uncorr_quals[i][sites_corrected].flatten(), 1)
-
-    print(ek.tstamp(), "3")
-
-    #build "training" data for logit regression
-    x_nonerror = np.repeat(np.arange(43), nonerroneous_scores)
-    x_error = np.repeat(np.arange(43), erroneous_scores)
-    x = np.concatenate([x_nonerror, x_error])
-    y = np.repeat([0,1], [np.sum(nonerroneous_scores),np.sum(erroneous_scores)])
-    assert len(x) == len(y)
-    lr = LR(tol = 1e-8)
-    lr.fit( x.reshape(-1,1), y)
-
-    print(ek.tstamp(), "4")
-
-    #ir = IR( out_of_bounds = 'clip' )
-    #ir.fit( x, y)
-    # how to get recalibrated probability: 
-    #newp = lr.predict_proba( p_test.reshape(-1,1))[:,1]
-
-    recalibratedfile = "reads.recalibrated.fq"
-    qtostr = np.arange(43, dtype = np.uint32) + 33
-    qtostr = qtostr.view('U1')
-    uncalibrated_quals = dict()
-    calibrated_quals = dict()
-    with open(recalibratedfile, 'w') as fout:
-        for entry in uncorr_set:
-            oldp = np.array(entry.get_quality_array(), dtype = np.int)
-            newp = np.array(lr.predict_proba(oldp.reshape(-1,1))[:,1], dtype = np.longdouble)
-            #newp = np.array(ir.transform(oldp), dtype = np.longdouble)
-            q = -10.0*np.log10(newp)
-            quals = np.array(np.rint(q), dtype=np.int)
-            quals = np.clip(quals, 0, 43)
-            entry.quality = ''.join(qtostr[quals])
-            fout.write(str(entry))
-            uncalibrated_quals[entry.name] = np.array(oldp)
-            calibrated_quals[entry.name] = np.array(quals, dtype = np.int)
-
-    print(ek.tstamp(), "5")
+    #qtostr = np.arange(43, dtype = np.uint32) + 33
+    #qtostr = qtostr.view('U1')
 
     bad_positions = load_positions("variable_sites.txt")
-    numerrs1, numtotal1, caliberrs1, calibtotal1 = count_quals_from_plp('only_confident.1.plp', bad_positions, calibrated_quals, uncalibrated_quals, "/1")
-    numerrs2, numtotal2, caliberrs2, calibtotal2 = count_quals_from_plp('only_confident.2.plp', bad_positions, calibrated_quals, uncalibrated_quals, "/2")
-    print(ek.tstamp(), "6")
-    numerrs = numerrs1 + numerrs2
-    numtotal = numtotal1 + numtotal2
-    caliberrs = caliberrs1 + caliberrs2
-    calibtotal = calibtotal1 + calibtotal2
-    print(ek.tstamp(), "\nNumerrs:", numerrs, "\nNumtotal", numtotal, "\nCaliberrs", caliberrs, "\nCalibtotal", calibtotal, file=sys.stderr)
+    plpfile1 = "only_confident.1.plp"
+    plpfile2 = "only_confident.2.plp"
+    gatkcalibratedquals1, erroneous1 = process_plp(plpfile1, var_pos, names, seqlen, "/1")
+    gatkcalibratedquals2, erroneous2 = process_plp(plpfile2, var_pos, names, seqlen, "/2")
+    gatkcalibratedquals = (gatkcalibratedquals1.flatten() + gatkcalibratedquals2.flatten()).reshape(gatkcalibratedquals1.shape)
+    erroneous = np.logical_or(erroneous1.flatten(), erroneous2.flatten()).reshape(erroneous1.shape)
+
+    #important arrays: names, rawquals, rcorrected, calibquals, gatkcalibratedquals, erroneous
+    print(ek.tstamp(), "Tallying . . .", file=sys.stderr)
+    numerrors = np.zeros(42, dtype = np.uint64)
+    numtotal = np.zeros(42, dtype = np.uint64)
+    np.add.at(numerrors, rawquals.flatten()[erroneous.flatten()], 1)
+    np.add.at(numtotal, rawquals.flatten(), 1)
+
+    caliberrs = np.zeros(42, dtype = np.uint64)
+    calibtotal = np.zeros(42, dtype = np.uint64)
+    np.add.at(caliberrs, calibquals.flatten()[erroneous.flatten()], 1)
+    np.add.at(calibtotal, calibquals.flatten(), 1)
+
     ek.plot_qual_scores(numerrs, numtotal, "qualscores.png", "Raw Reads")
     ek.plot_qual_scores(caliberrs, calibtotal, "calibrated.png", "After Calibration")
     assert np.all(numerrs <= numtotal)
     assert np.all(caliberrs <= calibtotal)
+    assert np.all(numtotal == calibtotal)
 
 if __name__ == '__main__':
     main()
