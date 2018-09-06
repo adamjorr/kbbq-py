@@ -33,9 +33,9 @@ def find_rcorrected_sites(uncorrfile, corrfile):
             raise
 
     names = np.zeros(len(uncorr_reads), dtype = np.unicode_)
-    seqlen = len(uncorr[0].get_quality_array())
-    rawquals = np.zeros([len(uncorr), seqlen], dtype = np.int64)
-    rcorrected = np.zeros([len(uncorr),seqlen], dtype = np.bool_)
+    seqlen = len(uncorr_reads[0].get_quality_array())
+    rawquals = np.zeros([len(uncorr_reads), seqlen], dtype = np.int64)
+    rcorrected = np.zeros([len(uncorr_reads),seqlen], dtype = np.bool_)
     for i in range(len(uncorr_reads)):
         names[i] = uncorr_reads[i].name
         rawquals[i,:] = uncorr_reads[i].get_quality_array()
@@ -44,13 +44,13 @@ def find_rcorrected_sites(uncorrfile, corrfile):
         rcorrected[i] = (uncorr_s == corr_s)
     return names, rawquals, rcorrected, seqlen
 
-def train_regression(rawquals, rcorrected, tol = 1e-8)
+def train_regression(rawquals, rcorrected, tol = 1e-4):
     print(ek.tstamp(), "Doing Logit Regression", file=sys.stderr)
     lr = LR(tol = tol)
     lr.fit(rawquals.flatten().reshape(-1,1), rcorrected.flatten())
     return lr
 
-def recalibrate(lr, quals)
+def recalibrate(lr, quals):
     print(ek.tstamp(), "Recalibrating Quality Scores . . .", file = sys.stderr)
     shape = quals.shape
     probs = np.array(lr.predict_proba(quals.flatten().reshape(-1,1))[:,1].reshape(shape), dtype = np.longdouble)
@@ -63,7 +63,7 @@ def process_plp(plpfilename, var_pos, names, seqlen, suffix):
     """
     Returns an array of gatk calibrated qualities and actually erroneous sites
     """
-    print(ek.tstamp(), "Processing Pileup" + plpfilename + ". . .", file = sys.stderr)
+    print(ek.tstamp(), "Processing Pileup " + plpfilename + " . . .", file = sys.stderr)
     gatkcalibratedquals = np.zeros([len(names), seqlen], dtype = np.int)
     erroneous = np.zeros([len(names), seqlen], dtype = np.bool_)
 
@@ -106,8 +106,9 @@ def process_plp(plpfilename, var_pos, names, seqlen, suffix):
             quals = np.array(list(quals), dtype = np.unicode_)
             quals = np.array(quals.view(np.uint32) - 33, dtype = np.uint32)
             ##here
-            gatkcalibratedquals[names == qname, qpos] = quals
-            erroneous[names == qname, qpos] = errs
+            mask = np.isin(names, qname)
+            gatkcalibratedquals[mask,qpos] = quals
+            erroneous[mask,qpos] = errs
 
     return gatkcalibratedquals.copy(), erroneous.copy()
 
@@ -153,8 +154,8 @@ def main():
     bad_positions = load_positions("variable_sites.txt")
     plpfile1 = "only_confident.1.plp"
     plpfile2 = "only_confident.2.plp"
-    gatkcalibratedquals1, erroneous1 = process_plp(plpfile1, var_pos, names, seqlen, "/1")
-    gatkcalibratedquals2, erroneous2 = process_plp(plpfile2, var_pos, names, seqlen, "/2")
+    gatkcalibratedquals1, erroneous1 = process_plp(plpfile1, bad_positions, names, seqlen, "/1")
+    gatkcalibratedquals2, erroneous2 = process_plp(plpfile2, bad_positions, names, seqlen, "/2")
     gatkcalibratedquals = (gatkcalibratedquals1.flatten() + gatkcalibratedquals2.flatten()).reshape(gatkcalibratedquals1.shape)
     erroneous = np.logical_or(erroneous1.flatten(), erroneous2.flatten()).reshape(erroneous1.shape)
 
