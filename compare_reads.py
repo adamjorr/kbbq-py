@@ -10,6 +10,10 @@ spec.loader.exec_module(ek)
 import os.path
 import sys
 import re
+import matplotlib
+matplotlib.use('Agg')
+import matplotlib.pyplot as plt
+import seaborn as sns
 
 def load_positions(posfile):
     d = dict()
@@ -123,7 +127,7 @@ def plot_qual_scores(numerrors, numtotal, plotname, plottitle = None):
     #p[p == 0] = 1e-4 #1e-4 is the largest quality score, 40
     q = -10.0*np.ma.log10(p)
     q = np.ma.masked_array(np.rint(q), dtype=np.int)
-    q = np.clip(q, 0, 42)
+    q = np.clip(q, 0, 43)
     x = np.arange(len(p))
     mse = np.mean(np.square(x - q))
     
@@ -163,18 +167,18 @@ def main():
 
     #important arrays: names, rawquals, rcorrected, calibquals, gatkcalibratedquals, erroneous
     print(ek.tstamp(), "Tallying . . .", file=sys.stderr)
-    numerrors = np.zeros(42, dtype = np.uint64)
-    numtotal = np.zeros(42, dtype = np.uint64)
+    numerrors = np.zeros(43, dtype = np.uint64)
+    numtotal = np.zeros(43, dtype = np.uint64)
     np.add.at(numerrors, rawquals.flatten()[erroneous.flatten()], 1)
     np.add.at(numtotal, rawquals.flatten(), 1)
 
-    caliberrs = np.zeros(42, dtype = np.uint64)
-    calibtotal = np.zeros(42, dtype = np.uint64)
+    caliberrs = np.zeros(43, dtype = np.uint64)
+    calibtotal = np.zeros(43, dtype = np.uint64)
     np.add.at(caliberrs, calibquals.flatten()[erroneous.flatten()], 1)
     np.add.at(calibtotal, calibquals.flatten(), 1)
 
-    ek.plot_qual_scores(numerrs, numtotal, "qualscores.png", "Raw Reads")
-    ek.plot_qual_scores(caliberrs, calibtotal, "calibrated.png", "After Calibration")
+    plot_qual_scores(numerrors, numtotal, "qualscores.png", "Raw Reads")
+    plot_qual_scores(caliberrs, calibtotal, "calibrated.png", "After Calibration")
     assert np.all(numerrs <= numtotal)
     assert np.all(caliberrs <= calibtotal)
     assert np.all(numtotal == calibtotal)
