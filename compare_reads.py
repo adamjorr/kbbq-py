@@ -32,17 +32,12 @@ def find_rcorrected_sites(uncorrfile, corrfile):
             print("Uncorr_Set[i]:", uncorr_reads[i])
             raise
 
-    names = np.zeros(len(uncorr_reads), dtype = 'U1')
+    names = dict()
     seqlen = len(uncorr_reads[0].get_quality_array())
     rawquals = np.zeros([len(uncorr_reads), seqlen], dtype = np.int64)
     rcorrected = np.zeros([len(uncorr_reads),seqlen], dtype = np.bool_)
-    longestname = 1
     for i in range(len(uncorr_reads)):
-        rname = uncorr_reads[i].name
-        if len(rname) > longestname:
-            longestname = len(rname)
-            names = np.array(names, dtype = ('U' + str(longestname)))
-        names[i] = uncorr_reads[i].name
+        names[uncorr_reads[i].name] = i
         rawquals[i,:] = uncorr_reads[i].get_quality_array()
         uncorr_s = np.array(list(uncorr_reads[i].sequence), dtype = np.unicode_)
         corr_s = np.array(list(corr_reads[i].sequence), dtype = np.unicode_)
@@ -111,8 +106,9 @@ def process_plp(plpfilename, var_pos, names, seqlen, suffix):
             quals = np.array(list(quals), dtype = np.unicode_)
             quals = np.array(quals.view(np.uint32) - 33, dtype = np.uint32)
             ##here
-            mask = np.nonzero(np.isin(names, qname, assume_unique=True))
-            present = np.nonzero(np.isin(qname, names[mask], assume_unique = True))
+            mask = np.array([names.get(n) for n in qname])
+            present = np.flatnonzero(mask)
+            mask = mask[present].astype(np.int)
             gatkcalibratedquals[mask,qpos[present]] = quals[present]
             erroneous[mask,qpos[present]] = errs[present]
 
