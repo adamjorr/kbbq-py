@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 import pysam
 import numpy as np
+import sklearn
 from sklearn.linear_model import LogisticRegression as LR
 from sklearn.isotonic import IsotonicRegression as IR
 import importlib.util
@@ -145,6 +146,34 @@ def plot_qual_scores(numerrors, numtotal, plotname, plottitle = None):
         transform = ax.transAxes)
     qualplot.savefig(plotname)
 
+def plot_calibration(data, truth, labels, plotname, plottitle = None):
+    print(ek.tstamp(), "Making Quality Score Plot . . .", file = sys.stderr)
+    plottitle = (plottitle if plottitle is not None else plotname)
+    sns.set()
+    qualplot = plt.figure()
+    ax = qualplot.add_subplot(111)
+    qualplot.suptitle(plottitle)
+    maxscore = 43
+    plt.plot(np.arange(maxscore), 'k:', label = "Perfect")
+    for i in range(len(data)):
+        label = labels[i]
+        print(ek.tstamp(), "Plotting %s . . ." % (label), file = sys.stderr)
+        estimate = data[i]
+        est_p = np.array(np.power(10.0,-(estimate / 10.0)), dtype = np.longdouble)
+        bscore = sklearn.metrics.brier_score_loss(truth, est_p)
+        numtotal = np.bincount(estimate, minlength = maxscore)
+        numerrs = np.bincount(estimate[truth], minlength = len(numtotal))
+        numtotal = np.ma.masked_where(numtotal == 0, numtotal)
+        p = numerrs / numtotal
+        q = -10.0*np.ma.log10(p)
+        q = np.ma.masked_array(np.rint(q), dtype=np.int)
+        q = np.clip(q, 0, maxscore)
+        plt.plot(np.arange(len(q))[np.logical_not(q.mask)], q[np.logical_not(q.mask)], 'o-', label ="%s, %1.3f" % (label, bscore))
+    plt.xlabel("Predicted Quality Score")
+    plt.ylabel("Actual Quality Score")
+    plt.legend(loc = "upper left") 
+    qualplot.savefig(plotname)
+
 def main():
     np.seterr(all = 'raise')
     print(ek.tstamp(), "Starting . . .", file=sys.stderr)
@@ -166,19 +195,25 @@ def main():
     erroneous = np.logical_or(erroneous1.flatten(), erroneous2.flatten()).reshape(erroneous1.shape)
 
     #important arrays: names, rawquals, rcorrected, calibquals, gatkcalibratedquals, erroneous
-    print(ek.tstamp(), "Tallying . . .", file=sys.stderr)
-    numerrors = np.zeros(43, dtype = np.uint64)
-    numtotal = np.zeros(43, dtype = np.uint64)
-    np.add.at(numerrors, rawquals.flatten()[erroneous.flatten()], 1)
-    np.add.at(numtotal, rawquals.flatten(), 1)
+    # print(ek.tstamp(), "Tallying . . .", file=sys.stderr)
+    # numerrors = np.zeros(43, dtype = np.uint64)
+    # numtotal = np.zeros(43, dtype = np.uint64)
+    # np.add.at(numerrors, rawquals.flatten()[erroneous.flatten()], 1)
+    # np.add.at(numtotal, rawquals.flatten(), 1)
 
-    caliberrs = np.zeros(43, dtype = np.uint64)
-    calibtotal = np.zeros(43, dtype = np.uint64)
-    np.add.at(caliberrs, calibquals.flatten()[erroneous.flatten()], 1)
-    np.add.at(calibtotal, calibquals.flatten(), 1)
+    # caliberrs = np.zeros(43, dtype = np.uint64)
+    # calibtotal = np.zeros(43, dtype = np.uint64)
+    # np.add.at(caliberrs, calibquals.flatten()[erroneous.flatten()], 1)
+    # np.add.at(calibtotal, calibquals.flatten(), 1)
 
-    plot_qual_scores(numerrors, numtotal, "qualscores.png", "Raw Reads")
-    plot_qual_scores(caliberrs, calibtotal, "calibrated.png", "After Calibration")
+    # plot_qual_scores(numerrors, numtotal, "qualscores.png", "Raw Reads")
+    # plot_qual_scores(caliberrs, calibtotal, "calibrated.png", "After Calibration")
+    plot_calibration([rawquals.flatten(), gatkcalibratedquals.flatten(), calibquals.flatten(), rcorrected.flatten()*43],
+        truth = erroneous.flatten(),
+        labels = ["Uncalibrated Scores", "GATK Calibration", "KBBQ - Logit Regression", "Rcorrector"],
+        plotname = 'qualscores.png',
+        plottitle = "Comparison of Calibration Methods")
+
 
 if __name__ == '__main__':
     main()
