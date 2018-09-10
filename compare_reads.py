@@ -46,22 +46,22 @@ def find_rcorrected_sites(uncorrfile, corrfile):
         uncorr_s = np.array(list(uncorr_reads[i].sequence), dtype = np.unicode_)
         corr_s = np.array(list(corr_reads[i].sequence), dtype = np.unicode_)
         rcorrected[i] = (uncorr_s == corr_s)
-    return names, rawquals, rcorrected, seqlen
+    return names, rawquals.copy(), rcorrected.copy(), seqlen
 
 def train_regression(rawquals, rcorrected, tol = 1e-4):
     print(ek.tstamp(), "Doing Logit Regression", file=sys.stderr)
     lr = LR(tol = tol)
-    lr.fit(rawquals.flatten().reshape(-1,1), rcorrected.flatten())
+    lr = lr.fit(rawquals.flatten().reshape(-1,1), rcorrected.flatten())
     return lr
 
-def recalibrate(lr, quals):
+def recalibrate(lr, oldquals):
     print(ek.tstamp(), "Recalibrating Quality Scores . . .", file = sys.stderr)
-    shape = quals.shape
-    probs = np.array(lr.predict_proba(quals.flatten().reshape(-1,1))[:,1].reshape(shape), dtype = np.longdouble)
+    shape = oldquals.shape
+    probs = np.array(lr.predict_proba(oldquals.flatten().reshape(-1,1))[:,0].reshape(shape), dtype = np.longdouble)
     q = np.array(-10.0 * np.log10(probs), dtype = np.longdouble)
     quals = np.array(np.rint(q), dtype=np.int)
     quals = np.clip(quals, 0, 43)
-    return quals
+    return quals.copy()
 
 def process_plp(plpfilename, var_pos, names, seqlen, suffix):
     """
@@ -179,9 +179,6 @@ def main():
 
     plot_qual_scores(numerrors, numtotal, "qualscores.png", "Raw Reads")
     plot_qual_scores(caliberrs, calibtotal, "calibrated.png", "After Calibration")
-    assert np.all(numerrs <= numtotal)
-    assert np.all(caliberrs <= calibtotal)
-    assert np.all(numtotal == calibtotal)
 
 if __name__ == '__main__':
     main()
