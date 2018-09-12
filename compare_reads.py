@@ -119,33 +119,6 @@ def process_plp(plpfilename, var_pos, names, seqlen, suffix):
 
     return gatkcalibratedquals.copy(), erroneous.copy()
 
-def plot_qual_scores(numerrors, numtotal, plotname, plottitle = None):
-    print(ek.tstamp(), "Making Base Quality Score Plot . . .", file=sys.stderr)
-    plottitle = (plottitle if plottitle is not None else plotname)
-    numtotal = np.ma.masked_array(numtotal, mask = (numtotal == 0))
-    #numtotal[numtotal == 0] = np.nan #don't divide by 0
-    p = numerrors/numtotal
-    #p[p == 0] = 1e-4 #1e-4 is the largest quality score, 40
-    q = -10.0*np.ma.log10(p)
-    q = np.ma.masked_array(np.rint(q), dtype=np.int)
-    q = np.clip(q, 0, 43)
-    x = np.arange(len(p))
-    mse = np.mean(np.square(x - q))
-    
-    sns.set()
-    qualplot = plt.figure()
-    ax = qualplot.add_subplot(111)
-    qualplot.suptitle(plottitle)
-    plt.plot(x)
-    plt.plot(np.arange(len(q))[np.logical_not(q.mask)], q[np.logical_not(q.mask)] , 'o-')
-    plt.xlabel("Predicted Quality Score")
-    plt.ylabel("Actual Quality Score")
-    plt.legend(labels = ["Perfect","Estimated"], loc = "upper left")
-    plt.text(0.5,0.01, "Mean squared error: " + str(mse),
-        horizontalalignment = 'center', verticalalignment = 'bottom',
-        transform = ax.transAxes)
-    qualplot.savefig(plotname)
-
 def plot_calibration(data, truth, labels, plotname, plottitle = None):
     print(ek.tstamp(), "Making Quality Score Plot . . .", file = sys.stderr)
     plottitle = (plottitle if plottitle is not None else plotname)
@@ -194,23 +167,21 @@ def main():
     gatkcalibratedquals = (gatkcalibratedquals1.flatten() + gatkcalibratedquals2.flatten()).reshape(gatkcalibratedquals1.shape)
     erroneous = np.logical_or(erroneous1.flatten(), erroneous2.flatten()).reshape(erroneous1.shape)
 
-    #important arrays: names, rawquals, rcorrected, calibquals, gatkcalibratedquals, erroneous
-    # print(ek.tstamp(), "Tallying . . .", file=sys.stderr)
-    # numerrors = np.zeros(43, dtype = np.uint64)
-    # numtotal = np.zeros(43, dtype = np.uint64)
-    # np.add.at(numerrors, rawquals.flatten()[erroneous.flatten()], 1)
-    # np.add.at(numtotal, rawquals.flatten(), 1)
+    ## This is a cheesy function to run the test without a lot of boilerplate
+    readnames, readquals = ek.do_recalibration()
+    hmmquals = np.zeros([len(names), seqlen], dtype = np.int64)
+    for i in range(len(readquals)):
+        idx = names.get(readnames[i])
+        if idx is None:
+            continue
+        hmmquals[idx,:] = readquals[i]
 
-    # caliberrs = np.zeros(43, dtype = np.uint64)
-    # calibtotal = np.zeros(43, dtype = np.uint64)
-    # np.add.at(caliberrs, calibquals.flatten()[erroneous.flatten()], 1)
-    # np.add.at(calibtotal, calibquals.flatten(), 1)
+    #important arrays: names, rawquals, rcorrected, calibquals, gatkcalibratedquals, erroneous, hmmquals
 
-    # plot_qual_scores(numerrors, numtotal, "qualscores.png", "Raw Reads")
-    # plot_qual_scores(caliberrs, calibtotal, "calibrated.png", "After Calibration")
-    plot_calibration([rawquals.flatten(), gatkcalibratedquals.flatten(), calibquals.flatten(), rcorrected.flatten()*43],
+    rawquals = np.ma.masked_equal(rawquals, 2) #2 is not a quality score in this data
+    plot_calibration([rawquals.flatten(), gatkcalibratedquals.flatten(), calibquals.flatten(), rcorrected.flatten()*43, hmmquals.flatten()],
         truth = erroneous.flatten(),
-        labels = ["Uncalibrated Scores", "GATK Calibration", "KBBQ - Logit Regression", "Rcorrector"],
+        labels = ["Uncalibrated Scores", "GATK Calibration", "KBBQ - Logit Regression", "Rcorrector", "KBBQ - HMM"],
         plotname = 'qualscores.png',
         plottitle = "Comparison of Calibration Methods")
 
