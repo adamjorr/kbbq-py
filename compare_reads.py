@@ -169,26 +169,37 @@ def q_to_p(q):
     p = np.ma.masked_array(np.ma.power(10.0,-(q / 10.0)), dtype = np.longdouble)
     return p
 
-def khmer_nb(seqs, rawquals, erroneous, seqlen, khmerfile):
-    print(ek.tstamp(), "Naively trying a Naive Bayes Classifier...", file = sys.stderr)
+def get_abundances(seqs, seqlen, khmerfile, savefile = None):
     args = khmer.khmer_args.build_counting_args().parse_args()
     alltable = khmer.khmer_args.create_countgraph(args)
     alltable.load(khmerfile)
     ksize = alltable.ksize()
     nkmers = seqlen - ksize + 1
-    getter = alltable.get_kmer_counts
-    abundances = np.ma.masked_array(np.zeros([len(seqs), nkmers], dtype = np.int))
+    if savefile is not None and os.path.exists(savefile):
+        print(ek.tstamp(), "Loading K-mer Abundances", file = sys.stderr)
+        abundances = np.loadtxt(savefile, dtype = np.int64)
+    else:
+        print(ek.tstamp(), "Finding K-mer Abundances", file = sys.stderr)
+        getter = alltable.get_kmer_counts
+        abundances = np.zeros([len(seqs), nkmers], dtype = np.int64)
+        for i in range(len(seqs)):
+            abundances[i,:] = getter(seqs[i])
+        if savefile is not None:
+            np.savetxt(savefile, abundances, fmt = '%d')
+    return abundances, ksize, nkmers
+
+def khmer_nb(seqs, rawquals, erroneous, seqlen, khmerfile):
+    print(ek.tstamp(), "Naively trying a Naive Bayes Classifier...", file = sys.stderr)
+    abundances, ksize, nkmers = get_abundances(seqs, seqlen, khmerfile, savefile = 'abundances.txt')
+    abundances = np.ma.masked_array(abundances)
     erroneous_mers = np.ma.masked_array(np.zeros([len(seqs), nkmers], dtype = np.bool_))
-    print(ek.tstamp(), "Finding K-mer Abundances", file = sys.stderr)
     for i in range(len(seqs)):
-        abundances[i,:] = getter(seqs[i])
         for j in range(nkmers):
             erroneous_bases = erroneous[i,j:j+ksize]
             erroneous_mers[i,j] = np.any(erroneous_bases)
             if np.ma.getmask(erroneous_mers[i,j]) is not np.ma.nomask and np.any(erroneous_bases.mask):
                 erroneous_mers[i,j] = np.ma.masked
                 abundances[i,j] = np.ma.masked
-
     noterr_or_masked = np.logical_not(np.logical_or(erroneous_mers.mask, erroneous_mers.data))
     err_and_notmasked = np.logical_and(erroneous_mers.data, np.logical_not(erroneous_mers.mask))
     erroneous_abundances = np.bincount(abundances[noterr_or_masked].flatten())
@@ -200,35 +211,27 @@ def khmer_nb(seqs, rawquals, erroneous, seqlen, khmerfile):
     elif len(nonerroneous_abundances) > len(erroneous_abundances):
         erronous_abundances.resize(nonerroneous_abundances.shape)
 
-    #all_abundances = np.bincount(abundances[~abundances.mask], minlength = len(erroneous_abundances))
     p_a_given_e = np.array(erroneous_abundances / np.sum(erroneous_abundances), dtype = np.longdouble)
     p_a_given_note = np.array(nonerroneous_abundances / np.sum(nonerroneous_abundances), dtype = np.longdouble)
-    #p_a = np.array(all_abundances / np.sum(all_abundances), dtype = np.longdouble)
     #P(E | O) = P(O | E) * P(E) / P(O) = sum(P(O | S) * P(S | E)) * P(E) / P(O)
-    s_given_e = np.array([0,0,0,0,0,0,1,1,0,0,0,0,0,0,1,1])
-    s_given_note = np.array([1,1,0,1,0,0,0,0,1,1,0,1,1,1,0,1])
+    s_given_e = np.array([0,1,0,1])
+    s_given_note = np.array([1,0,1,1])
     p_s_given_e = s_given_e / np.sum(s_given_e)
     p_s_given_note = s_given_note / np.sum(s_given_note)
-    actual_s_given_e = np.zeros(16, dtype = np.int)
-    actual_s_given_note = np.zeros(16, dtype = np.int)
+    actual_s_given_e = np.zeros(4, dtype = np.int)
+    actual_s_given_note = np.zeros(4, dtype = np.int)
     oldpe = q_to_p(rawquals.copy())
     newpe = oldpe.copy()
     print(ek.tstamp(), "Classifying and Recalibrating", file = sys.stderr)
     for i in range(len(seqs)):
         #just the middles for now
         for j in range(nkmers - ksize - 1):
-            allidxs = np.array([j, j+1, j+ksize, j+ksize+1])
-            #a0 = abundances[i,j]
-            #a1 = abundances[i,j + 1]
-            #a2 = abundances[i,j + ksize]
-            #a3 = abundances[i,j + ksize + 1]
-            a = abundances[i,allidxs] # dim 4,
-            a_given_e = p_a_given_e[a] # dim 4,
-            a_given_note = p_a_given_note[a] # dim 4,
+            allidxs = np.array([j, j+1])
+            a = abundances[i,allidxs] # dim 2,
+            a_given_e = p_a_given_e[a] # dim 2,
+            a_given_note = p_a_given_note[a] # dim 2,
             o = np.stack([a_given_note, a_given_e])
-            first = np.outer(o[:,0],o[:,1]) #first state transition
-            second = np.outer(o[:,2],o[:,3]) #second state transition
-            p_o_given_s = np.outer(first, second).flatten()
+            p_o_given_s = np.outer(o[:,0],o[:,1]).flatten() #first state transition
             p_o_given_e = np.sum(p_o_given_s * p_s_given_e)
             p_o_given_note = np.sum(p_o_given_s * p_s_given_note)
             p_e = oldpe[i,j+ksize]
@@ -241,15 +244,17 @@ def khmer_nb(seqs, rawquals, erroneous, seqlen, khmerfile):
                 actual_nonerrors = np.logical_not(actuals)
                 actual_errors = actuals
                 actual_o = np.stack([actual_nonerrors, actual_errors])
-                actual_first = np.outer(actual_o[:,0],actual_o[:,1])
-                actual_second = np.outer(actual_o[:,2],actual_o[:,3])
-                actuals_outer = np.outer(actual_first, actual_second).flatten()
+                actuals_outer = np.outer(actual_o[:,0],actual_o[:,1]).flatten()
                 if erroneous[i,j + ksize]:
                     actual_s_given_e = actual_s_given_e + actuals_outer
                 else:
                     actual_s_given_note = actual_s_given_note + actuals_outer
     actual_s_given_e = actual_s_given_e / np.sum(actual_s_given_e)
     actual_s_given_note = actual_s_given_note / np.sum(actual_s_given_note)
+    # Modeled P(S|E) [0.   0.   0.   0.   0.   0.   0.25 0.25 0.   0.   0.   0.   0.   0. 0.25 0.25]                                            
+    # Actual P(S|E) [0.         0.         0.         0.         0.         0. 0.02765633 0.1004291  0.         0.         0.         0. 0.         0.         0.12954866 0.74236591]            
+    # Modeled P(S|NOT E) [0.11111111 0.11111111 0.         0.11111111 0.         0. 0.         0.         0.11111111 0.11111111 0.         0.11111111 0.11111111 0.11111111 0.         0.11111111]
+    # Actual P(S|NOT E) [3.17953062e-01 2.12157531e-03 0.00000000e+00 1.04366234e-01 0.00000000e+00 0.00000000e+00 0.00000000e+00 0.00000000e+00 4.98386869e-03 2.48924327e-05 0.00000000e+00 1.72464193e-03 2.11434305e-01 1.59378846e-03 0.00000000e+00 3.55797633e-01]
     print("Modeled P(S|E)",p_s_given_e)
     print("Actual P(S|E)",actual_s_given_e)
     print("Modeled P(S|NOT E)", p_s_given_note)
