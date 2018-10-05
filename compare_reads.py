@@ -8,6 +8,7 @@ import importlib.util
 spec = importlib.util.spec_from_file_location("ek", "/home/ajorr1/bin/jelly/error_kmers.py")
 ek = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(ek)
+import os
 import os.path
 import sys
 import re
@@ -272,11 +273,13 @@ def khmer_nb(seqs, rawquals, erroneous, seqlen, khmerfile):
     return newquals
 
 def pystan_model(modelfile, L, seqlen, ksize, alpha, beta, a, raw_p):
-    sm = pystan.StanModel(file = modelfile, model_name = 'kbbq')
+    os.environ['STAN_NUM_THREADS'] = "32"
+    extra_compile_args = ['-pthreads', '-DSTAN_THREADS']
+    sm = pystan.StanModel(file = modelfile, model_name = 'kbbq', extra_compile_args = extra_compile_args)
     datadict = {'L' : L, 'seqlen' : seqlen, 'ksize' : ksize, 'alpha': alpha, 'beta': beta, 'a' : a}
     estimates = sm.optimizing(data = datadict,
         sample_file = 'samples.csv',
-        init = lambda chain_id = None: {'e' : raw_p},
+        init = lambda chain_id = None: {'e' : raw_p, 'lambda' : [30, 1300]},
         verbose = True)
     return estimates['e'], estimates['kerr'], estimates['lambda']
 
