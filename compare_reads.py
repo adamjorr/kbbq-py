@@ -16,6 +16,8 @@ matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 import seaborn as sns
 import khmer
+import pystan
+import scipy.stats
 
 def load_positions(posfile):
     d = dict()
@@ -138,13 +140,16 @@ def plot_calibration(data, truth, labels, plotname, plottitle = None):
     qualplot.suptitle(plottitle)
     maxscore = 43
     plt.plot(np.arange(maxscore), 'k:', label = "Perfect")
+    allmasks = np.stack([data[i].mask for i in range(len(data))].append(truth.mask))
+    allmasks = np.any(allmasks, axis = 0)
     for i in range(len(data)):
         label = labels[i]
         print(ek.tstamp(), "Plotting %s . . ." % (label), file = sys.stderr)
         assert np.ndim(data[i]) == 1
-        estimate = np.ma.masked_array(data[i]) #if this isn't working we need to find a way to remove the 2's then do the tabulating b/c bincount doesn't work on masked arrays
+        estimate = np.ma.masked_array(data[i])
+        estimate[allmasks] = np.ma.masked
         est_p = np.ma.masked_array(np.ma.power(10.0,-(estimate / 10.0)), dtype = np.longdouble)
-        unmask = np.logical_not(np.logical_or(est_p.mask, truth.mask))
+        unmask = np.logical_not(est_p.mask)
         bscore = sklearn.metrics.brier_score_loss(truth[unmask].reshape(-1), est_p[unmask].reshape(-1))
         numtotal = np.bincount(estimate[unmask].reshape(-1), minlength = (maxscore+1))
         numerrs = np.bincount(estimate[unmask][truth[unmask]], minlength = len(numtotal)) #not masked and error
@@ -214,14 +219,15 @@ def khmer_nb(seqs, rawquals, erroneous, seqlen, khmerfile):
     p_a_given_e = np.array(erroneous_abundances / np.sum(erroneous_abundances), dtype = np.longdouble)
     p_a_given_note = np.array(nonerroneous_abundances / np.sum(nonerroneous_abundances), dtype = np.longdouble)
     #P(E | O) = P(O | E) * P(E) / P(O) = sum(P(O | S) * P(S | E)) * P(E) / P(O)
-    s_given_e = np.array([0,1,0,1])
-    s_given_note = np.array([1,0,1,1])
-    p_s_given_e = s_given_e / np.sum(s_given_e)
-    p_s_given_note = s_given_note / np.sum(s_given_note)
+    p_s_given_e = np.array([0,.128,0,.872])
+    p_s_given_note = np.array([.424,0,.006,.57])
+    #p_s_given_e = s_given_e / np.sum(s_given_e)
+    #p_s_given_note = s_given_note / np.sum(s_given_note)
     actual_s_given_e = np.zeros(4, dtype = np.int)
     actual_s_given_note = np.zeros(4, dtype = np.int)
     oldpe = q_to_p(rawquals.copy())
     newpe = oldpe.copy()
+    p_e = 0.0108804719256
     print(ek.tstamp(), "Classifying and Recalibrating", file = sys.stderr)
     for i in range(len(seqs)):
         #just the middles for now
@@ -234,12 +240,13 @@ def khmer_nb(seqs, rawquals, erroneous, seqlen, khmerfile):
             p_o_given_s = np.outer(o[:,0],o[:,1]).flatten() #first state transition
             p_o_given_e = np.sum(p_o_given_s * p_s_given_e)
             p_o_given_note = np.sum(p_o_given_s * p_s_given_note)
-            p_e = oldpe[i,j+ksize]
+            #p_e = oldpe[i,j+ksize]
             p_o = p_o_given_e * p_e + p_o_given_note * (1.0 - p_e)
             p_e_given_o = p_o_given_e * p_e / p_o
             newpe[i,j + ksize] = p_e_given_o
 
-            if np.ma.getmask(newpe[i,j+ksize]) is not np.ma.nomask and np.ma.getmask(newpe[i,j+ksize]):
+            if np.ma.getmask(oldpe[i,j+ksize]) is not np.ma.nomask and np.ma.getmask(oldpe[i,j+ksize]):
+                newpe[i, j+ksize] = np.ma.masked
                 actuals = erroneous_mers[i, allidxs]
                 actual_nonerrors = np.logical_not(actuals)
                 actual_errors = actuals
@@ -259,8 +266,31 @@ def khmer_nb(seqs, rawquals, erroneous, seqlen, khmerfile):
     print("Actual P(S|E)",actual_s_given_e)
     print("Modeled P(S|NOT E)", p_s_given_note)
     print("Actual P(S|NOT E)", actual_s_given_note)
+    print("Modeled P(E)",p_e)
+    print("Actual P(E)",np.sum(erroneous)/np.sum(~erroneous.mask))
     newquals = p_to_q(newpe)
     return newquals
+
+def pystan_model(modelfile, L, seqlen, ksize, alpha, beta, a, raw_p):
+    sm = pystan.StanModel(file = modelfile, model_name = 'kbbq')
+    datadict = {'L' : L, 'seqlen' : seqlen, 'ksize' : ksize, 'alpha': alpha, 'beta': beta, 'a' : a}
+    estimates = sm.optimizing(data = datadict,
+        sample_file = 'samples.csv',
+        init = lambda chain_id = None: {'e' : raw_p},
+        verbose = True)
+    return estimates['e'], estimates['kerr'], estimates['lambda']
+
+def run_stan_model(modelfile, seqlen, ksize, rawquals, abundances):
+    raw_p = q_to_p(rawquals.copy())
+    adjustable = np.logical_not(np.any(raw_p.mask, axis = 1))
+    alpha, beta, _, _ = scipy.stats.beta.fit(raw_p[adjustable,:].data.astype(np.float), floc = 0, fscale = 1) ##needs log1p which isn't implemented for longdouble type.
+    a = abundances[adjustable,:]
+    L = a.shape[0]
+    e, kerr, l = pystan_model(modelfile, L, seqlen, ksize, alpha, beta, a, raw_p[adjustable,:])
+    raw_p[adjustable,:] = e
+    recalibrated = p_to_q(raw_p.copy())
+    recalibrated[~adjustable,:] = np.ma.masked
+    return recalibrated
 
 def main():
     np.seterr(all = 'raise')
@@ -318,11 +348,16 @@ def main():
     #isoquals = np.clip(isoquals, 0, 43)
 
     ##try to roll your own naive bayes classifier
-    naivebayes = khmer_nb(seqs, rawquals, erroneous, seqlen, khmerfile)
+    ##naivebayes = khmer_nb(seqs, rawquals, erroneous, seqlen, khmerfile)
 
-    plot_calibration([rawquals.flatten(), gatkcalibratedquals.flatten(), calibquals.flatten(), rcorrected.flatten()*rawquals.flatten(), naivebayes.flatten()],
+    abundances, ksize, nkmers = get_abundances(seqs, seqlen, khmerfile, savefile = 'abundances.txt')
+    ##def pystan_model(modelfile, L, seqlen, ksize, prior_e, a)
+    ## def run_stan_model(modelfile, seqlen, ksize, rawquals, abundances):
+    stan_calibrated = run_stan_model('/home/ajorr1/bin/kbbq/kbbq.stan', seqlen, ksize, rawquals, abundances)
+
+    plot_calibration([rawquals.flatten(), gatkcalibratedquals.flatten(), calibquals.flatten(), rcorrected.flatten()*rawquals.flatten(), stan_calibrated.flatten()],
         truth = erroneous.flatten(),
-        labels = ["Uncalibrated Scores", "GATK Calibration", "KBBQ - Logit Regression", "Rcorrector", "KBBQ - Naive Bayes"],
+        labels = ["Uncalibrated Scores", "GATK Calibration", "KBBQ - Logit Regression", "Rcorrector", "KBBQ - MAP"],
         plotname = 'qualscores.png',
         plottitle = "Comparison of Calibration Methods")
 
