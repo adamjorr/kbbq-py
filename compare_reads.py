@@ -131,17 +131,139 @@ def process_plp(plpfilename, var_pos, names, seqlen, suffix):
 
     return gatkcalibratedquals.copy(), erroneous.copy(), trackingmask.copy()
 
+def gatk_delta_q(prior_q, numerrs, numtotal, maxscore = 43):
+    possible_q = np.arange(maxscore, dtype = np.int)
+    diff = np.array(np.clip(np.absolute(np.rint(prior_q - possible_q)), 0, maxscore))
+    # this is a rescaled normal distribution
+    # this underflows if diff >= 20
+    prior_dist = np.zeros(diff.shape)
+    for i in range(diff.shape[0]):
+        try:
+            prior_dist[i] = np.log(.9 * np.exp(-((diff[i]/.5)**2)/2))
+        except FloatingPointError:
+            prior_dist[i] = np.NINF
+    #prior_dist = scipy.stats.norm.logpdf(diff, scale = .5)
+    #smooth by adding 1 error and 1 nonerror
+    #in gatk, this is done by rounding up and adding one
+    q_likelihood = scipy.stats.binom.logpmf(numerrs + 1, numtotal+2, q_to_p(possible_q).astype(np.float))
+    posterior_q = np.argmax(prior_dist + q_likelihood)
+    return posterior_q - prior_q
+
+def delta_q_recalibrate(q, dinucleotide, errors, maxscore = 43):
+    meanq, global_errs, global_total, q_errs, q_total, pos_errs, pos_total, dinuc_errs, dinuc_total = get_covariate_arrays(q, dinucleotide, errors)
+    globaldeltaq, qscoredeltaq, positiondeltaq, dinucdeltaq = get_delta_qs(meanq, global_errs, global_total, q_errs, q_total, pos_errs, pos_total, dinuc_errs, dinuc_total)
+    recal_q = np.ma.masked_array(np.zeros(q.shape, dtype = np.longdouble), copy = True) + meanq + globaldeltaq #TODO this is set to 0 in get_delta_qs
+    qunmasked = np.logical_not(np.ma.getmaskarray(q))
+
+    #TODO: this is probably easy to vectorize
+    for i in range(recal_q.shape[0]):
+        for j in range(recal_q.shape[1]):
+            if qunmasked[i,j]:
+                recal_q[i,j] = recal_q[i,j] + qscoredeltaq[q[i,j]] + positiondeltaq[q[i,j],j] + dinucdeltaq[q[i,j],dinucleotide[i,j]]
+            else:
+                recal_q[i,j] = np.ma.masked
+    return np.ma.masked_array(np.rint(np.clip(recal_q,0,maxscore)), dtype = np.int, copy = True)
+
+def get_dinucleotide(q, seqs, seqlen, minq = 2):
+    #[A, T, G, C] -> [A, T, G, C]
+    #nucleotides at the beginning of the sequence have an empty string before them
+    #we should: ignore any context containing an N, ignore any context at beginning of sequence
+    #we also ignore the longest string at the start and end of the sequence that have scores <=2
+    nucs = ['A','T','G','C']
+    seqs = seqs.copy() #we may need to alter this
+    dinucs = [i + j for i in  nucs for j in nucs]
+    dinuc_to_int = dict(zip(dinucs, range(len(dinucs))))
+    dinucleotide = np.zeros([seqs.shape[0], seqlen], dtype = np.int)
+    for i in range(seqs.shape[0]):
+        currentseq = seqs[i]
+        for j in range(seqlen):
+            if q[i,j] <= minq:
+                currentseq[j] = 'N'
+            else:
+                break
+        for j in reversed(range(seqlen)):
+            if q[i,j] <= minq:
+                currentseq[j] = 'N'
+            else:
+                break
+
+        dinucleotide[i,0] = -1
+        for j in range(1, seqlen):
+            bases = currentseq[j-1:j+1]
+            if not 'N' in bases:
+                dinucleotide[i,j] = dinuc_to_int[bases]
+            else:
+                dinucleotide[i,j] = -1
+    return dinucleotide
+
+def get_covariate_arrays(q, dinucleotide, errors, maxscore = 43):
+    #these arrays should be the same dimensions: (numsequences, seqlen)
+    #total mean Q, quality score, position, dinucleotide context
+    #TODO: gatk masks with N beginning and end of read that have qual score <= 2
+    #TODO: figure out about quantization, default is 16 qual scores.
+    qmask = np.ma.getmaskarray(q.copy())
+    qunmasked = np.logical_not(qmask)
+    #meanq = p_to_q(np.ma.sum(q_to_p(q)) / np.sum(qunmasked))
+    error_and_unmasked = np.logical_and(qunmasked, errors)
+
+    global_errs = np.sum(errors[qunmasked])
+    global_total = np.sum(qunmasked)
+    q_errs = np.bincount(q[error_and_unmasked], minlength = maxscore+1)
+    q_total = np.bincount(q[qunmasked], minlength = maxscore+1)
+    #meanq prior is q of expected # errors / total observations
+    expected_errs = np.sum(q_to_p(np.arange(maxscore+1)) * q_total)
+    meanq = p_to_q(expected_errs / np.sum(q_total))
+
+    #pos_errs should be 2d: pos_errs[qscore, position] = numerrors
+    pos_errs = np.zeros([maxscore + 1, q.shape[1]])
+    pos_total = np.zeros([maxscore + 1, q.shape[1]])
+    for i in range(maxscore + 1):
+        pos_errs[i,] = np.sum(np.logical_and(error_and_unmasked, q == i), axis = 0)
+        pos_total[i,] = np.sum(np.logical_and(qunmasked, q == i), axis = 0)
+
+    #dinuc_errs is 2d: dinuc_errs[qscore, dinuc] = numerrors
+    dinuc_errs = np.zeros([maxscore + 1, 16])
+    dinuc_total = np.zeros([maxscore + 1, 16])
+    for i in range(maxscore+1):
+        e_unmasked_and_q = np.logical_and(error_and_unmasked, q == i)
+        unmasked_and_q = np.logical_and(qunmasked, q == i)
+        e_valid = np.logical_and(error_and_unmasked, dinucleotide != -1)
+        valid = np.logical_and(unmasked_and_q, dinucleotide != -1)
+        dinuc_errs[i,] = np.bincount(dinucleotide[e_valid], minlength = 16)
+        dinuc_total[i,] = np.bincount(dinucleotide[valid], minlength = 16)
+
+    return meanq, global_errs, global_total, q_errs, q_total, pos_errs, pos_total, dinuc_errs, dinuc_total
+
+def get_delta_qs(meanq, global_errs, global_total, q_errs, q_total, pos_errs, pos_total, dinuc_errs, dinuc_total, maxscore = 43):
+    seqlen = pos_total.shape[1]
+    # there is 1 global delta q
+    globaldeltaq = gatk_delta_q(meanq, global_errs, global_total)
+    # the qscoredeltaq is 1d, with the index being the quality score
+    qscoredeltaq = np.array([gatk_delta_q(meanq + globaldeltaq, q_errs[i], q_total[i]) for i in range(maxscore + 1)])
+    ## positiondeltaq is 2d, first dimension is quality score and second is position
+    positiondeltaq = np.zeros([maxscore+1, seqlen])
+    ## dinucdeltaq is 2d, first dimension is quality score and second is nucleotide context
+    dinucdeltaq = np.zeros([maxscore+1, 17])
+    for i in range(maxscore + 1):
+        for j in range(seqlen):
+            positiondeltaq[i,j] = gatk_delta_q(meanq + globaldeltaq + qscoredeltaq[i], pos_errs[i,j], pos_total[i,j])
+        for j in range(16):
+            dinucdeltaq[i,j] = gatk_delta_q(meanq + globaldeltaq + qscoredeltaq[i], dinuc_errs[i,j], dinuc_total[i,j])
+        dinucdeltaq[i,-1] = 0 #no contribution for invalid context
+    return globaldeltaq.copy(), qscoredeltaq.copy(), positiondeltaq.copy(), dinucdeltaq.copy()
+
 def plot_calibration(data, truth, labels, plotname, plottitle = None):
     print(ek.tstamp(), "Making Quality Score Plot . . .", file = sys.stderr)
     assert np.ndim(truth) == 1
     plottitle = (plottitle if plottitle is not None else plotname)
     sns.set()
-    qualplot = plt.figure()
-    ax = qualplot.add_subplot(111)
+    qualplot, (ax1, ax2) = plt.subplots(2, sharex = True)
+    ax1.set_aspect('equal')
+    ax2.set_ylim(0,2e7)
     qualplot.suptitle(plottitle)
     maxscore = 43
-    plt.plot(np.arange(maxscore), 'k:', label = "Perfect")
-    allmasks = np.stack([data[i].mask for i in range(len(data))].append(truth.mask))
+    ax1.plot(np.arange(maxscore), 'k:', label = "Perfect")
+    allmasks = np.stack([np.ma.getmaskarray(data[i]) for i in range(len(data))] + [np.ma.getmaskarray(truth)])
     allmasks = np.any(allmasks, axis = 0)
     for i in range(len(data)):
         label = labels[i]
@@ -159,20 +281,22 @@ def plot_calibration(data, truth, labels, plotname, plottitle = None):
         q = -10.0*np.ma.log10(p)
         q = np.ma.masked_array(np.rint(q), dtype=np.int)
         q = np.clip(q, 0, maxscore)
-        plt.plot(np.arange(len(q))[np.logical_not(q.mask)], q[np.logical_not(q.mask)], 'o-', label ="%s, %1.3f" % (label, bscore))
+        ax1.plot(np.arange(len(q))[np.logical_not(q.mask)], q[np.logical_not(q.mask)], 'o-', label ="%s, %1.5f" % (label, bscore))
+        ax2.plot(np.arange(len(q))[np.logical_not(q.mask)], numtotal[np.logical_not(q.mask)], 'o-', label = "%s, %1.5f" % (label, bscore))
     plt.xlabel("Predicted Quality Score")
-    plt.ylabel("Actual Quality Score")
+    ax1.set_ylabel("Actual Quality Score")
     plt.legend(loc = "upper left")
+    ax2.set_ylabel("Sample Size")
     qualplot.savefig(plotname)
 
 def p_to_q(p, maxscore = 43):
     q = -10.0*np.ma.log10(p)
     q = np.ma.masked_array(np.rint(q), dtype=np.int)
     q = np.clip(q, 0, maxscore)
-    return q
+    return q.copy()
 
 def q_to_p(q):
-    p = np.ma.masked_array(np.ma.power(10.0,-(q / 10.0)), dtype = np.longdouble)
+    p = np.ma.masked_array(np.ma.power(10.0,-(q / 10.0)), dtype = np.longdouble, copy = True)
     return p
 
 def get_abundances(seqs, seqlen, khmerfile, savefile = None):
@@ -272,24 +396,40 @@ def khmer_nb(seqs, rawquals, erroneous, seqlen, khmerfile):
     newquals = p_to_q(newpe)
     return newquals
 
-def pystan_model(modelfile, L, seqlen, ksize, alpha, beta, a, raw_p):
+def pystan_model(modelfile, L, seqlen, ksize, alpha, beta, a, raw_p, q):
     os.environ['STAN_NUM_THREADS'] = "32"
-    extra_compile_args = ['-pthreads', '-DSTAN_THREADS']
+    extra_compile_args = ['-pthread', '-DSTAN_THREADS']
     sm = pystan.StanModel(file = modelfile, model_name = 'kbbq', extra_compile_args = extra_compile_args)
-    datadict = {'L' : L, 'seqlen' : seqlen, 'ksize' : ksize, 'alpha': alpha, 'beta': beta, 'a' : a}
+    print(ek.tstamp(), "Model Compiled. Starting optimization . . .", file=sys.stderr)
+    datadict = {'L' : L, 'seqlen' : seqlen, 'ksize' : ksize, 'a' : a, 'q' : q, 'alpha_init' : alpha, 'beta_init' : beta}
     estimates = sm.optimizing(data = datadict,
         sample_file = 'samples.csv',
-        init = lambda chain_id = None: {'e' : raw_p, 'lambda' : [30, 1300]},
+        init = lambda chain_id = None: {'e' : raw_p.copy(), 'kerr' : np.zeros((L, seqlen - ksize + 1)), 'lambda' : np.array([30, 1300]), 'alpha' : alpha, 'beta' : beta},
         verbose = True)
-    return estimates['e'], estimates['kerr'], estimates['lambda']
+    return estimates['e'], estimates['kerr'], estimates['lambda'], estimates['alpha'], estimates['beta']
 
 def run_stan_model(modelfile, seqlen, ksize, rawquals, abundances):
     raw_p = q_to_p(rawquals.copy())
     adjustable = np.logical_not(np.any(raw_p.mask, axis = 1))
-    alpha, beta, _, _ = scipy.stats.beta.fit(raw_p[adjustable,:].data.astype(np.float), floc = 0, fscale = 1) ##needs log1p which isn't implemented for longdouble type.
+    init_alpha, init_beta, _, _ = scipy.stats.beta.fit(raw_p[adjustable,:].data.astype(np.float), floc = 0, fscale = 1) ##needs log1p which isn't implemented for longdouble type.
     a = abundances[adjustable,:]
     L = a.shape[0]
-    e, kerr, l = pystan_model(modelfile, L, seqlen, ksize, alpha, beta, a, raw_p[adjustable,:])
+    init_p = raw_p[adjustable,:]
+    assert init_p.shape[0] == L
+    assert a.shape[0] == L
+    assert init_p.shape[1] == seqlen
+    assert a.shape[1] == seqlen - ksize + 1
+    e, kerr, l, alpha, beta = pystan_model(modelfile, L, seqlen, ksize, init_alpha, init_beta, a, init_p, rawquals[adjustable,:])
+    print("Init alpha:", init_alpha)
+    print("Init beta:", init_beta)
+    print("Fit alpha:", alpha)
+    print("Fit beta:", beta)
+    print("Init phi:", init_alpha / (init_alpha + init_beta))
+    print("Init gamma:", (init_alpha + init_beta))
+    print("Sum(perr):", sum(init_p))
+    print("Number of elements:", init_p.size)
+    print("Mean(perr):", np.mean(init_p))
+    print("Var(perr):", np.var(init_p))
     raw_p[adjustable,:] = e
     recalibrated = p_to_q(raw_p.copy())
     recalibrated[~adjustable,:] = np.ma.masked
@@ -304,10 +444,10 @@ def main():
     names, rawquals, rcorrected, seqs, seqlen = find_rcorrected_sites(uncorrfile, corrfile)
     rawquals = np.ma.masked_equal(rawquals,2) #2 is not a quality score in this data
 
-    lr = train_regression(rawquals[~rawquals.mask], np.logical_not(rcorrected[~rawquals.mask]))
+    #lr = train_regression(rawquals[~rawquals.mask], np.logical_not(rcorrected[~rawquals.mask]))
     #rcorrected is true when the bases match the original, false otherwise
     #hence rcorrected == false is where the errors are
-    calibquals = recalibrate(lr, rawquals)
+    #calibquals = recalibrate(lr, rawquals)
 
     #qtostr = np.arange(43, dtype = np.uint32) + 33
     #qtostr = qtostr.view('U1')
@@ -353,14 +493,18 @@ def main():
     ##try to roll your own naive bayes classifier
     ##naivebayes = khmer_nb(seqs, rawquals, erroneous, seqlen, khmerfile)
 
-    abundances, ksize, nkmers = get_abundances(seqs, seqlen, khmerfile, savefile = 'abundances.txt')
+    #abundances, ksize, nkmers = get_abundances(seqs, seqlen, khmerfile, savefile = 'abundances.txt')
     ##def pystan_model(modelfile, L, seqlen, ksize, prior_e, a)
     ## def run_stan_model(modelfile, seqlen, ksize, rawquals, abundances):
-    stan_calibrated = run_stan_model('/home/ajorr1/bin/kbbq/kbbq.stan', seqlen, ksize, rawquals, abundances)
+    #stan_calibrated = run_stan_model('/home/ajorr1/bin/kbbq/kbbq.stan', seqlen, ksize, rawquals, abundances)
 
-    plot_calibration([rawquals.flatten(), gatkcalibratedquals.flatten(), calibquals.flatten(), rcorrected.flatten()*rawquals.flatten(), stan_calibrated.flatten()],
+    dinucleotide = get_dinucleotide(rawquals, seqs, seqlen)
+    dq_calibrated = delta_q_recalibrate(rawquals, dinucleotide, np.logical_not(rcorrected))
+    custom_gatk_calibrated = delta_q_recalibrate(rawquals, dinucleotide, erroneous)
+
+    plot_calibration([rawquals.flatten(), gatkcalibratedquals.flatten(), rcorrected.flatten()*rawquals.flatten(), dq_calibrated.flatten(), custom_gatk_calibrated.flatten()],
         truth = erroneous.flatten(),
-        labels = ["Uncalibrated Scores", "GATK Calibration", "KBBQ - Logit Regression", "Rcorrector", "KBBQ - MAP"],
+        labels = ["Uncalibrated Scores", "GATK Calibration", "Rcorrector", "KBBQ", "GATK Python Implementation"],
         plotname = 'qualscores.png',
         plottitle = "Comparison of Calibration Methods")
 
