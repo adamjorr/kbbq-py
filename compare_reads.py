@@ -46,14 +46,17 @@ def find_rcorrected_sites(uncorrfile, corrfile):
     rawquals = np.zeros([len(uncorr_reads), seqlen], dtype = np.int64)
     rcorrected = np.zeros([len(uncorr_reads),seqlen], dtype = np.bool_)
     seqs = np.zeros(len(uncorr_reads), dtype = 'U' + str(seqlen))
+    rgs = np.zeros(len(uncorr_reads), dtype = 'U7')
     for i in range(len(uncorr_reads)):
-        names[uncorr_reads[i].name] = i
+        names[uncorr_reads[i].name.split(sep='_')[0]] = i
+        #print(uncorr_reads[i].name)
+        rgs[i] = uncorr_reads[i].name.split(sep='_')[1].split(':')[-1]
         rawquals[i,:] = uncorr_reads[i].get_quality_array()
         seqs[i] = uncorr_reads[i].sequence
         uncorr_s = np.array(list(uncorr_reads[i].sequence), dtype = np.unicode_)
         corr_s = np.array(list(corr_reads[i].sequence), dtype = np.unicode_)
         rcorrected[i] = (uncorr_s == corr_s)
-    return names, rawquals.copy(), rcorrected.copy(), seqs.copy(), seqlen
+    return names, rawquals.copy(), rcorrected.copy(), seqs.copy(), rgs.copy(), seqlen
 
 def train_regression(rawquals, rcorrected, tol = 1e-4):
     print(ek.tstamp(), "Doing Logit Regression", file=sys.stderr)
@@ -131,6 +134,53 @@ def process_plp(plpfilename, var_pos, names, seqlen, suffix):
 
     return gatkcalibratedquals.copy(), erroneous.copy(), trackingmask.copy()
 
+class RescaledNormal:
+    oldset = np.seterr(all = 'raise')
+    maxscore = 43
+    possible_diffs = np.arange(maxscore+1, dtype = np.int_)
+    prior_dist = np.zeros(possible_diffs.shape[0], dtype = np.longdouble)
+    for i in range(possible_diffs.shape[0]):
+        try:
+            prior_dist[i] = np.log(.9 * np.exp(-((possible_diffs[i]/.5)**2)/2))
+        except FloatingPointError:
+            prior_dist[i] = np.NINF
+    np.seterr(**oldset)
+
+    def prior(self, difference):
+        return prior_dist[difference]
+
+def v_gatk_delta_q(prior_q, numerrs, numtotal, maxscore = 43):
+    assert prior_q.shape == numerrs.shape == numtotal.shape
+    possible_q = np.arange(maxscore, dtype = np.int)
+    diff = np.absolute(np.subtract.outer(possible_q, prior_q))
+    #1st dim is possible qs
+    prior = RescaledNormal.prior_dist[diff]
+    #figure out how to make this work
+    #maybe broadcast possible_q at the beginning and use regular subtract ?
+    broadcast_errs = np.broadcast_to(numerrs, possible_q.shape + numerrs.shape)
+    broadcast_tot = np.broadcast_to(numtotal, possible_q.shape + numtotal.shape)
+    p = q_to_p(possible_q).astype(np.float)
+    while len(p.shape) < len(broadcast_tot.shape):
+        p = np.expand_dims(p, -1)
+    broadcast_p = np.broadcast_to( p, broadcast_tot.shape )
+    loglike = scipy.stats.binom.logpmf(broadcast_errs+1, broadcast_tot+2, broadcast_p)
+    #loglike should now have same dims as prior
+    assert loglike.shape == prior.shape
+    posterior = prior + loglike
+    #this doesn't seem right, check it
+    posterior_q = np.argmax(posterior, axis = 0)
+    try:
+        assert posterior_q.shape == prior_q.shape
+    except AssertionError:
+        print("Posterior",posterior)
+        print("Posterior.shape",posterior.shape)
+        print("Posterior q:",posterior_q)
+        print("Posterior q.shape",posterior_q.shape)
+        print("Prior q:",prior_q)
+        print("Prior q.shape:", prior_q.shape)
+        raise
+    return posterior_q - prior_q
+
 def gatk_delta_q(prior_q, numerrs, numtotal, maxscore = 43):
     possible_q = np.arange(maxscore, dtype = np.int)
     diff = np.array(np.clip(np.absolute(np.rint(prior_q - possible_q)), 0, maxscore))
@@ -149,26 +199,36 @@ def gatk_delta_q(prior_q, numerrs, numtotal, maxscore = 43):
     posterior_q = np.argmax(prior_dist + q_likelihood)
     return posterior_q - prior_q
 
-def delta_q_recalibrate(q, dinucleotide, errors, maxscore = 43):
-    meanq, global_errs, global_total, q_errs, q_total, pos_errs, pos_total, dinuc_errs, dinuc_total = get_covariate_arrays(q, dinucleotide, errors)
+def delta_q_recalibrate(q, rgs, dinucleotide, errors, maxscore = 43):
+    print(ek.tstamp(), "Getting Covariate Arrays . . .", file=sys.stderr)
+    meanq, global_errs, global_total, q_errs, q_total, pos_errs, pos_total, dinuc_errs, dinuc_total = v_get_covariate_arrays(q, rgs, dinucleotide, errors)
+    print(ek.tstamp(), "Finding Delta Q's . . .", file=sys.stderr)
     globaldeltaq, qscoredeltaq, positiondeltaq, dinucdeltaq = get_delta_qs(meanq, global_errs, global_total, q_errs, q_total, pos_errs, pos_total, dinuc_errs, dinuc_total)
-    recal_q = np.ma.masked_array(np.zeros(q.shape, dtype = np.longdouble), copy = True) + meanq + globaldeltaq #TODO this is set to 0 in get_delta_qs
-    qunmasked = np.logical_not(np.ma.getmaskarray(q))
+    print(ek.tstamp(), "Recalibrating . . .", file=sys.stderr)
+    recal_q = np.ma.masked_array(np.zeros(q.shape, dtype = np.longdouble), copy = True) #+ meanq + globaldeltaq
+    recal_q[q <= 6] = np.ma.masked
 
-    #TODO: this is probably easy to vectorize
-    for i in range(recal_q.shape[0]):
-        for j in range(recal_q.shape[1]):
-            if qunmasked[i,j]:
-                recal_q[i,j] = recal_q[i,j] + qscoredeltaq[q[i,j]] + positiondeltaq[q[i,j],j] + dinucdeltaq[q[i,j],dinucleotide[i,j]]
-            else:
-                recal_q[i,j] = np.ma.masked
-    return np.ma.masked_array(np.rint(np.clip(recal_q,0,maxscore)), dtype = np.int, copy = True)
+    #vectorization:
+    posrange = np.arange(recal_q.shape[1])
+    recal_q = meanq[rgs] + globaldeltaq[rgs] + qscoredeltaq[rgs,q] + positiondeltaq[rgs, q, posrange] + dinucdeltaq[rgs, q,dinucleotide]
 
-def get_dinucleotide(q, seqs, seqlen, minq = 2):
+    #clip and round
+    r_q = np.ma.masked_array(np.rint(np.clip(recal_q,0,maxscore)), dtype = np.int, copy = True)
+
+    #quantization
+    #quantizer = np.arange(maxscore + 1)
+    #quantizer[0:3] = 3 #collapse 0, 1, and 2 to 3
+    #quantizer[32:] = 32 #collapse everything above 32 to 32
+    #recal_q = quantizer[recal_q]
+
+    return r_q.copy()
+
+def get_dinucleotide(q, seqs, seqlen, minq = 6):
     #[A, T, G, C] -> [A, T, G, C]
     #nucleotides at the beginning of the sequence have an empty string before them
     #we should: ignore any context containing an N, ignore any context at beginning of sequence
     #we also ignore the longest string at the start and end of the sequence that have scores <=2
+    print(ek.tstamp(), "Getting dinucleotide context . . .", file=sys.stderr)
     nucs = ['A','T','G','C']
     seqs = seqs.copy() #we may need to alter this
     dinucs = [i + j for i in  nucs for j in nucs]
@@ -176,16 +236,16 @@ def get_dinucleotide(q, seqs, seqlen, minq = 2):
     dinucleotide = np.zeros([seqs.shape[0], seqlen], dtype = np.int)
     for i in range(seqs.shape[0]):
         currentseq = seqs[i]
-        for j in range(seqlen):
-            if q[i,j] <= minq:
-                currentseq[j] = 'N'
-            else:
-                break
-        for j in reversed(range(seqlen)):
-            if q[i,j] <= minq:
-                currentseq[j] = 'N'
-            else:
-                break
+        #for j in range(seqlen):
+        #    if q[i,j] <= minq:
+        #        currentseq[j] = 'N'
+        #    else:
+        #        break
+        #for j in reversed(range(seqlen)):
+        #    if q[i,j] <= minq:
+        #        currentseq[j] = 'N'
+        #    else:
+        #        break
 
         dinucleotide[i,0] = -1
         for j in range(1, seqlen):
@@ -196,12 +256,51 @@ def get_dinucleotide(q, seqs, seqlen, minq = 2):
                 dinucleotide[i,j] = -1
     return dinucleotide
 
-def get_covariate_arrays(q, dinucleotide, errors, maxscore = 43):
+def v_get_covariate_arrays(q, rgs, dinucleotide, errors, maxscore = 43, minscore = 6):
+    #input arrays are the same dimensions: (numsequences, seqlen)
+    #output arrays are dimension (nrgs), (nrgs, q), (nrgs, q, seqlen), or (nrgs, q, 16)
+    m = np.ma.getmaskarray(q)
+    nrgs = np.unique(rgs).shape[0]
+    seqlen = q.shape[1]
+
+    meanq = np.zeros(nrgs, dtype = np.int_)
+    expected_errs = np.zeros(nrgs, dtype = np.longdouble)
+    rg_errs = np.zeros(nrgs, dtype = np.int_)
+    rg_total = np.zeros(nrgs, dtype = np.int_)
+    q_errs = np.zeros((nrgs, maxscore + 1), dtype = np.int_)
+    q_total = np.zeros((nrgs, maxscore + 1), dtype = np.int_)
+    pos_errs = np.zeros((nrgs, maxscore + 1, seqlen), dtype = np.int_)
+    pos_total = np.zeros((nrgs, maxscore + 1, seqlen), dtype = np.int_)
+    dinuc_errs = np.zeros((nrgs, maxscore + 1, 16), dtype = np.int_)
+    dinuc_total = np.zeros((nrgs, maxscore + 1, 16), dtype = np.int_)
+    pos = np.broadcast_to(np.arange(seqlen), (q.shape[0], seqlen))
+
+    #these will be reused a lot; cache them here
+    rge = rgs[errors]
+    qe = q[errors]
+    valid = (dinucleotide != -1)
+    e_and_valid = np.logical_and(errors, valid)
+
+    np.add.at(expected_errs, rgs, q_to_p(q))
+    np.add.at(rg_errs, rge, 1)
+    np.add.at(rg_total, rgs, 1)
+    np.add.at(q_errs, (rge, qe), 1)
+    np.add.at(q_total, (rgs, q), 1)
+    np.add.at(pos_errs, (rge, qe, pos[errors]), 1)
+    np.add.at(pos_total, (rgs, q, pos), 1)
+    np.add.at(dinuc_errs, (rgs[e_and_valid], q[e_and_valid], dinucleotide[e_and_valid]), 1)
+    np.add.at(dinuc_total, (rgs[valid], q[valid], dinucleotide[valid]), 1)
+
+    meanq = p_to_q(expected_errs / rg_total)
+
+    return meanq, rg_errs, rg_total, q_errs, q_total, pos_errs, pos_total, dinuc_errs, dinuc_total
+
+def get_covariate_arrays(q, rgs, dinucleotide, errors, maxscore = 43, minscore = 6):
     #these arrays should be the same dimensions: (numsequences, seqlen)
     #total mean Q, quality score, position, dinucleotide context
-    #TODO: gatk masks with N beginning and end of read that have qual score <= 2
-    #TODO: figure out about quantization, default is 16 qual scores.
+    #TODO: figure how to do this smartly per read group
     qmask = np.ma.getmaskarray(q.copy())
+    qmask = np.logical_or(qmask, q <= minscore)
     qunmasked = np.logical_not(qmask)
     #meanq = p_to_q(np.ma.sum(q_to_p(q)) / np.sum(qunmasked))
     error_and_unmasked = np.logical_and(qunmasked, errors)
@@ -218,7 +317,9 @@ def get_covariate_arrays(q, dinucleotide, errors, maxscore = 43):
     pos_errs = np.zeros([maxscore + 1, q.shape[1]])
     pos_total = np.zeros([maxscore + 1, q.shape[1]])
     for i in range(maxscore + 1):
+        #pos_errs = np.bincount(q[error_and_unmasked], minlength = maxscore+1) is vectorized equivalent?
         pos_errs[i,] = np.sum(np.logical_and(error_and_unmasked, q == i), axis = 0)
+        #pos_total = np.bincount(q[qunmasked], minlength = maxscore + 1) is vectorized equivalent?
         pos_total[i,] = np.sum(np.logical_and(qunmasked, q == i), axis = 0)
 
     #dinuc_errs is 2d: dinuc_errs[qscore, dinuc] = numerrors
@@ -234,46 +335,64 @@ def get_covariate_arrays(q, dinucleotide, errors, maxscore = 43):
 
     return meanq, global_errs, global_total, q_errs, q_total, pos_errs, pos_total, dinuc_errs, dinuc_total
 
-def get_delta_qs(meanq, global_errs, global_total, q_errs, q_total, pos_errs, pos_total, dinuc_errs, dinuc_total, maxscore = 43):
-    seqlen = pos_total.shape[1]
-    # there is 1 global delta q
-    globaldeltaq = gatk_delta_q(meanq, global_errs, global_total)
+def get_delta_qs(meanq, rg_errs, rg_total, q_errs, q_total, pos_errs, pos_total, dinuc_errs, dinuc_total, maxscore = 43):
+    # shapes are:
+    #   [rg]
+    #   [rg, q]
+    #   [rg, q, covariate]
+    seqlen = pos_total.shape[2]
+    nrgs = meanq.shape[0]
+    rgdeltaq = v_gatk_delta_q(meanq, rg_errs, rg_total)
     # the qscoredeltaq is 1d, with the index being the quality score
-    qscoredeltaq = np.array([gatk_delta_q(meanq + globaldeltaq, q_errs[i], q_total[i]) for i in range(maxscore + 1)])
+    #qscoredeltaq = np.array([gatk_delta_q(meanq + globaldeltaq, q_errs[i], q_total[i]) for i in range(maxscore + 1)])
+    prior1 = np.broadcast_to((meanq + rgdeltaq)[:,np.newaxis], q_total.shape)
+    qscoredeltaq = v_gatk_delta_q( prior1 , q_errs, q_total)
     ## positiondeltaq is 2d, first dimension is quality score and second is position
-    positiondeltaq = np.zeros([maxscore+1, seqlen])
+    #positiondeltaq = np.zeros([maxscore+1, seqlen])
     ## dinucdeltaq is 2d, first dimension is quality score and second is nucleotide context
-    dinucdeltaq = np.zeros([maxscore+1, 17])
-    for i in range(maxscore + 1):
-        for j in range(seqlen):
-            positiondeltaq[i,j] = gatk_delta_q(meanq + globaldeltaq + qscoredeltaq[i], pos_errs[i,j], pos_total[i,j])
-        for j in range(16):
-            dinucdeltaq[i,j] = gatk_delta_q(meanq + globaldeltaq + qscoredeltaq[i], dinuc_errs[i,j], dinuc_total[i,j])
-        dinucdeltaq[i,-1] = 0 #no contribution for invalid context
-    return globaldeltaq.copy(), qscoredeltaq.copy(), positiondeltaq.copy(), dinucdeltaq.copy()
+    #dinucdeltaq = np.zeros([maxscore+1, 17])
+    prior2 = np.broadcast_to((prior1 + qscoredeltaq)[...,np.newaxis], pos_total.shape)
+    positiondeltaq = v_gatk_delta_q(prior2, pos_errs, pos_total)
+    prior3 = np.broadcast_to((prior1 + qscoredeltaq)[...,np.newaxis], dinuc_total.shape)
+    dinucdeltaq = v_gatk_delta_q(prior3, dinuc_errs, dinuc_total)
+    #TODO: could be another layer where position is dependent on qreported while dinuc is dependent on qreported and position
+    #TODO: seems like its just a RG problem where my data ACTUALLY has like 30
+    #for i in range(maxscore + 1):
+    #    for j in range(seqlen):
+    #        positiondeltaq[i,j] = gatk_delta_q(meanq + globaldeltaq + qscoredeltaq[i], pos_errs[i,j], pos_total[i,j])
+    #    for j in range(16):
+    #        dinucdeltaq[i,j] = gatk_delta_q(meanq + globaldeltaq + qscoredeltaq[i], dinuc_errs[i,j], dinuc_total[i,j])
+    #    dinucdeltaq[i,-1] = 0 #no contribution for invalid context
+    return rgdeltaq.copy(), qscoredeltaq.copy(), positiondeltaq.copy(), dinucdeltaq.copy()
 
 def plot_calibration(data, truth, labels, plotname, plottitle = None):
     print(ek.tstamp(), "Making Quality Score Plot . . .", file = sys.stderr)
     assert np.ndim(truth) == 1
     plottitle = (plottitle if plottitle is not None else plotname)
     sns.set()
-    qualplot, (ax1, ax2) = plt.subplots(2, sharex = True)
-    ax1.set_aspect('equal')
-    ax2.set_ylim(0,2e7)
+    qualplot, (ax1, ax2) = plt.subplots(2, sharex = True, gridspec_kw = { 'height_ratios' : [4, 1] }, figsize = (7,9))
+    #ax1.set_aspect('equal')
+    ax2.set_ylim(top = 1e7)
     qualplot.suptitle(plottitle)
     maxscore = 43
     ax1.plot(np.arange(maxscore), 'k:', label = "Perfect")
-    allmasks = np.stack([np.ma.getmaskarray(data[i]) for i in range(len(data))] + [np.ma.getmaskarray(truth)])
-    allmasks = np.any(allmasks, axis = 0)
+    maskstack = np.stack([np.ma.getmaskarray(data[i]) for i in range(len(data))] + [np.ma.getmaskarray(truth)])
+    allmasks = np.any(maskstack, axis = 0)
     for i in range(len(data)):
         label = labels[i]
         print(ek.tstamp(), "Plotting %s . . ." % (label), file = sys.stderr)
         assert np.ndim(data[i]) == 1
-        estimate = np.ma.masked_array(data[i])
+        estimate = np.ma.masked_array(data[i], copy = True)
         estimate[allmasks] = np.ma.masked
-        est_p = np.ma.masked_array(np.ma.power(10.0,-(estimate / 10.0)), dtype = np.longdouble)
-        unmask = np.logical_not(est_p.mask)
-        bscore = sklearn.metrics.brier_score_loss(truth[unmask].reshape(-1), est_p[unmask].reshape(-1))
+        est_p = np.ma.masked_array(np.ma.power(10.0,-(estimate / 10.0)), dtype = np.longdouble, copy = True)
+        unmask = np.logical_not(allmasks)
+        try:
+            bscore = sklearn.metrics.brier_score_loss(truth[unmask].reshape(-1), est_p[unmask].reshape(-1))
+        except ValueError:
+            print(est_p)
+            print(unmask)
+            print(est_p[unmask])
+            raise
         numtotal = np.bincount(estimate[unmask].reshape(-1), minlength = (maxscore+1))
         numerrs = np.bincount(estimate[unmask][truth[unmask]], minlength = len(numtotal)) #not masked and error
         numtotal = np.ma.masked_equal(numtotal, 0)
@@ -285,7 +404,7 @@ def plot_calibration(data, truth, labels, plotname, plottitle = None):
         ax2.plot(np.arange(len(q))[np.logical_not(q.mask)], numtotal[np.logical_not(q.mask)], 'o-', label = "%s, %1.5f" % (label, bscore))
     plt.xlabel("Predicted Quality Score")
     ax1.set_ylabel("Actual Quality Score")
-    plt.legend(loc = "upper left")
+    ax1.legend(loc = "upper left")
     ax2.set_ylabel("Sample Size")
     qualplot.savefig(plotname)
 
@@ -435,63 +554,52 @@ def run_stan_model(modelfile, seqlen, ksize, rawquals, abundances):
     recalibrated[~adjustable,:] = np.ma.masked
     return recalibrated
 
-def main():
-    np.seterr(all = 'raise')
-    print(ek.tstamp(), "Starting . . .", file=sys.stderr)
-    uncorrfile = "reads.fq"
-    corrfile = "nospace.reads.cor.fq"
-    khmerfile = "counts.khmer"
-    names, rawquals, rcorrected, seqs, seqlen = find_rcorrected_sites(uncorrfile, corrfile)
-    rawquals = np.ma.masked_equal(rawquals,2) #2 is not a quality score in this data
-
-    #lr = train_regression(rawquals[~rawquals.mask], np.logical_not(rcorrected[~rawquals.mask]))
-    #rcorrected is true when the bases match the original, false otherwise
-    #hence rcorrected == false is where the errors are
-    #calibquals = recalibrate(lr, rawquals)
-
-    #qtostr = np.arange(43, dtype = np.uint32) + 33
-    #qtostr = qtostr.view('U1')
-
-    bad_positions = load_positions("variable_sites.txt")
-    plpfile1 = "only_confident.1.plp"
-    plpfile2 = "only_confident.2.plp"
+def load_pileups(plpfile1, plpfile2, bad_positions, names, seqlen):
     gatkcalibratedquals1, erroneous1, trackingmask1 = process_plp(plpfile1, bad_positions, names, seqlen, "/1")
     gatkcalibratedquals2, erroneous2, trackingmask2 = process_plp(plpfile2, bad_positions, names, seqlen, "/2")
     foundinplp = np.logical_or(trackingmask1,trackingmask2)
     gatkcalibratedquals = np.ma.masked_where(~foundinplp, gatkcalibratedquals1 + gatkcalibratedquals2)
     gatkcalibratedquals[gatkcalibratedquals == 2] = np.ma.masked
     erroneous = np.ma.masked_where(~foundinplp, np.logical_or(erroneous1, erroneous2))
+    return foundinplp, gatkcalibratedquals, erroneous
 
-    ## This is a cheesy function to run the test without a lot of boilerplate
-    #readnames, readquals = ek.do_recalibration()
-    #hmmquals = np.ma.masked_array(np.zeros([len(names), seqlen], dtype = np.int64))
-    #for i in range(len(readquals)):
-    #    idx = names.get(readnames[i])
-    #    if idx is None:
-    #        continue
-    #    else:
-    #        hmmquals[idx,:] = readquals[i]
-    #notinhmm = np.all(hmmquals == 0, axis = 1)
-    #hmmquals[notinhmm,:] = np.ma.masked
+def main():
+    np.seterr(all = 'raise')
+    print(ek.tstamp(), "Starting . . .", file=sys.stderr)
+    uncorrfile = "nospace.reads.fq"
+    corrfile = "nospace.reads.cor.fq"
+    names, rawquals, rcorrected, seqs, rgs, seqlen = find_rcorrected_sites(uncorrfile, corrfile)
+    rawquals = np.ma.masked_equal(rawquals,2) #2 is not a quality score in this data
+
+    #rcorrected is true when the bases match the original, false otherwise
+    #hence rcorrected == false is where the errors are
+
+    bad_positions = load_positions("variable_sites.txt")
+    plpfile1 = "only_confident.recal.1.plp"
+    plpfile2 = "only_confident.recal.2.plp"
+    cachefile = 'cached_recal_errs.npz'
+    if os.path.exists(cachefile):
+        print(ek.tstamp(), "Loading cached errors . . .", file=sys.stderr)
+        loaded = np.load(cachefile)
+        foundinplp = loaded['foundinplp']
+        assert not np.all(~foundinplp)
+        #print("foundinplp.shape:",foundinplp.shape)
+        #print("sum(foundinplp):",np.sum(foundinplp))
+        gatkcalibratedquals = loaded['gatkcalibratedquals']
+        gatkcalibratedquals = np.ma.masked_where(~foundinplp, gatkcalibratedquals)
+        gatkcalibratedquals[gatkcalibratedquals == 2] = np.ma.masked
+        #print("gatkcalibratedquals.shape:",gatkcalibratedquals.shape)
+        #print("sum(np.ma.getmaskarray(gatkcalibratedquals)):",np.sum(np.ma.getmaskarray(gatkcalibratedquals)))
+        erroneous = loaded['erroneous']
+        erroneous = np.ma.masked_where(~foundinplp, erroneous)
+        #print("erroneous.shape:",erroneous.shape)
+        #print("sum(np.ma.getmaskarray(erroneous)):",np.sum(np.ma.getmaskarray(gatkcalibratedquals)))
+    else:
+        foundinplp, gatkcalibratedquals, erroneous = load_pileups(plpfile1, plpfile2, bad_positions, names, seqlen)
+        assert not np.all(~foundinplp)
+        np.savez_compressed(cachefile, foundinplp = foundinplp, gatkcalibratedquals = gatkcalibratedquals, erroneous = erroneous)
 
     #important arrays: names, rawquals, rcorrected, calibquals, gatkcalibratedquals, erroneous, hmmquals
-
-    ##do a regression on the hmm
-    #tunmask = np.logical_not(np.logical_or(erroneous.mask, hmmquals.mask))
-    #lr2 = train_regression(hmmquals[~hmmquals.mask], np.logical_not(rcorrected[~hmmquals.mask]))
-    #lr2recal = recalibrate(lr2, hmmquals)
-
-    ##do an isotonic regression
-    #ir = IR(out_of_bounds = 'clip')
-    #rawp = np.ma.power(10.0, -(rawquals / 10.0))
-    #isop = np.ma.masked_array(rawquals, dtype = np.longdouble)
-    #isop[~isop.mask] = ir.fit_transform(rawp[~rawp.mask].data, np.logical_not(rcorrected[~rawquals.mask].data))
-    #isoquals = -10.0*np.ma.log10(isop)
-    #isoquals = np.ma.masked_array(np.rint(isoquals), dtype=np.int)
-    #isoquals = np.clip(isoquals, 0, 43)
-
-    ##try to roll your own naive bayes classifier
-    ##naivebayes = khmer_nb(seqs, rawquals, erroneous, seqlen, khmerfile)
 
     #abundances, ksize, nkmers = get_abundances(seqs, seqlen, khmerfile, savefile = 'abundances.txt')
     ##def pystan_model(modelfile, L, seqlen, ksize, prior_e, a)
@@ -499,8 +607,25 @@ def main():
     #stan_calibrated = run_stan_model('/home/ajorr1/bin/kbbq/kbbq.stan', seqlen, ksize, rawquals, abundances)
 
     dinucleotide = get_dinucleotide(rawquals, seqs, seqlen)
-    dq_calibrated = delta_q_recalibrate(rawquals, dinucleotide, np.logical_not(rcorrected))
-    custom_gatk_calibrated = delta_q_recalibrate(rawquals, dinucleotide, erroneous)
+    unique_rgs = np.unique(rgs)
+    dq_calibrated = np.ma.masked_array(rawquals, copy = True)
+    custom_gatk_calibrated = np.ma.masked_array(rawquals, copy = True)
+    #for i in range(unique_rgs.shape[0]):
+    #    print(ek.tstamp(), "Processing RG:",unique_rgs[i], "(", i+1, "of", unique_rgs.shape[0], ")",". . .", file=sys.stderr)
+    #    thisrg = np.zeros(rawquals.shape, dtype = np.bool_)
+    #    thisrg[rgs == unique_rgs[i],] = True
+    #    #d_q_recalibrate requires arrays of the right shape and returns them
+    #    #so we have to mask the input and only assign the unmasked values
+    #    rg_quals = np.ma.masked_where(np.logical_not(thisrg), rawquals)
+    #    dq_calibrated[thisrg] = delta_q_recalibrate(rg_quals, rgs, dinucleotide, np.logical_not(rcorrected))[thisrg]
+    #    custom_gatk_calibrated[thisrg] = delta_q_recalibrate(rg_quals, rgs, dinucleotide, erroneous)[thisrg]
+
+    rg_to_int = dict(zip(unique_rgs, range(len(unique_rgs))))
+    rgs = np.array([rg_to_int[r] for r in rgs], dtype = np.int_)
+    rgs = np.broadcast_to(rgs[:,np.newaxis], rgs.shape + (seqlen,))
+
+    dq_calibrated = delta_q_recalibrate(rawquals, rgs, dinucleotide, np.logical_not(rcorrected))
+    custom_gatk_calibrated = delta_q_recalibrate(rawquals, rgs, dinucleotide, erroneous)
 
     plot_calibration([rawquals.flatten(), gatkcalibratedquals.flatten(), rcorrected.flatten()*rawquals.flatten(), dq_calibrated.flatten(), custom_gatk_calibrated.flatten()],
         truth = erroneous.flatten(),
