@@ -205,12 +205,16 @@ def delta_q_recalibrate(q, rgs, dinucleotide, errors, maxscore = 43):
     print(ek.tstamp(), "Finding Delta Q's . . .", file=sys.stderr)
     globaldeltaq, qscoredeltaq, positiondeltaq, dinucdeltaq = get_delta_qs(meanq, global_errs, global_total, q_errs, q_total, pos_errs, pos_total, dinuc_errs, dinuc_total)
     print(ek.tstamp(), "Recalibrating . . .", file=sys.stderr)
-    recal_q = np.ma.masked_array(np.zeros(q.shape, dtype = np.longdouble), copy = True) #+ meanq + globaldeltaq
-    recal_q[q <= 6] = np.ma.masked
+    qmask = np.ma.getmaskarray(q)
+    recal_q = np.zeros(q.shape, dtype = np.longdouble)
+    #recal_q = np.ma.masked_array(np.zeros(q.shape, dtype = np.longdouble), copy = True) #+ meanq + globaldeltaq
+    recal_q = np.ma.masked_where(qmask, recal_q)
+    #recal_q[q <= 6] = np.ma.masked
+    recal_q = np.ma.masked_where(q <= 6, recal_q)
 
     #vectorization:
     posrange = np.arange(recal_q.shape[1])
-    recal_q = meanq[rgs] + globaldeltaq[rgs] + qscoredeltaq[rgs,q] + positiondeltaq[rgs, q, posrange] + dinucdeltaq[rgs, q,dinucleotide]
+    recal_q = meanq[rgs] + globaldeltaq[rgs] + qscoredeltaq[rgs,q] + positiondeltaq[rgs, q, posrange] + dinucdeltaq[rgs, q, dinucleotide]
 
     #clip and round
     r_q = np.ma.masked_array(np.rint(np.clip(recal_q,0,maxscore)), dtype = np.int, copy = True)
@@ -223,7 +227,7 @@ def delta_q_recalibrate(q, rgs, dinucleotide, errors, maxscore = 43):
 
     return r_q.copy()
 
-def get_dinucleotide(q, seqs, seqlen, minq = 6):
+def get_dinucleotide(q, seqs, seqlen, minq = 2):
     #[A, T, G, C] -> [A, T, G, C]
     #nucleotides at the beginning of the sequence have an empty string before them
     #we should: ignore any context containing an N, ignore any context at beginning of sequence
@@ -236,16 +240,16 @@ def get_dinucleotide(q, seqs, seqlen, minq = 6):
     dinucleotide = np.zeros([seqs.shape[0], seqlen], dtype = np.int)
     for i in range(seqs.shape[0]):
         currentseq = seqs[i]
-        #for j in range(seqlen):
-        #    if q[i,j] <= minq:
-        #        currentseq[j] = 'N'
-        #    else:
-        #        break
-        #for j in reversed(range(seqlen)):
-        #    if q[i,j] <= minq:
-        #        currentseq[j] = 'N'
-        #    else:
-        #        break
+        for j in range(seqlen):
+            if q[i,j] <= minq:
+                currentseq[j] = 'N'
+            else:
+                break
+        for j in reversed(range(seqlen)):
+            if q[i,j] <= minq:
+                currentseq[j] = 'N'
+            else:
+                break
 
         dinucleotide[i,0] = -1
         for j in range(1, seqlen):
@@ -355,6 +359,12 @@ def get_delta_qs(meanq, rg_errs, rg_total, q_errs, q_total, pos_errs, pos_total,
     positiondeltaq = v_gatk_delta_q(prior2, pos_errs, pos_total)
     prior3 = np.broadcast_to((prior1 + qscoredeltaq)[...,np.newaxis], dinuc_total.shape)
     dinucdeltaq = v_gatk_delta_q(prior3, dinuc_errs, dinuc_total)
+
+    #need to add another value of dinuc, for invalid dinuc
+    pad = np.zeros((len(dinucdeltaq.shape),2), dtype = np.int_)
+    pad[-1,1] = 1 #add a 0 to the last axis
+    dinucdq = np.pad(dinucdeltaq, pad_width = pad, mode = 'constant', constant_values = 0)
+
     #TODO: could be another layer where position is dependent on qreported while dinuc is dependent on qreported and position
     #TODO: seems like its just a RG problem where my data ACTUALLY has like 30
     #for i in range(maxscore + 1):
@@ -363,7 +373,7 @@ def get_delta_qs(meanq, rg_errs, rg_total, q_errs, q_total, pos_errs, pos_total,
     #    for j in range(16):
     #        dinucdeltaq[i,j] = gatk_delta_q(meanq + globaldeltaq + qscoredeltaq[i], dinuc_errs[i,j], dinuc_total[i,j])
     #    dinucdeltaq[i,-1] = 0 #no contribution for invalid context
-    return rgdeltaq.copy(), qscoredeltaq.copy(), positiondeltaq.copy(), dinucdeltaq.copy()
+    return rgdeltaq.copy(), qscoredeltaq.copy(), positiondeltaq.copy(), dinucdq.copy()
 
 def plot_calibration(data, truth, labels, plotname, plottitle = None):
     print(ek.tstamp(), "Making Quality Score Plot . . .", file = sys.stderr)
@@ -410,7 +420,7 @@ def plot_calibration(data, truth, labels, plotname, plottitle = None):
 
 def p_to_q(p, maxscore = 43):
     q = -10.0*np.ma.log10(p)
-    q = np.ma.masked_array(np.rint(q), dtype=np.int)
+    q = np.ma.masked_array(np.rint(q), dtype=np.int, copy = True)
     q = np.clip(q, 0, maxscore)
     return q.copy()
 
@@ -608,8 +618,6 @@ def main():
 
     dinucleotide = get_dinucleotide(rawquals, seqs, seqlen)
     unique_rgs = np.unique(rgs)
-    dq_calibrated = np.ma.masked_array(rawquals, copy = True)
-    custom_gatk_calibrated = np.ma.masked_array(rawquals, copy = True)
     #for i in range(unique_rgs.shape[0]):
     #    print(ek.tstamp(), "Processing RG:",unique_rgs[i], "(", i+1, "of", unique_rgs.shape[0], ")",". . .", file=sys.stderr)
     #    thisrg = np.zeros(rawquals.shape, dtype = np.bool_)
@@ -624,8 +632,8 @@ def main():
     rgs = np.array([rg_to_int[r] for r in rgs], dtype = np.int_)
     rgs = np.broadcast_to(rgs[:,np.newaxis], rgs.shape + (seqlen,))
 
-    dq_calibrated = delta_q_recalibrate(rawquals, rgs, dinucleotide, np.logical_not(rcorrected))
-    custom_gatk_calibrated = delta_q_recalibrate(rawquals, rgs, dinucleotide, erroneous)
+    dq_calibrated = delta_q_recalibrate(rawquals.copy(), rgs, dinucleotide, np.logical_not(rcorrected))
+    custom_gatk_calibrated = delta_q_recalibrate(rawquals.copy(), rgs, dinucleotide, erroneous)
 
     plot_calibration([rawquals.flatten(), gatkcalibratedquals.flatten(), rcorrected.flatten()*rawquals.flatten(), dq_calibrated.flatten(), custom_gatk_calibrated.flatten()],
         truth = erroneous.flatten(),
