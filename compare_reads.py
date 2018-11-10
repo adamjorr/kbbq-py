@@ -156,9 +156,8 @@ def v_gatk_delta_q(prior_q, numerrs, numtotal, maxscore = 43):
     #1st dim is possible qs
     prior = RescaledNormal.prior_dist[diff]
     #figure out how to make this work
-    #maybe broadcast possible_q at the beginning and use regular subtract ?
-    broadcast_errs = np.broadcast_to(numerrs, possible_q.shape + numerrs.shape)
-    broadcast_tot = np.broadcast_to(numtotal, possible_q.shape + numtotal.shape)
+    broadcast_errs = np.broadcast_to(numerrs, possible_q.shape + numerrs.shape).copy()
+    broadcast_tot = np.broadcast_to(numtotal, possible_q.shape + numtotal.shape).copy()
     p = q_to_p(possible_q).astype(np.float)
     while len(p.shape) < len(broadcast_tot.shape):
         p = np.expand_dims(p, -1)
@@ -199,9 +198,40 @@ def gatk_delta_q(prior_q, numerrs, numtotal, maxscore = 43):
     posterior_q = np.argmax(prior_dist + q_likelihood)
     return posterior_q - prior_q
 
-def delta_q_recalibrate(q, rgs, dinucleotide, errors, maxscore = 43):
+def table_to_vectors(tablefile, rg_order, dinuc_order, seqlen, maxscore = 43):
+    table = recaltable.RecalibrationReport(tablefile)
+    rgtable = table.tables[2].data.reindex(rg_order)
+    meanq = rgtable['EmpiricalQuality'].values.astype(np.int64)
+    global_errs = rgtable['Errors'].values.astype(np.int64)
+    global_total = rgtable['Observations'].values
+
+    qtable = table.tables[3].data.reindex(pd.MultiIndex.from_product([rg_order, np.arange(maxscore + 1)]))
+    q_shape = (len(rg_order), maxscore)
+    q_errs = qtable['Errors'].fillna(0, downcast = 'infer').values.reshape(q_shape)
+    q_total = qtable['Observations'].fillna(0, downcast = 'infer').values.reshape(q_shape)
+
+    postable = table.tables[4].data.loc[rg_order, np.arange(maxscore + 1), 'Cycle']
+    postable = postable.reset_index(level = 'CovariateValue').astype({'CovariateValue' : np.int_}).set_index('CovariateValue', append = True)
+    postable = postable.reindex(pd.MultiIndex.from_product(
+        [rg_order, np.arange(maxscore + 1), ['Cycle'],
+        np.concatenate([np.arange(seqlen)+1, np.flip(-(np.arange(seqlen)+1),axis = 0)])
+        ]))
+    pos_shape = (len(rg_order), maxscore, 2 * seqlen)
+    pos_errs = postable['Errors'].fillna(0, downcast = 'infer').values.reshape(pos_shape)
+    pos_total = postable['Observations'].fillna(0, downcast = 'infer').values.reshape(pos_shape)
+
+    dinuctable = table.tables[4].data.reindex(pd.MultiIndex.from_product([rg_order, np.arange(maxscore + 1), ['Context'], dinuc_order]))
+    dinuc_shape = (len(rg_order), maxscore, len(dinuc_order))
+    dinuc_errs = dinuctable['Errors'].fillna(0, downcast = 'infer').values.reshape(dinuc_shape)
+    dinuc_total = dinuctable['Observations'].fillna(0, downcast = 'infer').values.reshape(dinuc_shape)
+
+    return meanq, global_errs, global_total, q_errs, q_total, pos_errs, pos_total, dinuc_errs, dinuc_total
+
+def delta_q_recalibrate(q, rgs, dinucleotide, errors, reversecycle, maxscore = 43):
+    #TODO: My issue is the cycle covariate can be negative if
+    # the read is on the reverse strand.
     print(ek.tstamp(), "Getting Covariate Arrays . . .", file=sys.stderr)
-    meanq, global_errs, global_total, q_errs, q_total, pos_errs, pos_total, dinuc_errs, dinuc_total = v_get_covariate_arrays(q, rgs, dinucleotide, errors)
+    meanq, global_errs, global_total, q_errs, q_total, pos_errs, pos_total, dinuc_errs, dinuc_total = v_get_covariate_arrays(q, rgs, dinucleotide, errors, reversecycle)
     print(ek.tstamp(), "Finding Delta Q's . . .", file=sys.stderr)
     globaldeltaq, qscoredeltaq, positiondeltaq, dinucdeltaq = get_delta_qs(meanq, global_errs, global_total, q_errs, q_total, pos_errs, pos_total, dinuc_errs, dinuc_total)
     print(ek.tstamp(), "Recalibrating . . .", file=sys.stderr)
@@ -213,8 +243,10 @@ def delta_q_recalibrate(q, rgs, dinucleotide, errors, maxscore = 43):
     recal_q = np.ma.masked_where(q <= 6, recal_q)
 
     #vectorization:
-    posrange = np.arange(recal_q.shape[1])
-    recal_q = meanq[rgs] + globaldeltaq[rgs] + qscoredeltaq[rgs,q] + positiondeltaq[rgs, q, posrange] + dinucdeltaq[rgs, q, dinucleotide]
+    pos = np.broadcast_to(np.arange(q.shape[1]), (q.shape[0], q.shape[1])).copy()
+    np.add.at(pos, reversecycle, 1)
+    np.negative.at(pos,reversecycle)
+    recal_q = meanq[rgs] + globaldeltaq[rgs] + qscoredeltaq[rgs,q] + positiondeltaq[rgs, q, pos] + dinucdeltaq[rgs, q, dinucleotide]
 
     #clip and round
     r_q = np.ma.masked_array(np.rint(np.clip(recal_q,0,maxscore)), dtype = np.int, copy = True)
@@ -260,7 +292,7 @@ def get_dinucleotide(q, seqs, seqlen, minq = 2):
                 dinucleotide[i,j] = -1
     return dinucleotide
 
-def v_get_covariate_arrays(q, rgs, dinucleotide, errors, maxscore = 43, minscore = 6):
+def v_get_covariate_arrays(q, rgs, dinucleotide, errors, reversecycle, maxscore = 43, minscore = 6):
     #input arrays are the same dimensions: (numsequences, seqlen)
     #output arrays are dimension (nrgs), (nrgs, q), (nrgs, q, seqlen), or (nrgs, q, 16)
     m = np.ma.getmaskarray(q)
@@ -273,11 +305,13 @@ def v_get_covariate_arrays(q, rgs, dinucleotide, errors, maxscore = 43, minscore
     rg_total = np.zeros(nrgs, dtype = np.int_)
     q_errs = np.zeros((nrgs, maxscore + 1), dtype = np.int_)
     q_total = np.zeros((nrgs, maxscore + 1), dtype = np.int_)
-    pos_errs = np.zeros((nrgs, maxscore + 1, seqlen), dtype = np.int_)
-    pos_total = np.zeros((nrgs, maxscore + 1, seqlen), dtype = np.int_)
+    pos_errs = np.zeros((nrgs, maxscore + 1, 2 * seqlen), dtype = np.int_)
+    pos_total = np.zeros((nrgs, maxscore + 1, 2 * seqlen), dtype = np.int_)
     dinuc_errs = np.zeros((nrgs, maxscore + 1, 16), dtype = np.int_)
     dinuc_total = np.zeros((nrgs, maxscore + 1, 16), dtype = np.int_)
-    pos = np.broadcast_to(np.arange(seqlen), (q.shape[0], seqlen))
+    pos = np.broadcast_to(np.arange(seqlen), (q.shape[0], seqlen)).copy()
+    np.add.at(pos, reversecycle, 1)
+    np.negative.at(pos,reversecycle)
 
     #these will be reused a lot; cache them here
     rge = rgs[errors]
@@ -318,8 +352,8 @@ def get_covariate_arrays(q, rgs, dinucleotide, errors, maxscore = 43, minscore =
     meanq = p_to_q(expected_errs / np.sum(q_total))
 
     #pos_errs should be 2d: pos_errs[qscore, position] = numerrors
-    pos_errs = np.zeros([maxscore + 1, q.shape[1]])
-    pos_total = np.zeros([maxscore + 1, q.shape[1]])
+    pos_errs = np.zeros([maxscore + 1, 2 * q.shape[1]])
+    pos_total = np.zeros([maxscore + 1, 2 * q.shape[1]])
     for i in range(maxscore + 1):
         #pos_errs = np.bincount(q[error_and_unmasked], minlength = maxscore+1) is vectorized equivalent?
         pos_errs[i,] = np.sum(np.logical_and(error_and_unmasked, q == i), axis = 0)
@@ -344,7 +378,7 @@ def get_delta_qs(meanq, rg_errs, rg_total, q_errs, q_total, pos_errs, pos_total,
     #   [rg]
     #   [rg, q]
     #   [rg, q, covariate]
-    seqlen = pos_total.shape[2]
+    #seqlen = pos_total.shape[2] / 2
     nrgs = meanq.shape[0]
     rgdeltaq = v_gatk_delta_q(meanq, rg_errs, rg_total)
     # the qscoredeltaq is 1d, with the index being the quality score
@@ -568,10 +602,11 @@ def load_pileups(plpfile1, plpfile2, bad_positions, names, seqlen):
     gatkcalibratedquals1, erroneous1, trackingmask1 = process_plp(plpfile1, bad_positions, names, seqlen, "/1")
     gatkcalibratedquals2, erroneous2, trackingmask2 = process_plp(plpfile2, bad_positions, names, seqlen, "/2")
     foundinplp = np.logical_or(trackingmask1,trackingmask2)
+    reversecycle = np.ma.masked_where(~foundinplp, trackingmask2)
     gatkcalibratedquals = np.ma.masked_where(~foundinplp, gatkcalibratedquals1 + gatkcalibratedquals2)
     gatkcalibratedquals[gatkcalibratedquals == 2] = np.ma.masked
     erroneous = np.ma.masked_where(~foundinplp, np.logical_or(erroneous1, erroneous2))
-    return foundinplp, gatkcalibratedquals, erroneous
+    return foundinplp, gatkcalibratedquals, erroneous, reversecycle
 
 def main():
     np.seterr(all = 'raise')
@@ -593,21 +628,17 @@ def main():
         loaded = np.load(cachefile)
         foundinplp = loaded['foundinplp']
         assert not np.all(~foundinplp)
-        #print("foundinplp.shape:",foundinplp.shape)
-        #print("sum(foundinplp):",np.sum(foundinplp))
         gatkcalibratedquals = loaded['gatkcalibratedquals']
         gatkcalibratedquals = np.ma.masked_where(~foundinplp, gatkcalibratedquals)
         gatkcalibratedquals[gatkcalibratedquals == 2] = np.ma.masked
-        #print("gatkcalibratedquals.shape:",gatkcalibratedquals.shape)
-        #print("sum(np.ma.getmaskarray(gatkcalibratedquals)):",np.sum(np.ma.getmaskarray(gatkcalibratedquals)))
         erroneous = loaded['erroneous']
         erroneous = np.ma.masked_where(~foundinplp, erroneous)
-        #print("erroneous.shape:",erroneous.shape)
-        #print("sum(np.ma.getmaskarray(erroneous)):",np.sum(np.ma.getmaskarray(gatkcalibratedquals)))
+        reversecycle = loaded['reversecycle']
+        reversecycle = np.ma.masked_where(~foundinplp, reversecycle)
     else:
-        foundinplp, gatkcalibratedquals, erroneous = load_pileups(plpfile1, plpfile2, bad_positions, names, seqlen)
+        foundinplp, gatkcalibratedquals, erroneous, reversecycle = load_pileups(plpfile1, plpfile2, bad_positions, names, seqlen)
         assert not np.all(~foundinplp)
-        np.savez_compressed(cachefile, foundinplp = foundinplp, gatkcalibratedquals = gatkcalibratedquals, erroneous = erroneous)
+        np.savez_compressed(cachefile, foundinplp = foundinplp, gatkcalibratedquals = gatkcalibratedquals, erroneous = erroneous, reversecycle = reversecycle)
 
     #important arrays: names, rawquals, rcorrected, calibquals, gatkcalibratedquals, erroneous, hmmquals
 
@@ -632,8 +663,8 @@ def main():
     rgs = np.array([rg_to_int[r] for r in rgs], dtype = np.int_)
     rgs = np.broadcast_to(rgs[:,np.newaxis], rgs.shape + (seqlen,))
 
-    dq_calibrated = delta_q_recalibrate(rawquals.copy(), rgs, dinucleotide, np.logical_not(rcorrected))
-    custom_gatk_calibrated = delta_q_recalibrate(rawquals.copy(), rgs, dinucleotide, erroneous)
+    dq_calibrated = delta_q_recalibrate(rawquals.copy(), rgs, dinucleotide, np.logical_not(rcorrected), reversecycle)
+    custom_gatk_calibrated = delta_q_recalibrate(rawquals.copy(), rgs, dinucleotide, erroneous, reversecycle)
 
     plot_calibration([rawquals.flatten(), gatkcalibratedquals.flatten(), rcorrected.flatten()*rawquals.flatten(), dq_calibrated.flatten(), custom_gatk_calibrated.flatten()],
         truth = erroneous.flatten(),
