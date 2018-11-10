@@ -1,3 +1,4 @@
+
 #!/usr/bin/env python3
 import pysam
 import numpy as np
@@ -226,6 +227,8 @@ def table_to_vectors(tablefile, rg_order, dinuc_order, seqlen, maxscore = 43):
     dinuc_total = dinuctable['Observations'].fillna(0, downcast = 'infer').values.reshape(dinuc_shape)
 
     return meanq, global_errs, global_total, q_errs, q_total, pos_errs, pos_total, dinuc_errs, dinuc_total
+
+def table_recalibrate(tablefile
 
 def delta_q_recalibrate(q, rgs, dinucleotide, errors, reversecycle, maxscore = 43):
     #TODO: My issue is the cycle covariate can be negative if
@@ -480,84 +483,6 @@ def get_abundances(seqs, seqlen, khmerfile, savefile = None):
         if savefile is not None:
             np.savetxt(savefile, abundances, fmt = '%d')
     return abundances, ksize, nkmers
-
-def khmer_nb(seqs, rawquals, erroneous, seqlen, khmerfile):
-    print(ek.tstamp(), "Naively trying a Naive Bayes Classifier...", file = sys.stderr)
-    abundances, ksize, nkmers = get_abundances(seqs, seqlen, khmerfile, savefile = 'abundances.txt')
-    abundances = np.ma.masked_array(abundances)
-    erroneous_mers = np.ma.masked_array(np.zeros([len(seqs), nkmers], dtype = np.bool_))
-    for i in range(len(seqs)):
-        for j in range(nkmers):
-            erroneous_bases = erroneous[i,j:j+ksize]
-            erroneous_mers[i,j] = np.any(erroneous_bases)
-            if np.ma.getmask(erroneous_mers[i,j]) is not np.ma.nomask and np.any(erroneous_bases.mask):
-                erroneous_mers[i,j] = np.ma.masked
-                abundances[i,j] = np.ma.masked
-    noterr_or_masked = np.logical_not(np.logical_or(erroneous_mers.mask, erroneous_mers.data))
-    err_and_notmasked = np.logical_and(erroneous_mers.data, np.logical_not(erroneous_mers.mask))
-    erroneous_abundances = np.bincount(abundances[noterr_or_masked].flatten())
-    nonerroneous_abundances = np.bincount(abundances[err_and_notmasked].flatten())
-
-    #make the arrays the same length
-    if len(erroneous_abundances) > len(nonerroneous_abundances):
-        nonerroneous_abundances.resize(erroneous_abundances.shape)
-    elif len(nonerroneous_abundances) > len(erroneous_abundances):
-        erronous_abundances.resize(nonerroneous_abundances.shape)
-
-    p_a_given_e = np.array(erroneous_abundances / np.sum(erroneous_abundances), dtype = np.longdouble)
-    p_a_given_note = np.array(nonerroneous_abundances / np.sum(nonerroneous_abundances), dtype = np.longdouble)
-    #P(E | O) = P(O | E) * P(E) / P(O) = sum(P(O | S) * P(S | E)) * P(E) / P(O)
-    p_s_given_e = np.array([0,.128,0,.872])
-    p_s_given_note = np.array([.424,0,.006,.57])
-    #p_s_given_e = s_given_e / np.sum(s_given_e)
-    #p_s_given_note = s_given_note / np.sum(s_given_note)
-    actual_s_given_e = np.zeros(4, dtype = np.int)
-    actual_s_given_note = np.zeros(4, dtype = np.int)
-    oldpe = q_to_p(rawquals.copy())
-    newpe = oldpe.copy()
-    p_e = 0.0108804719256
-    print(ek.tstamp(), "Classifying and Recalibrating", file = sys.stderr)
-    for i in range(len(seqs)):
-        #just the middles for now
-        for j in range(nkmers - ksize - 1):
-            allidxs = np.array([j, j+1])
-            a = abundances[i,allidxs] # dim 2,
-            a_given_e = p_a_given_e[a] # dim 2,
-            a_given_note = p_a_given_note[a] # dim 2,
-            o = np.stack([a_given_note, a_given_e])
-            p_o_given_s = np.outer(o[:,0],o[:,1]).flatten() #first state transition
-            p_o_given_e = np.sum(p_o_given_s * p_s_given_e)
-            p_o_given_note = np.sum(p_o_given_s * p_s_given_note)
-            #p_e = oldpe[i,j+ksize]
-            p_o = p_o_given_e * p_e + p_o_given_note * (1.0 - p_e)
-            p_e_given_o = p_o_given_e * p_e / p_o
-            newpe[i,j + ksize] = p_e_given_o
-
-            if np.ma.getmask(oldpe[i,j+ksize]) is not np.ma.nomask and np.ma.getmask(oldpe[i,j+ksize]):
-                newpe[i, j+ksize] = np.ma.masked
-                actuals = erroneous_mers[i, allidxs]
-                actual_nonerrors = np.logical_not(actuals)
-                actual_errors = actuals
-                actual_o = np.stack([actual_nonerrors, actual_errors])
-                actuals_outer = np.outer(actual_o[:,0],actual_o[:,1]).flatten()
-                if erroneous[i,j + ksize]:
-                    actual_s_given_e = actual_s_given_e + actuals_outer
-                else:
-                    actual_s_given_note = actual_s_given_note + actuals_outer
-    actual_s_given_e = actual_s_given_e / np.sum(actual_s_given_e)
-    actual_s_given_note = actual_s_given_note / np.sum(actual_s_given_note)
-    # Modeled P(S|E) [0.   0.   0.   0.   0.   0.   0.25 0.25 0.   0.   0.   0.   0.   0. 0.25 0.25]                                            
-    # Actual P(S|E) [0.         0.         0.         0.         0.         0. 0.02765633 0.1004291  0.         0.         0.         0. 0.         0.         0.12954866 0.74236591]            
-    # Modeled P(S|NOT E) [0.11111111 0.11111111 0.         0.11111111 0.         0. 0.         0.         0.11111111 0.11111111 0.         0.11111111 0.11111111 0.11111111 0.         0.11111111]
-    # Actual P(S|NOT E) [3.17953062e-01 2.12157531e-03 0.00000000e+00 1.04366234e-01 0.00000000e+00 0.00000000e+00 0.00000000e+00 0.00000000e+00 4.98386869e-03 2.48924327e-05 0.00000000e+00 1.72464193e-03 2.11434305e-01 1.59378846e-03 0.00000000e+00 3.55797633e-01]
-    print("Modeled P(S|E)",p_s_given_e)
-    print("Actual P(S|E)",actual_s_given_e)
-    print("Modeled P(S|NOT E)", p_s_given_note)
-    print("Actual P(S|NOT E)", actual_s_given_note)
-    print("Modeled P(E)",p_e)
-    print("Actual P(E)",np.sum(erroneous)/np.sum(~erroneous.mask))
-    newquals = p_to_q(newpe)
-    return newquals
 
 def pystan_model(modelfile, L, seqlen, ksize, alpha, beta, a, raw_p, q):
     os.environ['STAN_NUM_THREADS'] = "32"
