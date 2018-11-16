@@ -21,7 +21,6 @@ class GATKReport:
 
 class GATKTable:
     def __init__(self, tablestring):
-        print("Doing something")
         rows = tablestring.splitlines()
         self.format = rows[0]
         splitfmt = self.format.split(':')
