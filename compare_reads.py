@@ -184,49 +184,6 @@ def v_gatk_delta_q(prior_q, numerrs, numtotal, maxscore = 43):
         raise
     return posterior_q - prior_q
 
-def gatk_delta_q(prior_q, numerrs, numtotal, maxscore = 43):
-    possible_q = np.arange(maxscore, dtype = np.int)
-    diff = np.array(np.clip(np.absolute(np.rint(possible_q - prior_q)), 0, maxscore))
-    # this is a rescaled normal distribution
-    # this underflows if diff >= 20
-    prior_dist = np.zeros(diff.shape)
-    for i in range(diff.shape[0]):
-        try:
-            prior_dist[i] = np.log(.9 * np.exp(-((diff[i]/.5)**2)/2))
-        except FloatingPointError:
-            prior_dist[i] = np.NINF
-    #prior_dist = scipy.stats.norm.logpdf(diff, scale = .5)
-    #smooth by adding 1 error and 1 nonerror
-    #in gatk, this is done by rounding up and adding one
-    q_likelihood = scipy.stats.binom.logpmf(numerrs + 1, numtotal+2, q_to_p(possible_q).astype(np.float))
-    posterior_q = np.argmax(prior_dist + q_likelihood)
-    return posterior_q - prior_q
-
-def table_to_eq(tablefile, rg_order, dinuc_order, seqlen, maxscore = 43):
-    #globaldeltaq, qscoredeltaq, positiondeltaq, dinucdeltaq
-    table = recaltable.RecalibrationReport(tablefile)
-    rgtable = table.tables[2].data.reindex(rg_order)
-    globaleq = rgtable['EmpiricalQuality'].values
-
-    qtable = table.tables[3].data.reindex(pd.MultiIndex.from_product([rg_order, np.arange(maxscore + 1)], names = ['ReadGroup','QualityScore']))
-    q_shape = (len(rg_order), maxscore + 1)
-    qscoreeq = (qtable['EmpiricalQuality']).values.reshape(q_shape)
-
-    postable = table.tables[4].data.loc[rg_order, np.arange(maxscore + 1), 'Cycle']
-    postable = postable.reset_index(level = 'CovariateValue').astype({'CovariateValue' : np.int_}).set_index('CovariateValue', append = True)
-    postable = postable.reindex(pd.MultiIndex.from_product(
-        [rg_order, np.arange(maxscore + 1), ['Cycle'],
-        np.concatenate([np.arange(seqlen)+1, np.flip(-(np.arange(seqlen)+1),axis = 0)])
-        ]))
-    pos_shape = (len(rg_order), maxscore + 1, 2 * seqlen)
-    positioneq = (postable['EmpiricalQuality']).values.reshape(pos_shape)
-
-    dinuctable = table.tables[4].data.reindex(pd.MultiIndex.from_product([rg_order, np.arange(maxscore + 1), ['Context'], dinuc_order]))
-    dinuc_shape = (len(rg_order), maxscore + 1, len(dinuc_order))
-    dinuceq = (dinuctable['EmpiricalQuality']).values.reshape(dinuc_shape)
-
-    return globaleq, qscoreeq, positioneq, dinuceq
-
 def table_to_vectors(tablefile, rg_order, dinuc_order, seqlen, maxscore = 43):
     #the recal table uses the PU of the read group as the read group entry in the table
     table = recaltable.RecalibrationReport(tablefile)
@@ -267,9 +224,6 @@ def table_recalibrate(q, tablefile, rg_order, dinuc_order, seqlen, reversecycle,
     pos = np.broadcast_to(np.arange(q.shape[1]), (q.shape[0], q.shape[1])).copy()
     np.add.at(pos, reversecycle, 1)
     np.negative.at(pos,reversecycle)
-    print("MeanQ:",meanq)
-    print("GlobalDQ:",globaldeltaq)
-    print("QscoreDQ:",qscoredeltaq)
     recal_q = meanq[rgs] + globaldeltaq[rgs] + qscoredeltaq[rgs,q] + positiondeltaq[rgs, q, pos] + dinucdeltaq[rgs, q, dinucleotide]
     r_q = np.ma.masked_array(np.rint(np.clip(recal_q,0,maxscore)), dtype = np.int, copy = True)
 
@@ -446,14 +400,6 @@ def get_delta_qs(meanq, rg_errs, rg_total, q_errs, q_total, pos_errs, pos_total,
     pad[-1,1] = 1 #add a 0 to the last axis
     dinucdq = np.pad(dinucdeltaq, pad_width = pad, mode = 'constant', constant_values = 0)
 
-    #TODO: could be another layer where position is dependent on qreported while dinuc is dependent on qreported and position
-    #TODO: seems like its just a RG problem where my data ACTUALLY has like 30
-    #for i in range(maxscore + 1):
-    #    for j in range(seqlen):
-    #        positiondeltaq[i,j] = gatk_delta_q(meanq + globaldeltaq + qscoredeltaq[i], pos_errs[i,j], pos_total[i,j])
-    #    for j in range(16):
-    #        dinucdeltaq[i,j] = gatk_delta_q(meanq + globaldeltaq + qscoredeltaq[i], dinuc_errs[i,j], dinuc_total[i,j])
-    #    dinucdeltaq[i,-1] = 0 #no contribution for invalid context
     return rgdeltaq.copy(), qscoredeltaq.copy(), positiondeltaq.copy(), dinucdq.copy()
 
 def plot_calibration(data, truth, labels, plotname, plottitle = None):
@@ -511,64 +457,6 @@ def q_to_p(q):
     p = np.ma.masked_array(np.ma.power(10.0,-(q / 10.0)), dtype = np.longdouble, copy = True)
     return p
 
-def get_abundances(seqs, seqlen, khmerfile, savefile = None):
-    args = khmer.khmer_args.build_counting_args().parse_args()
-    alltable = khmer.khmer_args.create_countgraph(args)
-    alltable.load(khmerfile)
-    ksize = alltable.ksize()
-    nkmers = seqlen - ksize + 1
-    if savefile is not None and os.path.exists(savefile):
-        print(ek.tstamp(), "Loading K-mer Abundances", file = sys.stderr)
-        abundances = np.loadtxt(savefile, dtype = np.int64)
-    else:
-        print(ek.tstamp(), "Finding K-mer Abundances", file = sys.stderr)
-        getter = alltable.get_kmer_counts
-        abundances = np.zeros([len(seqs), nkmers], dtype = np.int64)
-        for i in range(len(seqs)):
-            abundances[i,:] = getter(seqs[i])
-        if savefile is not None:
-            np.savetxt(savefile, abundances, fmt = '%d')
-    return abundances, ksize, nkmers
-
-def pystan_model(modelfile, L, seqlen, ksize, alpha, beta, a, raw_p, q):
-    os.environ['STAN_NUM_THREADS'] = "32"
-    extra_compile_args = ['-pthread', '-DSTAN_THREADS']
-    sm = pystan.StanModel(file = modelfile, model_name = 'kbbq', extra_compile_args = extra_compile_args)
-    print(ek.tstamp(), "Model Compiled. Starting optimization . . .", file=sys.stderr)
-    datadict = {'L' : L, 'seqlen' : seqlen, 'ksize' : ksize, 'a' : a, 'q' : q, 'alpha_init' : alpha, 'beta_init' : beta}
-    estimates = sm.optimizing(data = datadict,
-        sample_file = 'samples.csv',
-        init = lambda chain_id = None: {'e' : raw_p.copy(), 'kerr' : np.zeros((L, seqlen - ksize + 1)), 'lambda' : np.array([30, 1300]), 'alpha' : alpha, 'beta' : beta},
-        verbose = True)
-    return estimates['e'], estimates['kerr'], estimates['lambda'], estimates['alpha'], estimates['beta']
-
-def run_stan_model(modelfile, seqlen, ksize, rawquals, abundances):
-    raw_p = q_to_p(rawquals.copy())
-    adjustable = np.logical_not(np.any(raw_p.mask, axis = 1))
-    init_alpha, init_beta, _, _ = scipy.stats.beta.fit(raw_p[adjustable,:].data.astype(np.float), floc = 0, fscale = 1) ##needs log1p which isn't implemented for longdouble type.
-    a = abundances[adjustable,:]
-    L = a.shape[0]
-    init_p = raw_p[adjustable,:]
-    assert init_p.shape[0] == L
-    assert a.shape[0] == L
-    assert init_p.shape[1] == seqlen
-    assert a.shape[1] == seqlen - ksize + 1
-    e, kerr, l, alpha, beta = pystan_model(modelfile, L, seqlen, ksize, init_alpha, init_beta, a, init_p, rawquals[adjustable,:])
-    print("Init alpha:", init_alpha)
-    print("Init beta:", init_beta)
-    print("Fit alpha:", alpha)
-    print("Fit beta:", beta)
-    print("Init phi:", init_alpha / (init_alpha + init_beta))
-    print("Init gamma:", (init_alpha + init_beta))
-    print("Sum(perr):", sum(init_p))
-    print("Number of elements:", init_p.size)
-    print("Mean(perr):", np.mean(init_p))
-    print("Var(perr):", np.var(init_p))
-    raw_p[adjustable,:] = e
-    recalibrated = p_to_q(raw_p.copy())
-    recalibrated[~adjustable,:] = np.ma.masked
-    return recalibrated
-
 def load_pileups(plpfile1, plpfile2, bad_positions, names, seqlen):
     gatkcalibratedquals1, erroneous1, trackingmask1 = process_plp(plpfile1, bad_positions, names, seqlen, "/1")
     gatkcalibratedquals2, erroneous2, trackingmask2 = process_plp(plpfile2, bad_positions, names, seqlen, "/2")
@@ -582,7 +470,6 @@ def load_pileups(plpfile1, plpfile2, bad_positions, names, seqlen):
 def bam_test(bamfile, tablefile, rg_to_int, rg_order, dinuc_order, seqlen, minscore = 6, maxscore = 43):
     meanq, global_errs, global_total, q_errs, q_total, pos_errs, pos_total, dinuc_errs, dinuc_total = table_to_vectors(tablefile, rg_order, dinuc_order, seqlen, maxscore)
     globaldeltaq, qscoredeltaq, positiondeltaq, dinucdeltaq = get_delta_qs(meanq, global_errs, global_total, q_errs, q_total, pos_errs, pos_total, dinuc_errs, dinuc_total)
-    #globaldeltaq, qscoredeltaq, positiondeltaq, dinucdeltaq = table_to_eq(tablefile, rg_order, dinuc_order, seqlen, maxscore)
     dinuc_to_int = {d : i for i,d in enumerate(dinuc_order)}
     bam = pysam.AlignmentFile(bamfile,'r')
     for read in bam:
