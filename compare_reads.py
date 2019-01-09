@@ -474,26 +474,28 @@ def bamread_cycle_covariates(read):
 
 def bamread_dinuc_covariates(read, dinuc_to_int, complement):
     seq = list(read.query_sequence)
-    if read.is_reverse:
-        seq = [complement[x] for x in reversed(seq)]
-    seq = np.array(seq)
-    dinuc = np.char.add(seq[:-1], seq[1:])
-    #dinuc = np.pad(dinuc, (1,0), mode = 'constant', constant_values = 'N') #add a N at the front
-    #dinuc = np.concatenate([['N'], dinuc]) #this seems much faster than pad
-    if read.is_reverse:
-        dinuc = np.flip(dinuc)
     oq = np.array(list(read.get_tag('OQ')), dtype = np.unicode_)
     original_quals = np.array(oq.view(np.uint32) - 33, dtype = np.uint32)
+    if read.is_reverse:
+        seq = [complement[x] for x in reversed(seq)]
+        original_quals = np.flip(original_quals)
+    seq = np.array(seq)
+    dinuc = np.char.add(seq[:-1], seq[1:])
     dinuccov = np.zeros(len(seq), dtype = np.int)
     dinuccov[0] = -1
-    for i in range(len(dinuc)):
-        if original_quals[i] < 3:
-            dinuccov[i + 1] = -1
+    for i in range(1,len(seq)):
+        if original_quals[i-1] < 3:
+            dinuccov[i] = -1
         else:
-            dinuccov[i + 1] = dinuc_to_int[dinuc[i]]
+            dinuccov[i] = dinuc_to_int[dinuc[i]]
+
+    if read.is_reverse:
+        np.flip(dinuccov)
 
     #old method that worked
     seq = read.query_sequence
+    oq = np.array(list(read.get_tag('OQ')), dtype = np.unicode_)
+    original_quals = np.array(oq.view(np.uint32) - 33, dtype = np.uint32)
     old_dinuccov = np.zeros(len(seq), dtype = np.int)
     for i in range(len(seq)):
         #if read is reverse u have to reverse the context
