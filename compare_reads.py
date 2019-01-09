@@ -480,6 +480,8 @@ def bamread_dinuc_covariates(read, dinuc_to_int, complement):
     dinuc = np.char.add(seq[:-1], seq[1:])
     #dinuc = np.pad(dinuc, (1,0), mode = 'constant', constant_values = 'N') #add a N at the front
     #dinuc = np.concatenate([['N'], dinuc]) #this seems much faster than pad
+    if read.is_reverse:
+        dinuc = np.flip(dinuc)
     oq = np.array(list(read.get_tag('OQ')), dtype = np.unicode_)
     original_quals = np.array(oq.view(np.uint32) - 33, dtype = np.uint32)
     dinuccov = np.zeros(len(dinuc) + 1, dtype = np.int)
