@@ -469,9 +469,7 @@ def bamread_cycle_covariates(read):
     if read.is_reverse:
         cycle = np.flip(cycle)
     if read.is_read2:
-        cycle = np.negative(cycle)
-    else: #if it's read1, we use index notation starting at 0.
-        cycle = cycle - 1
+        cycle = np.negative(cycle + 1)
     return cycle
 
 def bamread_dinuc_covariates(read, dinuc_to_int, complement):
