@@ -520,7 +520,7 @@ def bam_test(bamfile, tablefile, rg_to_int, rg_order, dinuc_order, seqlen, minsc
     bam = pysam.AlignmentFile(bamfile,'r')
     for read in bam:
         gatk_calibrated_quals = np.array(read.query_qualities, dtype = np.int)
-        recalibrated_quals = recalibrate_bamread(read, meanq, globaldeltaq, qscoredeltaq, dinucdeltaq, positiondeltaq, dinucdeltaq, rg_to_int, dinuc_to_int)
+        recalibrated_quals = recalibrate_bamread(read, meanq, globaldeltaq, qscoredeltaq, positiondeltaq, dinucdeltaq, rg_to_int, dinuc_to_int)
         assert np.array_equal(recalibrated_quals, gatk_calibrated_quals)
     print(ek.tstamp(), "BAM test completed successfully.", file = sys.stderr)
 
