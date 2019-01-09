@@ -484,13 +484,45 @@ def bamread_dinuc_covariates(read, dinuc_to_int, complement):
         dinuc = np.flip(dinuc)
     oq = np.array(list(read.get_tag('OQ')), dtype = np.unicode_)
     original_quals = np.array(oq.view(np.uint32) - 33, dtype = np.uint32)
-    dinuccov = np.zeros(len(dinuc) + 1, dtype = np.int)
+    dinuccov = np.zeros(len(seq), dtype = np.int)
     dinuccov[0] = -1
     for i in range(len(dinuc)):
         if original_quals[i] < 3:
             dinuccov[i + 1] = -1
         else:
             dinuccov[i + 1] = dinuc_to_int[dinuc[i]]
+
+    #old method that worked
+    seq = read.query_sequence
+    old_dinuccov = np.zeros(len(seq), dtype = np.int)
+    for i in range(len(seq)):
+        #if read is reverse u have to reverse the context
+        nuc = seq[i]
+        if read.is_reverse:
+            if i == len(seq) - 1:
+                old_dinuccov[i] = -1
+            elif original_quals[i+1] < 3:
+                old_dinuccov[i] = -1
+            else:
+                dinuc = complement[seq[i + 1]] + complement[nuc]
+                old_dinuccov[i] = dinuc_to_int[dinuc]
+        else:
+            if i == 0:
+                old_dinuccov[i] = -1
+            elif original_quals[i-1] < 3:
+                old_dinuccov[i] = -1
+            else:
+                dinuc = seq[i-1:i+1]
+                old_dinuccov[i] = dinuc_to_int[dinuc]
+    ###############################################
+    try:
+        assert np.array_equal(old_dinuccov, dinuccov)
+    except AssertionError:
+        print('Old:', old_dinuccov)
+        print('New:', dinuccov)
+        raise 
+
+
     return dinuccov
 
 def recalibrate_bamread(read, meanq, globaldeltaq, qscoredeltaq, positiondeltaq, dinucdeltaq, rg_to_int, dinuc_to_int, minscore = 6, maxscore = 43):
@@ -508,6 +540,8 @@ def recalibrate_bamread(read, meanq, globaldeltaq, qscoredeltaq, positiondeltaq,
     qcov = original_quals[valid_positions]
     cycle = bamread_cycle_covariates(read)[valid_positions]
     dinuccov = bamread_dinuc_covariates(read, dinuc_to_int, complement)[valid_positions]
+
+
 
     recalibrated_quals[valid_positions] = (meanq[rg] + globaldeltaq[rg] + qscoredeltaq[rg, qcov] + dinucdeltaq[rg, qcov, dinuccov] + positiondeltaq[rg, qcov, cycle]).astype(np.int)
     return recalibrated_quals
