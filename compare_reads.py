@@ -496,7 +496,7 @@ def bamread_dinuc_covariates(read, dinuc_to_int, complement):
             dinuccov[i + 1] = dinuc_to_int[dinuc[i]]
     return dinuccov
 
-def recalibrate_read(read, meanq, globaldeltaq, qscoredeltaq, dinucdeltaq, positiondeltaq, rg_to_int, dinuc_to_int, minscore = 6, maxscore = 43):
+def recalibrate_bamread(read, meanq, globaldeltaq, qscoredeltaq, dinucdeltaq, positiondeltaq, rg_to_int, dinuc_to_int, minscore = 6, maxscore = 43):
     complement = {'A' : 'T', 'T' : 'A', 'G' : 'C', 'C' : 'G'}
     gatk_calibrated_quals = np.array(read.query_qualities, dtype = np.int)
     oq = np.array(list(read.get_tag('OQ')), dtype = np.unicode_)
