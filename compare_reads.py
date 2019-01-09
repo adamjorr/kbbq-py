@@ -507,7 +507,7 @@ def recalibrate_bamread(read, meanq, globaldeltaq, qscoredeltaq, positiondeltaq,
     valid_positions = (original_quals >= minscore)
     qcov = original_quals[valid_positions]
     cycle = bamread_cycle_covariates(read)[valid_positions]
-    dinuccov = bamread_dinuc_covariates(read, dinuc_to_int)[valid_positions]
+    dinuccov = bamread_dinuc_covariates(read, dinuc_to_int, complement)[valid_positions]
 
     recalibrated_quals[valid_positions] = (meanq[rg] + globaldeltaq[rg] + qscoredeltaq[rg, qcov] + dinucdeltaq[rg, qcov, dinuccov] + positiondeltaq[rg, qcov, cycle]).astype(np.int)
     return recalibrated_quals
