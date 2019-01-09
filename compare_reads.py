@@ -170,7 +170,6 @@ def v_gatk_delta_q(prior_q, numerrs, numtotal, maxscore = 43):
     #loglike should now have same dims as prior
     assert loglike.shape == prior.shape
     posterior = prior + loglike
-    #this doesn't seem right, check it
     posterior_q = np.argmax(posterior, axis = 0)
     try:
         assert posterior_q.shape == prior_q.shape
@@ -231,8 +230,6 @@ def table_recalibrate(q, tablefile, rg_order, dinuc_order, seqlen, reversecycle,
 
 
 def delta_q_recalibrate(q, rgs, dinucleotide, errors, reversecycle, maxscore = 43):
-    #TODO: My issue is the cycle covariate can be negative if
-    # the read is on the reverse strand.
     print(ek.tstamp(), "Getting Covariate Arrays . . .", file=sys.stderr)
     meanq, global_errs, global_total, q_errs, q_total, pos_errs, pos_total, dinuc_errs, dinuc_total = v_get_covariate_arrays(q, rgs, dinucleotide, errors, reversecycle)
     print(ek.tstamp(), "Finding Delta Q's . . .", file=sys.stderr)
@@ -496,9 +493,12 @@ def bamread_dinuc_covariates(read, dinuc_to_int, complement):
             dinuccov[i + 1] = dinuc_to_int[dinuc[i]]
     return dinuccov
 
-def recalibrate_bamread(read, meanq, globaldeltaq, qscoredeltaq, dinucdeltaq, positiondeltaq, rg_to_int, dinuc_to_int, minscore = 6, maxscore = 43):
+def recalibrate_bamread(read, meanq, globaldeltaq, qscoredeltaq, positiondeltaq, dinucdeltaq, rg_to_int, dinuc_to_int, minscore = 6, maxscore = 43):
     complement = {'A' : 'T', 'T' : 'A', 'G' : 'C', 'C' : 'G'}
-    gatk_calibrated_quals = np.array(read.query_qualities, dtype = np.int)
+    
+    #TODO: add an assert or logic to ensure OQ is present
+    # alternatively, use OQ if present otherwise assume
+    # read.query_qualities is the raw score
     oq = np.array(list(read.get_tag('OQ')), dtype = np.unicode_)
     original_quals = np.array(oq.view(np.uint32) - 33, dtype = np.uint32)
     recalibrated_quals = np.array(original_quals, dtype = np.int)
@@ -510,10 +510,20 @@ def recalibrate_bamread(read, meanq, globaldeltaq, qscoredeltaq, dinucdeltaq, po
     dinuccov = bamread_dinuc_covariates(read, dinuc_to_int)[valid_positions]
 
     recalibrated_quals[valid_positions] = (meanq[rg] + globaldeltaq[rg] + qscoredeltaq[rg, qcov] + dinucdeltaq[rg, qcov, dinuccov] + positiondeltaq[rg, qcov, cycle]).astype(np.int)
-    assert np.array_equal(recalibrated_quals,gatk_calibrated_quals)
     return recalibrated_quals
 
 def bam_test(bamfile, tablefile, rg_to_int, rg_order, dinuc_order, seqlen, minscore = 6, maxscore = 43):
+    meanq, global_errs, global_total, q_errs, q_total, pos_errs, pos_total, dinuc_errs, dinuc_total = table_to_vectors(tablefile, rg_order, dinuc_order, seqlen, maxscore)
+    globaldeltaq, qscoredeltaq, positiondeltaq, dinucdeltaq = get_delta_qs(meanq, global_errs, global_total, q_errs, q_total, pos_errs, pos_total, dinuc_errs, dinuc_total)
+    dinuc_to_int = {d : i for i,d in enumerate(dinuc_order)}
+    bam = pysam.AlignmentFile(bamfile,'r')
+    for read in bam:
+        gatk_calibrated_quals = np.array(read.query_qualities, dtype = np.int)
+        recalibrated_quals = recalibrate_bamread(read, meanq, globaldeltaq, qscoredeltaq, dinucdeltaq, positiondeltaq, dinucdeltaq, rg_to_int, dinuc_to_int)
+        assert np.array_equal(recalibrated_quals, gatk_calibrated_quals)
+    print(ek.tstamp(), "BAM test completed successfully.", file = sys.stderr)
+
+def old_bam_test(bamfile, tablefile, rg_to_int, rg_order, dinuc_order, seqlen, minscore = 6, maxscore = 43):
     meanq, global_errs, global_total, q_errs, q_total, pos_errs, pos_total, dinuc_errs, dinuc_total = table_to_vectors(tablefile, rg_order, dinuc_order, seqlen, maxscore)
     globaldeltaq, qscoredeltaq, positiondeltaq, dinucdeltaq = get_delta_qs(meanq, global_errs, global_total, q_errs, q_total, pos_errs, pos_total, dinuc_errs, dinuc_total)
     dinuc_to_int = {d : i for i,d in enumerate(dinuc_order)}
@@ -627,9 +637,10 @@ def main():
     unique_pus = [id_to_pu[rg] for rg in unique_rgs]
 
     np.set_printoptions(threshold = np.inf)
-    #bam_test("only_confident.sorted.recal.bam", tablefile, rg_to_int, unique_pus, dinuc_order, seqlen)
-    #print("Test success")
-    #quit()
+    bam_test("only_confident.sorted.recal.bam", tablefile, rg_to_int, unique_pus, dinuc_order, seqlen)
+
+
+    quit()
 
     dq_calibrated = delta_q_recalibrate(rawquals.copy(), rgs, dinucleotide, np.logical_not(rcorrected), reversecycle)
     custom_gatk_calibrated = delta_q_recalibrate(rawquals.copy(), rgs, dinucleotide, erroneous, reversecycle)
