@@ -467,6 +467,52 @@ def load_pileups(plpfile1, plpfile2, bad_positions, names, seqlen):
     erroneous = np.ma.masked_where(~foundinplp, np.logical_or(erroneous1, erroneous2))
     return foundinplp, gatkcalibratedquals, erroneous, reversecycle
 
+def bamread_cycle_covariates(read):
+    cycle = np.arange(len(read.query_sequence))
+    if read.is_reverse:
+        cycle = np.flip(cycle)
+    if read.is_read2:
+        cycle = np.negative(cycle)
+    else: #if it's read1, we use index notation starting at 0.
+        cycle = cycle - 1
+    return cycle
+
+def bamread_dinuc_covariates(read, dinuc_to_int, complement):
+    seq = list(read.query_sequence)
+    if read.is_reverse:
+        seq = [complement[x] for x in reversed(seq)]
+    seq = np.array(seq)
+    dinuc = np.char.add(seq[:-1], seq[1:])
+    #dinuc = np.pad(dinuc, (1,0), mode = 'constant', constant_values = 'N') #add a N at the front
+    #dinuc = np.concatenate([['N'], dinuc]) #this seems much faster than pad
+    oq = np.array(list(read.get_tag('OQ')), dtype = np.unicode_)
+    original_quals = np.array(oq.view(np.uint32) - 33, dtype = np.uint32)
+    dinuccov = np.zeros(len(dinuc) + 1, dtype = np.int)
+    dinuccov[0] = -1
+    for i in range(len(dinuc)):
+        if original_quals[i] < 3:
+            dinuccov[i + 1] = -1
+        else:
+            dinuccov[i + 1] = dinuc_to_int[dinuc[i]]
+    return dinuccov
+
+def recalibrate_read(read, meanq, globaldeltaq, qscoredeltaq, dinucdeltaq, positiondeltaq, rg_to_int, dinuc_to_int, minscore = 6, maxscore = 43):
+    complement = {'A' : 'T', 'T' : 'A', 'G' : 'C', 'C' : 'G'}
+    gatk_calibrated_quals = np.array(read.query_qualities, dtype = np.int)
+    oq = np.array(list(read.get_tag('OQ')), dtype = np.unicode_)
+    original_quals = np.array(oq.view(np.uint32) - 33, dtype = np.uint32)
+    recalibrated_quals = np.array(original_quals, dtype = np.int)
+    rg = rg_to_int[read.get_tag('RG')]
+
+    valid_positions = (original_quals >= minscore)
+    qcov = original_quals[valid_positions]
+    cycle = bamread_cycle_covariates(read)[valid_positions]
+    dinuccov = bamread_dinuc_covariates(read, dinuc_to_int)[valid_positions]
+
+    recalibrated_quals[valid_positions] = (meanq[rg] + globaldeltaq[rg] + qscoredeltaq[rg, qcov] + dinucdeltaq[rg, qcov, dinuccov] + positiondeltaq[rg, qcov, cycle]).astype(np.int)
+    assert np.array_equal(recalibrated_quals,gatk_calibrated_quals)
+    return recalibrated_quals
+
 def bam_test(bamfile, tablefile, rg_to_int, rg_order, dinuc_order, seqlen, minscore = 6, maxscore = 43):
     meanq, global_errs, global_total, q_errs, q_total, pos_errs, pos_total, dinuc_errs, dinuc_total = table_to_vectors(tablefile, rg_order, dinuc_order, seqlen, maxscore)
     globaldeltaq, qscoredeltaq, positiondeltaq, dinucdeltaq = get_delta_qs(meanq, global_errs, global_total, q_errs, q_total, pos_errs, pos_total, dinuc_errs, dinuc_total)
