@@ -489,9 +489,6 @@ def bamread_dinuc_covariates(read, dinuc_to_int, complement):
         else:
             dinuccov[i] = dinuc_to_int[dinuc[i]]
 
-    if read.is_reverse:
-        np.flip(dinuccov)
-
     #old method that worked
     seq = read.query_sequence
     oq = np.array(list(read.get_tag('OQ')), dtype = np.unicode_)
