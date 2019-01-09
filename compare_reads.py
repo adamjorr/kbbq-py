@@ -530,7 +530,7 @@ def bamread_dinuc_covariates(read, dinuc_to_int, complement):
     return dinuccov
 
 def recalibrate_bamread(read, meanq, globaldeltaq, qscoredeltaq, positiondeltaq, dinucdeltaq, rg_to_int, dinuc_to_int, minscore = 6, maxscore = 43):
-    complement = {'A' : 'T', 'T' : 'A', 'G' : 'C', 'C' : 'G'}
+    complement = {'A' : 'T', 'T' : 'A', 'G' : 'C', 'C' : 'G', 'N' : 'N'}
     
     #TODO: add an assert or logic to ensure OQ is present
     # alternatively, use OQ if present otherwise assume
