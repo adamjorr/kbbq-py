@@ -521,7 +521,12 @@ def bam_test(bamfile, tablefile, rg_to_int, rg_order, dinuc_order, seqlen, minsc
     for read in bam:
         gatk_calibrated_quals = np.array(read.query_qualities, dtype = np.int)
         recalibrated_quals = recalibrate_bamread(read, meanq, globaldeltaq, qscoredeltaq, positiondeltaq, dinucdeltaq, rg_to_int, dinuc_to_int)
-        assert np.array_equal(recalibrated_quals, gatk_calibrated_quals)
+        try:
+            assert np.array_equal(recalibrated_quals, gatk_calibrated_quals)
+        except AssertionError:
+            print('GATK calibrated:', gatk_calibrated_quals)
+            print('Recalibrated:', recalibrated_quals)
+            raise
     print(ek.tstamp(), "BAM test completed successfully.", file = sys.stderr)
 
 def old_bam_test(bamfile, tablefile, rg_to_int, rg_order, dinuc_order, seqlen, minscore = 6, maxscore = 43):
