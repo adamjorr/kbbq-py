@@ -513,6 +513,7 @@ def recalibrate_bamread(read, meanq, globaldeltaq, qscoredeltaq, positiondeltaq,
     return recalibrated_quals
 
 def bam_test(bamfile, tablefile, rg_to_int, rg_order, dinuc_order, seqlen, minscore = 6, maxscore = 43):
+    print(ek.tstamp(), "Beginning BAM test . . .", file = sys.stderr)
     meanq, global_errs, global_total, q_errs, q_total, pos_errs, pos_total, dinuc_errs, dinuc_total = table_to_vectors(tablefile, rg_order, dinuc_order, seqlen, maxscore)
     globaldeltaq, qscoredeltaq, positiondeltaq, dinucdeltaq = get_delta_qs(meanq, global_errs, global_total, q_errs, q_total, pos_errs, pos_total, dinuc_errs, dinuc_total)
     dinuc_to_int = {d : i for i,d in enumerate(dinuc_order)}
