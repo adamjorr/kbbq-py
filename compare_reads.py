@@ -464,36 +464,87 @@ def load_pileups(plpfile1, plpfile2, bad_positions, names, seqlen):
     erroneous = np.ma.masked_where(~foundinplp, np.logical_or(erroneous1, erroneous2))
     return foundinplp, gatkcalibratedquals, erroneous, reversecycle
 
-def bamread_cycle_covariates(read):
-    cycle = np.arange(len(read.query_sequence))
-    if read.is_reverse:
-        cycle = np.flip(cycle)
-    if read.is_read2:
+
+
+def bam_test(bamfile, tablefile, rg_to_int, rg_order, dinuc_order, seqlen, minscore = 6, maxscore = 43):
+    print(ek.tstamp(), "Beginning BAM test . . .", file = sys.stderr)
+    meanq, global_errs, global_total, q_errs, q_total, pos_errs, pos_total, dinuc_errs, dinuc_total = table_to_vectors(tablefile, rg_order, dinuc_order, seqlen, maxscore)
+    globaldeltaq, qscoredeltaq, positiondeltaq, dinucdeltaq = get_delta_qs(meanq, global_errs, global_total, q_errs, q_total, pos_errs, pos_total, dinuc_errs, dinuc_total)
+    dinuc_to_int = {d : i for i,d in enumerate(dinuc_order)}
+    bam = pysam.AlignmentFile(bamfile,'r')
+    for read in bam:
+        gatk_calibrated_quals = np.array(read.query_qualities, dtype = np.int)
+        recalibrated_quals = recalibrate_bamread(read, meanq, globaldeltaq, qscoredeltaq, positiondeltaq, dinucdeltaq, rg_to_int, dinuc_to_int)
+        try:
+            assert np.array_equal(recalibrated_quals, gatk_calibrated_quals)
+        except AssertionError:
+            print('GATK calibrated:', gatk_calibrated_quals)
+            print('Recalibrated:', recalibrated_quals)
+            raise
+    print(ek.tstamp(), "BAM test completed successfully.", file = sys.stderr)
+
+
+
+## Generic covariate functions
+
+def generic_cycle_covariate(sequencelen, secondinpair = False):
+    cycle = np.arange(sequencelen)
+    if secondinpair:
         cycle = np.negative(cycle + 1)
     return cycle
 
-def bamread_dinuc_covariates(read, dinuc_to_int, complement, minscore = 6):
-    seq = list(read.query_sequence)
-    oq = np.array(list(read.get_tag('OQ')), dtype = np.unicode_)
-    original_quals = np.array(oq.view(np.uint32) - 33, dtype = np.uint32)
-
-    #have an extra point at the beginning and i'm missing one at the end
-    if read.is_reverse:
-        seq = [complement.get(x,'N') for x in reversed(seq)]
-        original_quals = np.flip(original_quals)
-    seq = np.array(seq)
+def generic_dinuc_covariate(sequence, quals, dinuc_to_int, minscore = 6):
+    #sequence should be a regular python string, quals should be a numpy array of integer quality scores
+    seq = np.array(list(sequence))
     dinuc = np.char.add(seq[:-1], seq[1:])
     dinuccov = np.zeros(len(seq), dtype = np.int)
     dinuccov[0] = -1
-    for i in range(1,len(seq)):
-        if original_quals[i] < minscore or original_quals[i-1] < 3:
+    for i in range(1, len(seq)):
+        if quals[i] < minscore or quals[i-1] < 3:
+            #do not recalibrate if < minscore; do not recalibrate if context includes base qith q<3
             dinuccov[i] = -1
         else:
             dinuccov[i] = dinuc_to_int[dinuc[i-1]]
+    return dinuccov
 
+## Recalibrating FASTQ reads
+
+def fastq_cycle_covariates(read, secondinpair = False):
+    return generic_cycle_covariate(len(read.sequence), secondinpair)
+
+def fastq_dinuc_covariates(read, dinuc_to_int, secondinpair = False, minscore = 6):
+    quals = np.array(read.get_quality_array(), dtype = np.int)
+    return generic_dinuc_covariate(read.sequence, quals, dinuc_to_int, secondinpair, minscore)
+
+def recalibrate_fastq(read, meanq, globaldeltaq, qscoredeltaq, positiondeltaq, dinucdeltaq, rg, dinuc_to_int, secondinpair = False, minscore = 6, maxscore = 43):
+    qcov = np.array(read.get_quality_array(), dtype = np.int)
+    recalibrated_quals = np.array(qcov, copy = True, dtype = np.int)
+    valid_positions = (qcov >= minscore)
+    cycle = fastq_cycle_covariates(read)[valid_positions]
+    dinuccov = fastq_dinuc_covariates(read, dinuc_to_int, secondinpair)[valid_positions]
+    recalibrated_quals[valid_positions] = (meanq[rg] + globaldeltaq[rg] + qscoredeltaq[rg, qcov] + dinucdeltaq[rg, qcov, dinuccov] + positiondeltaq[rg, qcov, cycle]).astype(np.int)
+    return recalibrated_quals
+
+## Recalibrate reads from a BAM
+
+def bamread_cycle_covariates(read):
+    cycle = generic_cycle_covariate(len(read.query_sequence), read.is_read2)
+    if read.is_reverse:
+        cycle = np.flip(cycle)
+    return cycle
+
+def bamread_dinuc_covariates(read, dinuc_to_int, complement, minscore = 6):
+    #TODO: add stuff to check whether OQ is present,
+    # otherwise use read.query_qualities
+    seq = read.query_sequence
+    oq = np.array(list(read.get_tag('OQ')), dtype = np.unicode_)
+    quals = np.array(oq.view(np.uint32) - 33, dtype = np.uint32)
+    if read.is_reverse:
+        seq = ''.join([complement.get(x,'N') for x in reversed(seq)])
+        quals = np.flip(quals)
+    dinuccov = generic_dinuc_covariate(seq, quals, dinuc_to_int, minscore)
     if read.is_reverse:
         dinuccov = np.flip(dinuccov)
-
     return dinuccov
 
 def recalibrate_bamread(read, meanq, globaldeltaq, qscoredeltaq, positiondeltaq, dinucdeltaq, rg_to_int, dinuc_to_int, minscore = 6, maxscore = 43):
@@ -515,120 +566,13 @@ def recalibrate_bamread(read, meanq, globaldeltaq, qscoredeltaq, positiondeltaq,
     recalibrated_quals[valid_positions] = (meanq[rg] + globaldeltaq[rg] + qscoredeltaq[rg, qcov] + dinucdeltaq[rg, qcov, dinuccov] + positiondeltaq[rg, qcov, cycle]).astype(np.int)
     return recalibrated_quals
 
-def bam_test(bamfile, tablefile, rg_to_int, rg_order, dinuc_order, seqlen, minscore = 6, maxscore = 43):
-    print(ek.tstamp(), "Beginning BAM test . . .", file = sys.stderr)
-    meanq, global_errs, global_total, q_errs, q_total, pos_errs, pos_total, dinuc_errs, dinuc_total = table_to_vectors(tablefile, rg_order, dinuc_order, seqlen, maxscore)
-    globaldeltaq, qscoredeltaq, positiondeltaq, dinucdeltaq = get_delta_qs(meanq, global_errs, global_total, q_errs, q_total, pos_errs, pos_total, dinuc_errs, dinuc_total)
-    dinuc_to_int = {d : i for i,d in enumerate(dinuc_order)}
-    bam = pysam.AlignmentFile(bamfile,'r')
-    for read in bam:
-        gatk_calibrated_quals = np.array(read.query_qualities, dtype = np.int)
-        recalibrated_quals = recalibrate_bamread(read, meanq, globaldeltaq, qscoredeltaq, positiondeltaq, dinucdeltaq, rg_to_int, dinuc_to_int)
-        try:
-            assert np.array_equal(recalibrated_quals, gatk_calibrated_quals)
-        except AssertionError:
-            print('GATK calibrated:', gatk_calibrated_quals)
-            print('Recalibrated:', recalibrated_quals)
-            raise
-    print(ek.tstamp(), "BAM test completed successfully.", file = sys.stderr)
-
-def old_bam_test(bamfile, tablefile, rg_to_int, rg_order, dinuc_order, seqlen, minscore = 6, maxscore = 43):
-    meanq, global_errs, global_total, q_errs, q_total, pos_errs, pos_total, dinuc_errs, dinuc_total = table_to_vectors(tablefile, rg_order, dinuc_order, seqlen, maxscore)
-    globaldeltaq, qscoredeltaq, positiondeltaq, dinucdeltaq = get_delta_qs(meanq, global_errs, global_total, q_errs, q_total, pos_errs, pos_total, dinuc_errs, dinuc_total)
-    dinuc_to_int = {d : i for i,d in enumerate(dinuc_order)}
-    bam = pysam.AlignmentFile(bamfile,'r')
-    for read in bam:
-        seq = read.query_sequence
-        gatk_calibrated_quals = np.array(read.query_qualities, dtype = np.int)
-        oq = np.array(list(read.get_tag('OQ')), dtype = np.unicode_)
-        original_quals = np.array(oq.view(np.uint32) - 33, dtype = np.uint32)
-        recalibrated_quals = np.array(original_quals, dtype = np.int)
-        rg = rg_to_int[read.get_tag('RG')]
-        complement = {'A' : 'T', 'T' : 'A', 'G' : 'C', 'C' : 'G'}
-        for i in range(len(seq)):
-            if original_quals[i] < minscore:
-                continue
-            qcov = original_quals[i]
-            #if read is reverse u have to reverse the context
-            nuc = seq[i]
-            if read.is_reverse:
-                if i == len(seq) - 1:
-                    dinuc = -1
-                    dinuccov = -1
-                elif original_quals[i+1] < 3:
-                    dinuc = -1
-                    dinuccov = -1
-                else:
-                    dinuc = complement[seq[i + 1]] + complement[nuc]
-                    dinuccov = dinuc_to_int[dinuc]
-            else:
-                if i == 0:
-                    dinuc = -1
-                    dinuccov = -1
-                elif original_quals[i-1] < 3:
-                    dinuc = -1
-                    dinuccov = -1
-                else:
-                    dinuc = seq[i-1:i+1]
-                    dinuccov = dinuc_to_int[dinuc]
-            readorderfactor = (-1 if read.is_read2 else 1)
-            if read.is_reverse:
-                cycle = len(seq) * readorderfactor
-                increment = -1 * readorderfactor
-            else:
-                cycle = readorderfactor
-                increment = readorderfactor
-            cycle = cycle +  increment * (i) #cycle is wrong, gotta fix it
-            if cycle > 0:
-                cycle = cycle - 1
-            recalibrated_quals[i] = (meanq[rg] + globaldeltaq[rg] + qscoredeltaq[rg,qcov] + dinucdeltaq[rg,qcov,dinuccov]+ positiondeltaq[rg,qcov,cycle]).astype(np.int)
-
-            try:
-                assert recalibrated_quals[i] == gatk_calibrated_quals[i]
-            except AssertionError:
-                print("read:",read)
-                print("i:",i)
-                print("Covariates: RG", read.get_tag('RG'), "Q", qcov, "Dinuc", dinuc, "Cycle", cycle)
-                print("rg_errs:", global_errs[rg], "rg_total:", global_total[rg])
-                print("q_errs:", q_errs[rg, qcov], "q_total:", q_total[rg,qcov])
-                print("dinuc_errs:", dinuc_errs[rg, qcov, dinuccov], "dinuc_total:", dinuc_total[rg,qcov,dinuccov])
-                print("pos_errs:",pos_errs[rg, qcov, cycle], "pos_total", pos_total[rg, qcov, cycle])
-                print("Recalibrated:", recalibrated_quals[i], "(", meanq[rg],globaldeltaq[rg],qscoredeltaq[rg,qcov],dinucdeltaq[rg,qcov,dinuccov],positiondeltaq[rg,qcov,cycle],")")
-                print("GATK Calibrated:", gatk_calibrated_quals[i])
-                print("Dinuc:", dinuc_order)
-                print("Dinuc:", dinucdeltaq[rg,qcov,:])
-                raise
-
-## Recalibrating FASTQ reads
-
-def fastq_cycle_covariates(read, secondinpair = False):
-    cycle = np.arange(len(read.sequence))
-    if secondinpair:
-        cycle = np.negative(cycle + 1)
-    return cycle
-
-def fastq_dinuc_covariates(read, dinuc_to_int, secondinpair = False, minscore = 6):
-    seq = np.array(list(read.sequence))
-    quals = np.array(read.get_quality_array(), dtype = np.int)
-    dinuc = np.char.add(seq[:-1], seq[1:])
-    dinuccov = np.zeros(len(seq), dtype = np.int)
-    dinuccov[0] = -1
-    for i in range(1,len(seq)):
-        if quals[i] < minscore or quals[i-1] < 3:
-            #do not recalibrate if < minscore; do not recalibrate if context includes base qith q<3
-            dinuccov[i] = -1
-        else:
-            dinuccov[i] = dinuc_to_int[dinuc[i-1]]
-    return dinuccov
-
-def recalibrate_fastq(read, meanq, globaldeltaq, qscoredeltaq, positiondeltaq, dinucdeltaq, rg, dinuc_to_int, secondinpair = False, minscore = 6, maxscore = 43):
-    qcov = np.array(read.get_quality_array(), dtype = np.int)
-    recalibrated_quals = np.array(qcov, copy = True, dtype = np.int)
-    valid_positions = (qcov >= minscore)
-    cycle = bamread_cycle_covariates(read)[valid_positions]
-    dinuccov = bamread_dinuc_covariates(read, dinuc_to_int, secondinpair)[valid_positions]
-    recalibrated_quals[valid_positions] = (meanq[rg] + globaldeltaq[rg] + qscoredeltaq[rg, qcov] + dinucdeltaq[rg, qcov, dinuccov] + positiondeltaq[rg, qcov, cycle]).astype(np.int)
-    return recalibrated_quals
+"""
+given sequences from fastq, get the recalibration vectors
+given: names, rawquals, rcorrected, seqs, rgs, seqlen
+the vectors are: meanq, global_errs, global_total, q_errs, q_total, pos_errs, pos_total, dinuc_errs, dinuc_total
+"""
+def rcorrected_to_vectors(names, rawquals, rcorrected, seqs, rgs, seqlen):
+    pass
 
 def main():
     np.seterr(all = 'raise')
@@ -676,9 +620,9 @@ def main():
     id_to_pu = {rg['ID'] : rg['PU'] for rg in bamfile.header.as_dict()['RG']}
     unique_pus = [id_to_pu[rg] for rg in unique_rgs]
 
-    #np.set_printoptions(threshold = np.inf)
-    #bam_test("only_confident.sorted.recal.bam", tablefile, rg_to_int, unique_pus, dinuc_order, seqlen)
-    #quit()
+    np.set_printoptions(threshold = np.inf)
+    bam_test("only_confident.sorted.recal.bam", tablefile, rg_to_int, unique_pus, dinuc_order, seqlen)
+    quit()
 
     dq_calibrated = delta_q_recalibrate(rawquals.copy(), rgs, dinucleotide, np.logical_not(rcorrected), reversecycle)
     custom_gatk_calibrated = delta_q_recalibrate(rawquals.copy(), rgs, dinucleotide, erroneous, reversecycle)
