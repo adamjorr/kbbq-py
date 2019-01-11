@@ -256,7 +256,7 @@ def delta_q_recalibrate(q, rgs, dinucleotide, errors, reversecycle, maxscore = 4
 
     return r_q.copy()
 
-def get_dinucleotide(q, seqs, seqlen, minq = 2):
+def get_dinucleotide(seqs, q):
     #[A, T, G, C] -> [A, T, G, C]
     #nucleotides at the beginning of the sequence have an empty string before them
     #we should: ignore any context containing an N, ignore any context at beginning of sequence
@@ -266,27 +266,9 @@ def get_dinucleotide(q, seqs, seqlen, minq = 2):
     seqs = seqs.copy() #we may need to alter this
     dinucs = [i + j for i in  nucs for j in nucs]
     dinuc_to_int = dict(zip(dinucs, range(len(dinucs))))
-    dinucleotide = np.zeros([seqs.shape[0], seqlen], dtype = np.int)
+    dinucleotide = np.zeros([seqs.shape[0], q.shape[1]], dtype = np.int)
     for i in range(seqs.shape[0]):
-        currentseq = seqs[i]
-        for j in range(seqlen):
-            if q[i,j] <= minq:
-                currentseq[j] = 'N'
-            else:
-                break
-        for j in reversed(range(seqlen)):
-            if q[i,j] <= minq:
-                currentseq[j] = 'N'
-            else:
-                break
-
-        dinucleotide[i,0] = -1
-        for j in range(1, seqlen):
-            bases = currentseq[j-1:j+1]
-            if not 'N' in bases:
-                dinucleotide[i,j] = dinuc_to_int[bases]
-            else:
-                dinucleotide[i,j] = -1
+        seqs[i,:] = generic_dinuc_covariate(seqs[i], q[i,:], dinuc_to_int)
     return dinucleotide.copy(), dinucs.copy()
 
 def v_get_covariate_arrays(q, rgs, dinucleotide, errors, reversecycle, maxscore = 43, minscore = 6):
@@ -512,16 +494,16 @@ def generic_dinuc_covariate(sequence, quals, dinuc_to_int, minscore = 6):
 def fastq_cycle_covariates(read, secondinpair = False):
     return generic_cycle_covariate(len(read.sequence), secondinpair)
 
-def fastq_dinuc_covariates(read, dinuc_to_int, secondinpair = False, minscore = 6):
+def fastq_dinuc_covariates(read, dinuc_to_int, minscore = 6):
     quals = np.array(read.get_quality_array(), dtype = np.int)
-    return generic_dinuc_covariate(read.sequence, quals, dinuc_to_int, secondinpair, minscore)
+    return generic_dinuc_covariate(read.sequence, quals, dinuc_to_int, minscore)
 
 def recalibrate_fastq(read, meanq, globaldeltaq, qscoredeltaq, positiondeltaq, dinucdeltaq, rg, dinuc_to_int, secondinpair = False, minscore = 6, maxscore = 43):
     qcov = np.array(read.get_quality_array(), dtype = np.int)
     recalibrated_quals = np.array(qcov, copy = True, dtype = np.int)
     valid_positions = (qcov >= minscore)
     cycle = fastq_cycle_covariates(read)[valid_positions]
-    dinuccov = fastq_dinuc_covariates(read, dinuc_to_int, secondinpair)[valid_positions]
+    dinuccov = fastq_dinuc_covariates(read, dinuc_to_int, minscore)[valid_positions]
     recalibrated_quals[valid_positions] = (meanq[rg] + globaldeltaq[rg] + qscoredeltaq[rg, qcov] + dinucdeltaq[rg, qcov, dinuccov] + positiondeltaq[rg, qcov, cycle]).astype(np.int)
     return recalibrated_quals
 
@@ -572,6 +554,8 @@ given: names, rawquals, rcorrected, seqs, rgs, seqlen
 the vectors are: meanq, global_errs, global_total, q_errs, q_total, pos_errs, pos_total, dinuc_errs, dinuc_total
 """
 def rcorrected_to_vectors(names, rawquals, rcorrected, seqs, rgs, seqlen):
+    firstread = np.isin(names,'/1')
+    secondread = np.logical_not(firstread)
     pass
 
 def main():
@@ -609,7 +593,7 @@ def main():
 
     #important arrays: names, rawquals, rcorrected, calibquals, gatkcalibratedquals, erroneous, hmmquals
 
-    dinucleotide, dinuc_order = get_dinucleotide(rawquals, seqs, seqlen)
+    dinucleotide, dinuc_order = get_dinucleotide(seqs, rawquals)
     unique_rgs = np.unique(rgs)
 
     rg_to_int = dict(zip(unique_rgs, range(len(unique_rgs))))
@@ -620,9 +604,9 @@ def main():
     id_to_pu = {rg['ID'] : rg['PU'] for rg in bamfile.header.as_dict()['RG']}
     unique_pus = [id_to_pu[rg] for rg in unique_rgs]
 
-    np.set_printoptions(threshold = np.inf)
-    bam_test("only_confident.sorted.recal.bam", tablefile, rg_to_int, unique_pus, dinuc_order, seqlen)
-    quit()
+    # np.set_printoptions(threshold = np.inf)
+    # bam_test("only_confident.sorted.recal.bam", tablefile, rg_to_int, unique_pus, dinuc_order, seqlen)
+    # quit()
 
     dq_calibrated = delta_q_recalibrate(rawquals.copy(), rgs, dinucleotide, np.logical_not(rcorrected), reversecycle)
     custom_gatk_calibrated = delta_q_recalibrate(rawquals.copy(), rgs, dinucleotide, erroneous, reversecycle)
