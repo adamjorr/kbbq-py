@@ -475,12 +475,16 @@ def generic_cycle_covariate(sequencelen, secondinpair = False):
         cycle = np.negative(cycle + 1)
     return cycle
 
-def generic_dinuc_covariate(sequence, quals, dinuc_to_int, minscore = 6):
-    #sequence should be a regular python string, quals should be a numpy array of integer quality scores
-    seq = np.array(list(sequence))
-    dinuc = np.char.add(seq[:-1], seq[1:])
-    dinuccov = np.zeros(len(seq), dtype = np.int)
-    dinuccov[0] = -1
+def generic_dinuc_covariate(sequences, quals, dinuc_to_int, minscore = 6):
+    #this should be refactored to compensate for multiple seqs, multiple quals. it takes too long as is
+    #sequences should be a numpy unicode character array, quals should be a numpy array of integer quality scores
+    assert sequences.shape == quals.shape
+    assert sequences.dtype == np.dtype('U1')
+    dinuc = np.char.add(seq[...,:-1], seq[...,1:])
+    dinuccov = np.zeros(seq.shape, dtype = np.int)
+    dinuccov[...,0] = -1
+    #TODO: here down
+    invalid = np.logical_or(quals < minscore, quals)
     for i in range(1, len(seq)):
         if quals[i] < minscore or quals[i-1] < 3 or 'N' in dinuc[i-1]:
             #do not recalibrate if < minscore; do not recalibrate if context includes base qith q<3
