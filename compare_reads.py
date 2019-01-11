@@ -482,7 +482,7 @@ def generic_dinuc_covariate(sequence, quals, dinuc_to_int, minscore = 6):
     dinuccov = np.zeros(len(seq), dtype = np.int)
     dinuccov[0] = -1
     for i in range(1, len(seq)):
-        if quals[i] < minscore or quals[i-1] < 3:
+        if quals[i] < minscore or quals[i-1] < 3 or 'N' in dinuc[i-1]:
             #do not recalibrate if < minscore; do not recalibrate if context includes base qith q<3
             dinuccov[i] = -1
         else:
