@@ -268,7 +268,7 @@ def get_dinucleotide(seqs, q):
     dinuc_to_int = dict(zip(dinucs, range(len(dinucs))))
     dinucleotide = np.zeros([seqs.shape[0], q.shape[1]], dtype = np.int)
     for i in range(seqs.shape[0]):
-        seqs[i,:] = generic_dinuc_covariate(seqs[i], q[i,:], dinuc_to_int)
+        dinucleotide[i,:] = generic_dinuc_covariate(seqs[i], q[i,:], dinuc_to_int)
     return dinucleotide.copy(), dinucs.copy()
 
 def v_get_covariate_arrays(q, rgs, dinucleotide, errors, reversecycle, maxscore = 43, minscore = 6):
