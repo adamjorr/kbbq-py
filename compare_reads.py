@@ -609,9 +609,9 @@ def main():
     custom_gatk_calibrated = delta_q_recalibrate(rawquals.copy(), rgs, dinucleotide, erroneous, reversecycle)
     from_table = table_recalibrate(rawquals.copy(), tablefile, unique_pus, dinuc_order, seqlen, reversecycle, rgs, dinucleotide)
 
-    plot_calibration([rawquals.flatten(), gatkcalibratedquals.flatten(), rcorrected.flatten()*rawquals.flatten(), dq_calibrated.flatten(), custom_gatk_calibrated.flatten(), from_table.flatten()],
+    plot_calibration([rawquals.flatten(), gatkcalibratedquals.flatten(), dq_calibrated.flatten(), custom_gatk_calibrated.flatten(), from_table.flatten()],
         truth = erroneous.flatten(),
-        labels = ["Uncalibrated Scores", "GATK Calibration", "Rcorrector", "KBBQ", "GATK Python Implementation", "From Table"],
+        labels = ["Uncalibrated Scores", "GATK Calibration", "KBBQ", "GATK Python Implementation", "From Table"],
         plotname = 'qualscores.png',
         plottitle = "Comparison of Calibration Methods")
 
