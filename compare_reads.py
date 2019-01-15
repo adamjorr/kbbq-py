@@ -246,9 +246,6 @@ def delta_q_recalibrate(q, rgs, dinucleotide, errors, reversecycle, maxscore = 4
     pos = np.broadcast_to(np.arange(q.shape[1]), (q.shape[0], q.shape[1])).copy()
     np.add.at(pos, reversecycle, 1)
     np.negative.at(pos,reversecycle)
-    print("MeanQ:",meanq)
-    print("GlobalDQ:",globaldeltaq)
-    print("QscoreDQ:",qscoredeltaq)
     recal_q = meanq[rgs] + globaldeltaq[rgs] + qscoredeltaq[rgs,q] + positiondeltaq[rgs, q, pos] + dinucdeltaq[rgs, q, dinucleotide]
 
     #clip and round
