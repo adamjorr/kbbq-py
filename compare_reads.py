@@ -481,7 +481,12 @@ def generic_dinuc_covariate(sequences, quals, dinuc_to_int, minscore = 6):
     dinuccov = np.zeros(seq.shape, dtype = np.int)
     dinuccov[...,0] = -1
     #TODO: here down
-    invalid = np.logical_or(quals < minscore, quals)
+    is_n = (sequences[...,1:] == 'N')
+    follows_n = (sequences[...,:-1] == 'N')
+    invalid = np.logical_or(quals < minscore, np.logical_or(is_n, follows_n))
+    dinuccov[invald] = -1
+    dinuccov[...,1:] = np.vectorize(dinuc_to_int.get)(dinuccov[!invalid])
+
     for i in range(1, len(seq)):
         if quals[i] < minscore or quals[i-1] < 3 or 'N' in dinuc[i-1]:
             #do not recalibrate if < minscore; do not recalibrate if context includes base qith q<3
