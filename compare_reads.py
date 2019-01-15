@@ -263,9 +263,7 @@ def get_dinucleotide(seqs, q):
     seqs = seqs.copy() #we may need to alter this
     dinucs = [i + j for i in  nucs for j in nucs]
     dinuc_to_int = dict(zip(dinucs, range(len(dinucs))))
-    dinucleotide = np.zeros([seqs.shape[0], q.shape[1]], dtype = np.int)
-    for i in range(seqs.shape[0]):
-        dinucleotide[i,:] = generic_dinuc_covariate(seqs[i], q[i,:], dinuc_to_int)
+    dinucleotide = generic_dinuc_covariate(seqs, q, dinuc_to_int)
     return dinucleotide.copy(), dinucs.copy()
 
 def v_get_covariate_arrays(q, rgs, dinucleotide, errors, reversecycle, maxscore = 43, minscore = 6):
@@ -477,22 +475,16 @@ def generic_dinuc_covariate(sequences, quals, dinuc_to_int, minscore = 6):
     #sequences should be a numpy unicode character array, quals should be a numpy array of integer quality scores
     assert sequences.shape == quals.shape
     assert sequences.dtype == np.dtype('U1')
-    dinuc = np.char.add(seq[...,:-1], seq[...,1:])
-    dinuccov = np.zeros(seq.shape, dtype = np.int)
+    dinuc = np.char.add(sequences[...,:-1], sequences[...,1:])
+    dinuccov = np.zeros(sequences.shape, dtype = np.int)
     dinuccov[...,0] = -1
     #TODO: here down
     is_n = (sequences[...,1:] == 'N')
     follows_n = (sequences[...,:-1] == 'N')
     invalid = np.logical_or(quals < minscore, np.logical_or(is_n, follows_n))
     dinuccov[invald] = -1
-    dinuccov[...,1:] = np.vectorize(dinuc_to_int.get)(dinuccov[!invalid])
-
-    for i in range(1, len(seq)):
-        if quals[i] < minscore or quals[i-1] < 3 or 'N' in dinuc[i-1]:
-            #do not recalibrate if < minscore; do not recalibrate if context includes base qith q<3
-            dinuccov[i] = -1
-        else:
-            dinuccov[i] = dinuc_to_int[dinuc[i-1]]
+    vecget = np.vectorize(dinuc_to_int.get)
+    dinuccov[!invalid] = vecget(dinuccov[!invalid])
     return dinuccov
 
 ## Recalibrating FASTQ reads
