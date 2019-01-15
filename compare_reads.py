@@ -478,7 +478,6 @@ def generic_dinuc_covariate(sequences, quals, dinuc_to_int, minscore = 6):
     dinuc = np.char.add(sequences[...,:-1], sequences[...,1:])
     dinuccov = np.zeros(sequences.shape, dtype = np.int)
     dinuccov[...,0] = -1
-    #TODO: here down
     is_n = (sequences[...,1:] == 'N')
     follows_n = (sequences[...,:-1] == 'N')
     invalid = np.logical_or(quals < minscore, np.logical_or(is_n, follows_n))
