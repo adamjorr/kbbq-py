@@ -483,7 +483,7 @@ def generic_dinuc_covariate(sequences, quals, dinuc_to_int, minscore = 6):
     invalid = np.logical_or(quals < minscore, np.logical_or(is_n, follows_n))
     dinuccov[invald] = -1
     vecget = np.vectorize(dinuc_to_int.get)
-    dinuccov[!invalid] = vecget(dinuccov[!invalid])
+    dinuccov[np.logical_not(invalid)] = vecget(dinuccov[np.logical_not(invalid)])
     return dinuccov
 
 ## Recalibrating FASTQ reads
