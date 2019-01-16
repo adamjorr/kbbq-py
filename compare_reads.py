@@ -612,7 +612,18 @@ def main():
     dq_calibrated = delta_q_recalibrate(rawquals.copy(), rgs, dinucleotide, np.logical_not(rcorrected), reversecycle)
     custom_gatk_calibrated = delta_q_recalibrate(rawquals.copy(), rgs, dinucleotide, erroneous, reversecycle)
     from_table = table_recalibrate(rawquals.copy(), tablefile, unique_pus, dinuc_order, seqlen, reversecycle, rgs, dinucleotide)
-    assert np.array_equal(from_table, gatkcalibratedquals)
+    try:
+        assert np.array_equal(from_table, gatkcalibratedquals)
+    except AssertionError:
+        print("from_table shape:", from_table.shape)
+        print("gatkcalibratedquals shape:", gatkcalibratedquals.shape)
+        print("from_table first line:", from_table[0,:])
+        print("gatkcalibratedquals first line:", gatkcalibratedquals[0,:])
+        ne = (from_table != gatkcalibratedquals)
+        print("sum(from_table != gatkcalibratedquals)", np.sum(ne))
+        print("from_table[ne][0,:]", from_table[np.any(ne, axis = 0),:][0,:])
+        print("gatkcalibratedquals[ne][0,:]", from_table[np.any(ne, axis = 0),:][0,:])
+        raise
 
     plot_calibration([rawquals.flatten(), gatkcalibratedquals.flatten(), dq_calibrated.flatten(), custom_gatk_calibrated.flatten(), from_table.flatten()],
         truth = erroneous.flatten(),
