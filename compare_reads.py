@@ -183,6 +183,7 @@ def v_gatk_delta_q(prior_q, numerrs, numtotal, maxscore = 43):
         raise
     return posterior_q - prior_q
 
+#this passes bam test
 def table_to_vectors(tablefile, rg_order, dinuc_order, seqlen, maxscore = 43):
     #the recal table uses the PU of the read group as the read group entry in the table
     table = recaltable.RecalibrationReport(tablefile)
@@ -213,20 +214,20 @@ def table_to_vectors(tablefile, rg_order, dinuc_order, seqlen, maxscore = 43):
 
     return meanq, global_errs, global_total, q_errs, q_total, pos_errs, pos_total, dinuc_errs, dinuc_total
 
-def table_recalibrate(q, tablefile, rg_order, dinuc_order, seqlen, reversecycle, rgs, dinucleotide, maxscore = 43):
+def table_recalibrate(q, tablefile, rg_order, dinuc_order, seqlen, reversecycle, rgs, dinucleotide, minscore = 6, maxscore = 43):
     meanq, global_errs, global_total, q_errs, q_total, pos_errs, pos_total, dinuc_errs, dinuc_total = table_to_vectors(tablefile, rg_order, dinuc_order, seqlen, maxscore)
     globaldeltaq, qscoredeltaq, positiondeltaq, dinucdeltaq = get_delta_qs(meanq, global_errs, global_total, q_errs, q_total, pos_errs, pos_total, dinuc_errs, dinuc_total)
-    qmask = np.ma.getmaskarray(q)
-    recal_q = np.zeros(q.shape, dtype = np.longdouble)
-    recal_q = np.ma.masked_where(qmask, recal_q)
-    recal_q = np.ma.masked_where(q <= 6, recal_q)
+
+    recal_q = np.array(q, copy = True, dtype = np.int)
+    valid_positions = (q >= minscore)
     pos = np.broadcast_to(np.arange(q.shape[1]), (q.shape[0], q.shape[1])).copy()
     np.add.at(pos, reversecycle, 1)
     np.negative.at(pos,reversecycle)
-    recal_q = meanq[rgs] + globaldeltaq[rgs] + qscoredeltaq[rgs,q] + positiondeltaq[rgs, q, pos] + dinucdeltaq[rgs, q, dinucleotide]
-    r_q = np.ma.masked_array(np.rint(np.clip(recal_q,0,maxscore)), dtype = np.int, copy = True)
+    pos = pos[valid_positions]
+    dinuccov = dinucleotide[valid_positions]
 
-    return r_q.copy()
+    recal_q[valid_positions] = (meanq[rgs] + globaldeltaq[rgs] + qscoredeltaq[rgs,q] + dinucdeltaq[rgs, q, dinuccov] + positiondeltaq[rgs, q, pos]).astype(np.int)
+    return recal_q
 
 
 def delta_q_recalibrate(q, rgs, dinucleotide, errors, reversecycle, maxscore = 43):
@@ -348,6 +349,7 @@ def get_covariate_arrays(q, rgs, dinucleotide, errors, maxscore = 43, minscore =
 
     return meanq, global_errs, global_total, q_errs, q_total, pos_errs, pos_total, dinuc_errs, dinuc_total
 
+#this function passes bam test
 def get_delta_qs(meanq, rg_errs, rg_total, q_errs, q_total, pos_errs, pos_total, dinuc_errs, dinuc_total, maxscore = 43):
     # shapes are:
     #   [rg]
@@ -608,6 +610,7 @@ def main():
     dq_calibrated = delta_q_recalibrate(rawquals.copy(), rgs, dinucleotide, np.logical_not(rcorrected), reversecycle)
     custom_gatk_calibrated = delta_q_recalibrate(rawquals.copy(), rgs, dinucleotide, erroneous, reversecycle)
     from_table = table_recalibrate(rawquals.copy(), tablefile, unique_pus, dinuc_order, seqlen, reversecycle, rgs, dinucleotide)
+    assert np.array_equal(from_table, gatkcalibratedquals)
 
     plot_calibration([rawquals.flatten(), gatkcalibratedquals.flatten(), dq_calibrated.flatten(), custom_gatk_calibrated.flatten(), from_table.flatten()],
         truth = erroneous.flatten(),
