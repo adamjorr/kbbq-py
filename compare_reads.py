@@ -223,10 +223,12 @@ def table_recalibrate(q, tablefile, rg_order, dinuc_order, seqlen, reversecycle,
     pos = np.broadcast_to(np.arange(q.shape[1]), (q.shape[0], q.shape[1])).copy()
     np.add.at(pos, reversecycle, 1)
     np.negative.at(pos,reversecycle)
-    pos = pos[valid_positions]
+    rgcov = rgs[valid_positions]
+    qcov = q[valid_positions]
+    poscov = pos[valid_positions]
     dinuccov = dinucleotide[valid_positions]
 
-    recal_q[valid_positions] = (meanq[rgs] + globaldeltaq[rgs] + qscoredeltaq[rgs,q] + dinucdeltaq[rgs, q, dinuccov] + positiondeltaq[rgs, q, pos]).astype(np.int)
+    recal_q[valid_positions] = (meanq[rgcov] + globaldeltaq[rgcov] + qscoredeltaq[rgcov,qcov] + dinucdeltaq[rgcov, qcov, dinuccov] + positiondeltaq[rgcov, qcov, poscov]).astype(np.int)
     return recal_q
 
 
