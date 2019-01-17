@@ -622,6 +622,7 @@ def main():
         print("from_table first line:", from_table[0,:])
         print("gatkcalibratedquals first line:", gatkcalibratedquals[0,:])
         ne = (from_table != gatkcalibratedquals)
+        print("ne.shape",ne.shape)
         print("sum(from_table != gatkcalibratedquals)", np.sum(ne))
         print("from_table[ne][0,:]", from_table[np.any(ne, axis = 0),:][0,:])
         print("gatkcalibratedquals[ne][0,:]", from_table[np.any(ne, axis = 0),:][0,:])
