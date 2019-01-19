@@ -583,6 +583,7 @@ def main():
         gatkcalibratedquals = loaded['gatkcalibratedquals']
         gatkcalibratedquals = np.ma.masked_where(~foundinplp, gatkcalibratedquals)
         gatkcalibratedquals[gatkcalibratedquals == 2] = np.ma.masked
+        assert not np.all(gatkcalibratedquals == np.ma.masked)
         erroneous = loaded['erroneous']
         erroneous = np.ma.masked_where(~foundinplp, erroneous)
         reversecycle = loaded['reversecycle']
@@ -624,7 +625,7 @@ def main():
         ne = (from_table != gatkcalibratedquals)
         print("ne.shape",ne.shape)
         print("sum(from_table != gatkcalibratedquals)", np.sum(ne))
-        print("from_table[ne][0,:]", from_table[np.any(ne, axis = 0),:][0,:])
+        print("from_table[ne][0,:]", from_table[np.any(ne, axis = 1),:][0,:])
         print("gatkcalibratedquals[ne][0,:]", from_table[np.any(ne, axis = 0),:][0,:])
         raise
 
