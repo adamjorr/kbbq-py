@@ -626,7 +626,7 @@ def main():
         print("ne.shape",ne.shape)
         print("sum(ne)", np.sum(ne))
         print("from_table[ne][0,:]", from_table[np.any(ne, axis = 1),:][0,:])
-        print("gatkcalibratedquals[ne][0,:]", from_table[np.any(ne, axis = 1),:][0,:])
+        print("gatkcalibratedquals[ne][0,:]", gatkcalibratedquals[np.any(ne, axis = 1),:][0,:])
         print("ne[np.any(ne, axis = 1),:][0,:]", ne[np.any(ne, axis = 1),:][0,:])
         raise
 
