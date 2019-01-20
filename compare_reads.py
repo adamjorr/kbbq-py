@@ -627,7 +627,7 @@ def main():
         print("sum(ne)", np.sum(ne))
         print("from_table[ne][0,:]", from_table[np.any(ne, axis = 1),:][0,:])
         print("gatkcalibratedquals[ne][0,:]", from_table[np.any(ne, axis = 1),:][0,:])
-        print("ne[np.any(ne, axis = 1),:][0,:]")
+        print("ne[np.any(ne, axis = 1),:][0,:]", ne[np.any(ne, axis = 1),:][0,:])
         raise
 
     plot_calibration([rawquals.flatten(), gatkcalibratedquals.flatten(), dq_calibrated.flatten(), custom_gatk_calibrated.flatten(), from_table.flatten()],
