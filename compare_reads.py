@@ -138,6 +138,27 @@ def process_plp(plpfilename, var_pos, names, seqlen, suffix):
 
     return gatkcalibratedquals.copy(), erroneous.copy(), trackingmask.copy()
 
+def find_errors(bamfilename, fastafilename, var_pos, names, seqlen):
+    #need to return gatkcalibratedquals, erroneous (maybe trackingmask?)
+    print(ek.tstamp(), "Finding Errors...", file = sys.stderr)
+    gatkcalibratedquals = np.zeros([len(names), seqlen], dtype = np.int)
+    erroneous = np.zeros([len(names), seqlen], dtype = np.bool)
+    fasta = pysam.FastaFile(fastafilename)
+    ref = {x : np.array(list(fasta.fetch(reference = x)), dtype = np.unicode) for x in fasta.references}
+
+    bam = pysam.AlignmentFile(bamfilename, 'r')
+    for read in bam:
+        suffix = ("/2" if read.is_read2 else "/1")
+        readidx = names[read.query_name + suffix]
+
+        gatkcalibratedquals[readidx,:] = np.array(read.query_qualities, dtype = np.int)
+        pos_0 = read.reference_start
+        refseq = ref[read.reference_name][pos_0 : pos_0 + seqlen]
+        seq = np.array(list(read.query_sequence), dtype = np.unicode)
+        #TODO: compare seq and refseq, ignore variable sites
+        #TODO: flip quals and errors if reverse read
+
+
 class RescaledNormal:
     oldset = np.seterr(all = 'raise')
     maxscore = 43
