@@ -649,20 +649,20 @@ def main():
     custom_gatk_calibrated = delta_q_recalibrate(rawquals.copy(), rgs, dinucleotide, erroneous, reversecycle)
     from_table = table_recalibrate(rawquals.copy(), tablefile, unique_pus, dinuc_order, seqlen, reversecycle, rgs, dinucleotide)
     try:
-        assert np.array_equal(from_table, gatkcalibratedquals)
+        #direct array_equal will not work even if the same positions are masked
+        assert np.array_equal(from_table.mask, gatkcalibratedquals.mask)
+        assert np.array_equal(from_table[~from_table.mask], gatkcalibratedquals[~gatkcalibratedquals.mask])
+        assert not np.all(from_table.mask)
     except AssertionError:
         print("from_table shape:", from_table.shape)
         print("gatkcalibratedquals shape:", gatkcalibratedquals.shape)
-        print("from_table first line:", from_table[0,:])
-        print("gatkcalibratedquals first line:", gatkcalibratedquals[0,:])
+        print("gatkcalibratedquals[0,:]", gatkcalibratedquals[0,:])
+        print("from_table[0,:]", from_table[0,:])
+        print("rawquals[0,:]", rawquals[0,:])
+        print("foundinplp[0,:]", foundinplp[0,:])
         ne = (from_table != gatkcalibratedquals)
         print("ne.shape",ne.shape)
         print("sum(ne)", np.sum(ne))
-        print("from_table[ne][0,:]", from_table[np.any(ne, axis = 1),:])
-        print("gatkcalibratedquals[ne][0,:]", gatkcalibratedquals[np.any(ne, axis = 1),:])
-        print("ne[np.any(ne, axis = 1),:]", ne[np.any(ne, axis = 1),:])
-        print("rawquals[0,:]", rawquals[0,:])
-        print("foundinplp[0,:]", foundinplp[0,:])
         raise
 
     plot_calibration([rawquals.flatten(), gatkcalibratedquals.flatten(), dq_calibrated.flatten(), custom_gatk_calibrated.flatten(), from_table.flatten()],
