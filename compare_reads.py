@@ -89,6 +89,7 @@ def process_plp(plpfilename, var_pos, names, seqlen, suffix):
     gatkcalibratedquals = np.zeros([len(names), seqlen], dtype = np.int)
     erroneous = np.zeros([len(names), seqlen], dtype = np.bool_)
     trackingmask = np.zeros([len(names), seqlen], dtype = np.bool_)
+    reversereads = np.zeros(len(names), dtype = np.bool)
 
     numfinder = re.compile('[\+-](\d+)')
     with open(plpfilename, 'r') as infh:
@@ -120,6 +121,11 @@ def process_plp(plpfilename, var_pos, names, seqlen, suffix):
 
             bases = np.array(list(bases), dtype = np.unicode_)
             errs = np.array(np.logical_and(bases != '.', bases != ','))
+            rev = np.array(bases == ',', dtype = np.bool)
+            #this will miss a read if it is ALL ref mismatches,
+            # but hopefully that doesn't happen
+            # if any of the bases are reverse strand matches, the whole
+            # read will be counted as reversed.
 
             qpos = np.array(qpos.split(','), dtype = np.int) - 1
             qname = qname.rstrip()
@@ -135,28 +141,34 @@ def process_plp(plpfilename, var_pos, names, seqlen, suffix):
             gatkcalibratedquals[mask,qpos[present]] = quals[present]
             erroneous[mask,qpos[present]] = errs[present]
             trackingmask[mask,qpos[present]] = True
-
+            reversereads[mask[rev]] = True
+    gatkcalibratedquals[reversereads,:] = np.fliplr(gatkcalibratedquals[reversereads,:])
+    erroneous[reversereads,:] = np.fliplr(erroneous[reversereads,:])
+    trackingmask[reversereads,:] = np.fliplr(trackingmask[reversereads,:])
     return gatkcalibratedquals.copy(), erroneous.copy(), trackingmask.copy()
 
-def find_errors(bamfilename, fastafilename, var_pos, names, seqlen):
-    #need to return gatkcalibratedquals, erroneous (maybe trackingmask?)
-    print(ek.tstamp(), "Finding Errors...", file = sys.stderr)
-    gatkcalibratedquals = np.zeros([len(names), seqlen], dtype = np.int)
-    erroneous = np.zeros([len(names), seqlen], dtype = np.bool)
-    fasta = pysam.FastaFile(fastafilename)
-    ref = {x : np.array(list(fasta.fetch(reference = x)), dtype = np.unicode) for x in fasta.references}
+# def find_errors(bamfilename, fastafilename, var_pos, names, seqlen):
+#     #TODO: WIP
+#     #this function may be better optimized that using the pileup
+#     #since we have to jump around a lot when using the pileup method
+#     #need to return gatkcalibratedquals, erroneous (maybe trackingmask?)
+#     print(ek.tstamp(), "Finding Errors...", file = sys.stderr)
+#     gatkcalibratedquals = np.zeros([len(names), seqlen], dtype = np.int)
+#     erroneous = np.zeros([len(names), seqlen], dtype = np.bool)
+#     fasta = pysam.FastaFile(fastafilename)
+#     ref = {x : np.array(list(fasta.fetch(reference = x)), dtype = np.unicode) for x in fasta.references}
 
-    bam = pysam.AlignmentFile(bamfilename, 'r')
-    for read in bam:
-        suffix = ("/2" if read.is_read2 else "/1")
-        readidx = names[read.query_name + suffix]
+#     bam = pysam.AlignmentFile(bamfilename, 'r')
+#     for read in bam:
+#         suffix = ("/2" if read.is_read2 else "/1")
+#         readidx = names[read.query_name + suffix]
 
-        gatkcalibratedquals[readidx,:] = np.array(read.query_qualities, dtype = np.int)
-        pos_0 = read.reference_start
-        refseq = ref[read.reference_name][pos_0 : pos_0 + seqlen]
-        seq = np.array(list(read.query_sequence), dtype = np.unicode)
-        #TODO: compare seq and refseq, ignore variable sites
-        #TODO: flip quals and errors if reverse read
+#         gatkcalibratedquals[readidx,:] = np.array(read.query_qualities, dtype = np.int)
+#         pos_0 = read.reference_start
+#         refseq = ref[read.reference_name][pos_0 : pos_0 + seqlen]
+#         seq = np.array(list(read.query_sequence), dtype = np.unicode)
+#         #TODO: compare seq and refseq, ignore variable sites
+#         #TODO: flip quals and errors if reverse read
 
 
 class RescaledNormal:
