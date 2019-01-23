@@ -597,7 +597,6 @@ def main():
     uncorrfile = "nospace.reads.fq"
     corrfile = "nospace.reads.cor.fq"
     names, rawquals, rcorrected, seqs, rgs, seqlen = find_rcorrected_sites(uncorrfile, corrfile)
-    rawquals = np.ma.masked_equal(rawquals,2) #2 is not a quality score in this data
 
     #rcorrected is true when the bases match the original, false otherwise
     #hence rcorrected == false is where the errors are
