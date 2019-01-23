@@ -141,7 +141,7 @@ def process_plp(plpfilename, var_pos, names, seqlen, suffix):
             gatkcalibratedquals[mask,qpos[present]] = quals[present]
             erroneous[mask,qpos[present]] = errs[present]
             trackingmask[mask,qpos[present]] = True
-            reversereads[mask[rev]] = True
+            reversereads[mask[rev[present]]] = True
     gatkcalibratedquals[reversereads,:] = np.fliplr(gatkcalibratedquals[reversereads,:])
     erroneous[reversereads,:] = np.fliplr(erroneous[reversereads,:])
     trackingmask[reversereads,:] = np.fliplr(trackingmask[reversereads,:])
