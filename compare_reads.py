@@ -251,7 +251,7 @@ def table_recalibrate(q, tablefile, rg_order, dinuc_order, seqlen, reversecycle,
     meanq, global_errs, global_total, q_errs, q_total, pos_errs, pos_total, dinuc_errs, dinuc_total = table_to_vectors(tablefile, rg_order, dinuc_order, seqlen, maxscore)
     globaldeltaq, qscoredeltaq, positiondeltaq, dinucdeltaq = get_delta_qs(meanq, global_errs, global_total, q_errs, q_total, pos_errs, pos_total, dinuc_errs, dinuc_total)
 
-    recal_q = np.ma.masked_array(q, copy = True, dtype = np.int)
+    recal_q = np.ma.masked_array(q, copy = True, dtype = np.int, hard_mask = True) #use hard mask to prevent assignment to masked data
     valid_positions = (q >= minscore)
     pos = np.broadcast_to(np.arange(q.shape[1]), (q.shape[0], q.shape[1])).copy()
     np.add.at(pos, reversecycle, 1)
