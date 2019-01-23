@@ -474,7 +474,6 @@ def load_pileups(plpfile1, plpfile2, bad_positions, names, seqlen):
     foundinplp = np.logical_or(trackingmask1,trackingmask2)
     reversecycle = np.ma.masked_where(~foundinplp, trackingmask2)
     gatkcalibratedquals = np.ma.masked_where(~foundinplp, gatkcalibratedquals1 + gatkcalibratedquals2)
-    gatkcalibratedquals[gatkcalibratedquals == 2] = np.ma.masked
     erroneous = np.ma.masked_where(~foundinplp, np.logical_or(erroneous1, erroneous2))
     return foundinplp, gatkcalibratedquals, erroneous, reversecycle
 
@@ -615,7 +614,6 @@ def main():
         assert not np.all(~foundinplp)
         gatkcalibratedquals = loaded['gatkcalibratedquals']
         gatkcalibratedquals = np.ma.masked_where(~foundinplp, gatkcalibratedquals)
-        gatkcalibratedquals[gatkcalibratedquals == 2] = np.ma.masked
         assert not np.all(gatkcalibratedquals == np.ma.masked)
         erroneous = loaded['erroneous']
         erroneous = np.ma.masked_where(~foundinplp, erroneous)
@@ -663,6 +661,7 @@ def main():
         ne = (from_table != gatkcalibratedquals)
         print("ne.shape",ne.shape)
         print("sum(ne)", np.sum(ne))
+        print("sum(from_table.mask != gatkcalibratedquals.mask)", np.sum(from_table.mask != gatkcalibratedquals.mask))
         raise
 
     plot_calibration([rawquals.flatten(), gatkcalibratedquals.flatten(), dq_calibrated.flatten(), custom_gatk_calibrated.flatten(), from_table.flatten()],
