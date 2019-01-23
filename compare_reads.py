@@ -251,7 +251,7 @@ def table_recalibrate(q, tablefile, rg_order, dinuc_order, seqlen, reversecycle,
     meanq, global_errs, global_total, q_errs, q_total, pos_errs, pos_total, dinuc_errs, dinuc_total = table_to_vectors(tablefile, rg_order, dinuc_order, seqlen, maxscore)
     globaldeltaq, qscoredeltaq, positiondeltaq, dinucdeltaq = get_delta_qs(meanq, global_errs, global_total, q_errs, q_total, pos_errs, pos_total, dinuc_errs, dinuc_total)
 
-    recal_q = np.ma.array(q, copy = True, dtype = np.int)
+    recal_q = np.ma.masked_array(q, copy = True, dtype = np.int)
     valid_positions = (q >= minscore)
     pos = np.broadcast_to(np.arange(q.shape[1]), (q.shape[0], q.shape[1])).copy()
     np.add.at(pos, reversecycle, 1)
@@ -661,6 +661,8 @@ def main():
         print("from_table[ne][0,:]", from_table[np.any(ne, axis = 1),:])
         print("gatkcalibratedquals[ne][0,:]", gatkcalibratedquals[np.any(ne, axis = 1),:])
         print("ne[np.any(ne, axis = 1),:]", ne[np.any(ne, axis = 1),:])
+        print("rawquals[0,:]", rawquals[0,:])
+        print("foundinplp[0,:]", foundinplp[0,:])
         raise
 
     plot_calibration([rawquals.flatten(), gatkcalibratedquals.flatten(), dq_calibrated.flatten(), custom_gatk_calibrated.flatten(), from_table.flatten()],
