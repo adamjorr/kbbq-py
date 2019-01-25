@@ -617,32 +617,25 @@ def main():
     print(ek.tstamp(), "Starting . . .", file=sys.stderr)
     uncorrfile = "nospace.reads.fq"
     corrfile = "nospace.reads.cor.fq"
+    bamfilename = "only_confident.sorted.recal.bam"
+    fastafilename = "../chr1.fa"
     names, rawquals, rcorrected, seqs, rgs, seqlen = find_rcorrected_sites(uncorrfile, corrfile)
 
     #rcorrected is true when the bases match the original, false otherwise
     #hence rcorrected == false is where the errors are
 
     bad_positions = load_positions("variable_sites.txt")
-    plpfile1 = "only_confident.recal.1.plp"
-    plpfile2 = "only_confident.recal.2.plp"
     cachefile = 'cached_recal_errs.npz'
     tablefile = 'only_confident.sorted.recal.txt'
     if os.path.exists(cachefile):
         print(ek.tstamp(), "Loading cached errors . . .", file=sys.stderr)
         loaded = np.load(cachefile)
-        foundinplp = loaded['foundinplp']
-        assert not np.all(~foundinplp)
         gatkcalibratedquals = loaded['gatkcalibratedquals']
-        gatkcalibratedquals = np.ma.masked_where(~foundinplp, gatkcalibratedquals)
-        assert not np.all(gatkcalibratedquals == np.ma.masked)
         erroneous = loaded['erroneous']
-        erroneous = np.ma.masked_where(~foundinplp, erroneous)
-        reversecycle = loaded['reversecycle']
-        reversecycle = np.ma.masked_where(~foundinplp, reversecycle)
+        skips = loaded['skips']
     else:
-        foundinplp, gatkcalibratedquals, erroneous, reversecycle = load_pileups(plpfile1, plpfile2, bad_positions, names, seqlen)
-        assert not np.all(~foundinplp)
-        np.savez_compressed(cachefile, foundinplp = foundinplp, gatkcalibratedquals = gatkcalibratedquals, erroneous = erroneous, reversecycle = reversecycle)
+        gatkcalibratedquals, erroneous, skips = find_errors(bamfilename, fastafilename, bad_positions, names, seqlen)
+        np.savez_compressed(cachefile, gatkcalibratedquals = gatkcalibratedquals, erroneous = erroneous, skips = skips)
 
     #important arrays: names, rawquals, rcorrected, calibquals, gatkcalibratedquals, erroneous, hmmquals
 
@@ -653,7 +646,7 @@ def main():
     rgs = np.array([rg_to_int[r] for r in rgs], dtype = np.int_)
     rgs = np.broadcast_to(rgs[:,np.newaxis], rgs.shape + (seqlen,)).copy()
 
-    bamfile = pysam.AlignmentFile("only_confident.sorted.recal.bam","r")
+    bamfile = pysam.AlignmentFile(bamfilename,"r")
     id_to_pu = {rg['ID'] : rg['PU'] for rg in bamfile.header.as_dict()['RG']}
     unique_pus = [id_to_pu[rg] for rg in unique_rgs]
 
