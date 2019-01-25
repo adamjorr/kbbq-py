@@ -147,29 +147,37 @@ def process_plp(plpfilename, var_pos, names, seqlen, suffix):
     trackingmask[reversereads,:] = np.fliplr(trackingmask[reversereads,:])
     return gatkcalibratedquals.copy(), erroneous.copy(), trackingmask.copy()
 
-# def find_errors(bamfilename, fastafilename, var_pos, names, seqlen):
-#     #TODO: WIP
-#     #this function may be better optimized that using the pileup
-#     #since we have to jump around a lot when using the pileup method
-#     #need to return gatkcalibratedquals, erroneous (maybe trackingmask?)
-#     print(ek.tstamp(), "Finding Errors...", file = sys.stderr)
-#     gatkcalibratedquals = np.zeros([len(names), seqlen], dtype = np.int)
-#     erroneous = np.zeros([len(names), seqlen], dtype = np.bool)
-#     fasta = pysam.FastaFile(fastafilename)
-#     ref = {x : np.array(list(fasta.fetch(reference = x)), dtype = np.unicode) for x in fasta.references}
+def find_errors(bamfilename, fastafilename, var_pos, names, seqlen):
+    #this function may be better optimized that using the pileup
+    #since we have to jump around a lot when using the pileup method
+    #need to return gatkcalibratedquals, erroneous (maybe trackingmask?)
+    print(ek.tstamp(), "Finding Errors...", file = sys.stderr)
+    #rawquals = np.zeros([len(names), seqlen], dtype = np.int)
+    gatkcalibratedquals = np.zeros([len(names), seqlen], dtype = np.int)
+    erroneous = np.zeros([len(names), seqlen], dtype = np.bool)
+    #seqs = np.zeros([len(names), seqlen], dtype = np.unicode)
+    fasta = pysam.FastaFile(fastafilename)
+    ref = {x : np.array(list(fasta.fetch(reference = x)), dtype = np.unicode) for x in fasta.references}
 
-#     bam = pysam.AlignmentFile(bamfilename, 'r')
-#     for read in bam:
-#         suffix = ("/2" if read.is_read2 else "/1")
-#         readidx = names[read.query_name + suffix]
+    bam = pysam.AlignmentFile(bamfilename, 'r')
+    for read in bam:
+        readcounter = 0
+        suffix = ("/2" if read.is_read2 else "/1")
+        readidx = names[read.query_name + suffix]
 
-#         gatkcalibratedquals[readidx,:] = np.array(read.query_qualities, dtype = np.int)
-#         pos_0 = read.reference_start
-#         refseq = ref[read.reference_name][pos_0 : pos_0 + seqlen]
-#         seq = np.array(list(read.query_sequence), dtype = np.unicode)
-#         #TODO: compare seq and refseq, ignore variable sites
-#         #TODO: flip quals and errors if reverse read
-
+        #rawquals[readidx,:] = np.array(bamread_get_fwd_oq(read), dtype = np.int)
+        gatkcalibratedquals[readidx,:] = np.array(read.get_forward_qualities(), dtype = np.int)
+        pos_0 = read.reference_start
+        refseq = np.array(list(ref[read.reference_name][pos_0 : pos_0 + seqlen]), dtype = np.unicode)
+        seq = np.array(list(read.get_forward_sequence()), dtype = np.unicode)
+        assert len(seq) == seqlen
+        erroneous[readidx,:] = (seq == refseq)
+        readcounter = readcounter + 1
+        #seqs[readidx,:] = seq
+        #TODO: compare seq and refseq, ignore variable sites
+        #TODO: flip quals and errors if reverse read
+    assert readcounter == len(names)
+    return gatkcalibratedquals, erroneous
 
 class RescaledNormal:
     oldset = np.seterr(all = 'raise')
@@ -541,6 +549,13 @@ def recalibrate_fastq(read, meanq, globaldeltaq, qscoredeltaq, positiondeltaq, d
     return recalibrated_quals
 
 ## Recalibrate reads from a BAM
+
+def bamread_get_fwd_oq(read):
+    oq = np.array(list(read.get_tag('OQ')), dtype = np.unicode)
+    quals = np.array(oq.view(np.uint32) - 33, dtype = np.uint32)
+    if read.is_reverse:
+        quals = np.flip(quals)
+    return quals
 
 def bamread_cycle_covariates(read):
     cycle = generic_cycle_covariate(len(read.query_sequence), read.is_read2)
