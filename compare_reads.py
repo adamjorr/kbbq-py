@@ -654,16 +654,12 @@ def main():
     # bam_test("only_confident.sorted.recal.bam", tablefile, rg_to_int, unique_pus, dinuc_order, seqlen)
     # quit()
 
-    rawquals = np.ma.masked_where(~foundinplp, rawquals)
-
     dq_calibrated = delta_q_recalibrate(rawquals.copy(), rgs, dinucleotide, np.logical_not(rcorrected), reversecycle)
     custom_gatk_calibrated = delta_q_recalibrate(rawquals.copy(), rgs, dinucleotide, erroneous, reversecycle)
     from_table = table_recalibrate(rawquals.copy(), tablefile, unique_pus, dinuc_order, seqlen, reversecycle, rgs, dinucleotide)
     try:
         #direct array_equal will not work even if the same positions are masked
-        assert np.array_equal(from_table.mask, gatkcalibratedquals.mask)
-        assert np.array_equal(from_table[~from_table.mask], gatkcalibratedquals[~gatkcalibratedquals.mask])
-        assert not np.all(from_table.mask)
+        assert np.array_equal(from_table, gatkcalibratedquals)
     except AssertionError:
         print("from_table shape:", from_table.shape)
         print("gatkcalibratedquals shape:", gatkcalibratedquals.shape)
