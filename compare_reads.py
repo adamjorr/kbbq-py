@@ -150,14 +150,20 @@ def process_plp(plpfilename, var_pos, names, seqlen, suffix):
 def find_errors(bamfilename, fastafilename, var_pos, names, seqlen):
     #this function may be better optimized that using the pileup
     #since we have to jump around a lot when using the pileup method
-    #need to return gatkcalibratedquals, erroneous (maybe trackingmask?)
+    #need to return gatkcalibratedquals, erroneous, skips
     print(ek.tstamp(), "Finding Errors...", file = sys.stderr)
     #rawquals = np.zeros([len(names), seqlen], dtype = np.int)
     gatkcalibratedquals = np.zeros([len(names), seqlen], dtype = np.int)
     erroneous = np.zeros([len(names), seqlen], dtype = np.bool)
     #seqs = np.zeros([len(names), seqlen], dtype = np.unicode)
+    skips = np.zeros([len(names),seqlen], dtype = np.bool)
     fasta = pysam.FastaFile(fastafilename)
-    ref = {x : np.array(list(fasta.fetch(reference = x)), dtype = np.unicode) for x in fasta.references}
+    ref = {chrom : np.array(list(fasta.fetch(reference = chrom)), dtype = np.unicode) for chrom in fasta.references}
+    varsites = {chrom : np.array(var_pos[chrom], dtype = np.int) for chrom in var_pos.keys()}
+    fullskips = {chrom : np.zeros(len(ref[chrom]), dtype = np.bool) for chrom in ref.keys()}
+    for chrom in fullskips.keys():
+        variable_positions = varsites[chrom]
+        fullskips[chrom][variable_positions] = True
 
     bam = pysam.AlignmentFile(bamfilename, 'r')
     for read in bam:
@@ -172,12 +178,12 @@ def find_errors(bamfilename, fastafilename, var_pos, names, seqlen):
         seq = np.array(list(read.get_forward_sequence()), dtype = np.unicode)
         assert len(seq) == seqlen
         erroneous[readidx,:] = (seq == refseq)
+        skips[readidx,:] = fullskips[ref[read.reference_name]][pos_0 : pos_0 + seqlen]
+
         readcounter = readcounter + 1
         #seqs[readidx,:] = seq
-        #TODO: compare seq and refseq, ignore variable sites
-        #TODO: flip quals and errors if reverse read
     assert readcounter == len(names)
-    return gatkcalibratedquals, erroneous
+    return gatkcalibratedquals, erroneous, skips
 
 class RescaledNormal:
     oldset = np.seterr(all = 'raise')
