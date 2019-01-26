@@ -81,72 +81,6 @@ def recalibrate(lr, oldquals):
     assert q.shape == shape
     return q.copy()
 
-def process_plp(plpfilename, var_pos, names, seqlen, suffix):
-    """
-    Returns an array of gatk calibrated qualities and actually erroneous sites
-    """
-    print(ek.tstamp(), "Processing Pileup " + plpfilename + " . . .", file = sys.stderr)
-    gatkcalibratedquals = np.zeros([len(names), seqlen], dtype = np.int)
-    erroneous = np.zeros([len(names), seqlen], dtype = np.bool_)
-    trackingmask = np.zeros([len(names), seqlen], dtype = np.bool_)
-    reversereads = np.zeros(len(names), dtype = np.bool)
-
-    numfinder = re.compile('[\+-](\d+)')
-    with open(plpfilename, 'r') as infh:
-        varidx = {k : 0 for k in var_pos.keys()}
-        for line in infh:
-            chrom, pos, refbase, depth, bases, quals, qpos, qname = line.split('\t')
-            pos = int(pos)
-            if var_pos[chrom][varidx[chrom]] == pos:
-                #increment unless it's the last position in the chromosome
-                varidx[chrom] = (varidx[chrom] + 1 if varidx[chrom] < len(var_pos[chrom]) - 1 else varidx[chrom])
-                continue
-            if int(depth) == 0:
-                continue
-            assert refbase != 'N'
-            assert var_pos[chrom][varidx[chrom]] > pos
-            bases = re.sub('\^.', '', bases)
-            bases = bases.replace('$','')
-            bases = bases.replace('<','')
-            bases = bases.replace('>','')
-            
-            match = numfinder.search(bases)
-            while match:
-                #remove only the specified number of bases inserted or deleted
-                bases = bases[:match.start()] + bases[(match.end() + int(match[1])):]
-                match = numfinder.search(bases)
-            
-            assert len(bases) == int(depth)
-            assert len(bases) == len(quals)
-
-            bases = np.array(list(bases), dtype = np.unicode_)
-            errs = np.array(np.logical_and(bases != '.', bases != ','))
-            rev = np.array(bases == ',', dtype = np.bool)
-            #this will miss a read if it is ALL ref mismatches,
-            # but hopefully that doesn't happen
-            # if any of the bases are reverse strand matches, the whole
-            # read will be counted as reversed.
-
-            qpos = np.array(qpos.split(','), dtype = np.int) - 1
-            qname = qname.rstrip()
-            qname = np.array(qname.split(','), dtype = np.unicode_)
-            qname = np.core.defchararray.add(qname, suffix)
-
-            quals = np.array(list(quals), dtype = np.unicode_)
-            quals = np.array(quals.view(np.uint32) - 33, dtype = np.uint32)
-            ##here
-            mask = np.array([names.get(n) for n in qname])
-            present = np.flatnonzero(mask)
-            mask = mask[present].astype(np.int)
-            gatkcalibratedquals[mask,qpos[present]] = quals[present]
-            erroneous[mask,qpos[present]] = errs[present]
-            trackingmask[mask,qpos[present]] = True
-            reversereads[mask[rev[present]]] = True
-    gatkcalibratedquals[reversereads,:] = np.fliplr(gatkcalibratedquals[reversereads,:])
-    erroneous[reversereads,:] = np.fliplr(erroneous[reversereads,:])
-    trackingmask[reversereads,:] = np.fliplr(trackingmask[reversereads,:])
-    return gatkcalibratedquals.copy(), erroneous.copy(), trackingmask.copy()
-
 def find_errors(bamfilename, fastafilename, var_pos, names, seqlen):
     #this function may be better optimized that using the pileup
     #since we have to jump around a lot when using the pileup method
@@ -200,13 +134,12 @@ class RescaledNormal:
     def prior(self, difference):
         return prior_dist[difference]
 
-def v_gatk_delta_q(prior_q, numerrs, numtotal, maxscore = 43):
+def gatk_delta_q(prior_q, numerrs, numtotal, maxscore = 43):
     assert prior_q.shape == numerrs.shape == numtotal.shape
     possible_q = np.arange(maxscore, dtype = np.int)
     diff = np.absolute(np.subtract.outer(possible_q, prior_q).astype(np.int64))
     #1st dim is possible qs
     prior = RescaledNormal.prior_dist[diff]
-    #figure out how to make this work
     broadcast_errs = np.broadcast_to(numerrs, possible_q.shape + numerrs.shape).copy()
     broadcast_tot = np.broadcast_to(numtotal, possible_q.shape + numtotal.shape).copy()
     p = q_to_p(possible_q).astype(np.float)
@@ -281,7 +214,7 @@ def table_recalibrate(q, tablefile, rg_order, dinuc_order, seqlen, reversecycle,
 
 def delta_q_recalibrate(q, rgs, dinucleotide, errors, reversecycle, maxscore = 43):
     print(ek.tstamp(), "Getting Covariate Arrays . . .", file=sys.stderr)
-    meanq, global_errs, global_total, q_errs, q_total, pos_errs, pos_total, dinuc_errs, dinuc_total = v_get_covariate_arrays(q, rgs, dinucleotide, errors, reversecycle)
+    meanq, global_errs, global_total, q_errs, q_total, pos_errs, pos_total, dinuc_errs, dinuc_total = get_covariate_arrays(q, rgs, dinucleotide, errors, reversecycle)
     print(ek.tstamp(), "Finding Delta Q's . . .", file=sys.stderr)
     globaldeltaq, qscoredeltaq, positiondeltaq, dinucdeltaq = get_delta_qs(meanq, global_errs, global_total, q_errs, q_total, pos_errs, pos_total, dinuc_errs, dinuc_total)
     print(ek.tstamp(), "Recalibrating . . .", file=sys.stderr)
@@ -316,7 +249,7 @@ def get_dinucleotide(seqs, q):
     dinucleotide = generic_dinuc_covariate(seqs.view('U1').reshape((seqs.size, -1)), q, dinuc_to_int)
     return dinucleotide.copy(), dinucs.copy()
 
-def v_get_covariate_arrays(q, rgs, dinucleotide, errors, reversecycle, maxscore = 43, minscore = 6):
+def get_covariate_arrays(q, rgs, dinucleotide, errors, reversecycle, maxscore = 43, minscore = 6):
     #input arrays are the same dimensions: (numsequences, seqlen)
     #output arrays are dimension (nrgs), (nrgs, q), (nrgs, q, seqlen), or (nrgs, q, 16)
     m = np.ma.getmaskarray(q)
@@ -358,46 +291,6 @@ def v_get_covariate_arrays(q, rgs, dinucleotide, errors, reversecycle, maxscore 
 
     return meanq, rg_errs, rg_total, q_errs, q_total, pos_errs, pos_total, dinuc_errs, dinuc_total
 
-def get_covariate_arrays(q, rgs, dinucleotide, errors, maxscore = 43, minscore = 6):
-    #these arrays should be the same dimensions: (numsequences, seqlen)
-    #total mean Q, quality score, position, dinucleotide context
-    #TODO: figure how to do this smartly per read group
-    qmask = np.ma.getmaskarray(q.copy())
-    qmask = np.logical_or(qmask, q <= minscore)
-    qunmasked = np.logical_not(qmask)
-    #meanq = p_to_q(np.ma.sum(q_to_p(q)) / np.sum(qunmasked))
-    error_and_unmasked = np.logical_and(qunmasked, errors)
-
-    global_errs = np.sum(errors[qunmasked])
-    global_total = np.sum(qunmasked)
-    q_errs = np.bincount(q[error_and_unmasked], minlength = maxscore+1)
-    q_total = np.bincount(q[qunmasked], minlength = maxscore+1)
-    #meanq prior is q of expected # errors / total observations
-    expected_errs = np.sum(q_to_p(np.arange(maxscore+1)) * q_total)
-    meanq = p_to_q(expected_errs / np.sum(q_total))
-
-    #pos_errs should be 2d: pos_errs[qscore, position] = numerrors
-    pos_errs = np.zeros([maxscore + 1, 2 * q.shape[1]])
-    pos_total = np.zeros([maxscore + 1, 2 * q.shape[1]])
-    for i in range(maxscore + 1):
-        #pos_errs = np.bincount(q[error_and_unmasked], minlength = maxscore+1) is vectorized equivalent?
-        pos_errs[i,] = np.sum(np.logical_and(error_and_unmasked, q == i), axis = 0)
-        #pos_total = np.bincount(q[qunmasked], minlength = maxscore + 1) is vectorized equivalent?
-        pos_total[i,] = np.sum(np.logical_and(qunmasked, q == i), axis = 0)
-
-    #dinuc_errs is 2d: dinuc_errs[qscore, dinuc] = numerrors
-    dinuc_errs = np.zeros([maxscore + 1, 16])
-    dinuc_total = np.zeros([maxscore + 1, 16])
-    for i in range(maxscore+1):
-        e_unmasked_and_q = np.logical_and(error_and_unmasked, q == i)
-        unmasked_and_q = np.logical_and(qunmasked, q == i)
-        e_valid = np.logical_and(error_and_unmasked, dinucleotide != -1)
-        valid = np.logical_and(unmasked_and_q, dinucleotide != -1)
-        dinuc_errs[i,] = np.bincount(dinucleotide[e_valid], minlength = 16)
-        dinuc_total[i,] = np.bincount(dinucleotide[valid], minlength = 16)
-
-    return meanq, global_errs, global_total, q_errs, q_total, pos_errs, pos_total, dinuc_errs, dinuc_total
-
 #this function passes bam test
 def get_delta_qs(meanq, rg_errs, rg_total, q_errs, q_total, pos_errs, pos_total, dinuc_errs, dinuc_total, maxscore = 43):
     # shapes are:
@@ -406,19 +299,16 @@ def get_delta_qs(meanq, rg_errs, rg_total, q_errs, q_total, pos_errs, pos_total,
     #   [rg, q, covariate]
     #seqlen = pos_total.shape[2] / 2
     nrgs = meanq.shape[0]
-    rgdeltaq = v_gatk_delta_q(meanq, rg_errs, rg_total)
+    rgdeltaq = gatk_delta_q(meanq, rg_errs, rg_total)
     # the qscoredeltaq is 1d, with the index being the quality score
-    #qscoredeltaq = np.array([gatk_delta_q(meanq + globaldeltaq, q_errs[i], q_total[i]) for i in range(maxscore + 1)])
     prior1 = np.broadcast_to((meanq + rgdeltaq)[:,np.newaxis], q_total.shape).copy()
-    qscoredeltaq = v_gatk_delta_q( prior1 , q_errs, q_total)
+    qscoredeltaq = gatk_delta_q( prior1 , q_errs, q_total)
     ## positiondeltaq is 2d, first dimension is quality score and second is position
-    #positiondeltaq = np.zeros([maxscore+1, seqlen])
     ## dinucdeltaq is 2d, first dimension is quality score and second is nucleotide context
-    #dinucdeltaq = np.zeros([maxscore+1, 17])
     prior2 = np.broadcast_to((prior1 + qscoredeltaq)[...,np.newaxis], pos_total.shape).copy()
-    positiondeltaq = v_gatk_delta_q(prior2, pos_errs, pos_total)
+    positiondeltaq = gatk_delta_q(prior2, pos_errs, pos_total)
     prior3 = np.broadcast_to((prior1 + qscoredeltaq)[...,np.newaxis], dinuc_total.shape).copy()
-    dinucdeltaq = v_gatk_delta_q(prior3, dinuc_errs, dinuc_total)
+    dinucdeltaq = gatk_delta_q(prior3, dinuc_errs, dinuc_total)
 
     #need to add another value of dinuc, for invalid dinuc
     pad = np.zeros((len(dinucdeltaq.shape),2), dtype = np.int_)
@@ -427,7 +317,7 @@ def get_delta_qs(meanq, rg_errs, rg_total, q_errs, q_total, pos_errs, pos_total,
 
     return rgdeltaq.copy(), qscoredeltaq.copy(), positiondeltaq.copy(), dinucdq.copy()
 
-def plot_calibration(data, truth, labels, plotname, plottitle = None):
+def plot_calibration(data, truth, labels, plotname, plottitle = None, maxscore = 42):
     print(ek.tstamp(), "Making Quality Score Plot . . .", file = sys.stderr)
     assert np.ndim(truth) == 1
     plottitle = (plottitle if plottitle is not None else plotname)
@@ -436,36 +326,29 @@ def plot_calibration(data, truth, labels, plotname, plottitle = None):
     #ax1.set_aspect('equal')
     ax2.set_ylim(top = 3e7)
     qualplot.suptitle(plottitle)
-    maxscore = 43
-    ax1.plot(np.arange(maxscore), 'k:', label = "Perfect")
+    ax1.plot(np.arange(maxscore + 1), 'k:', label = "Perfect")
     try:
         assert np.all([np.array_equal(data[0].shape, data[i].shape) for i in range(len(data))])
     except AssertionError:
         for i in range(len(data)):
             print(labels[i], 'Shape:', data[i].shape)
-    maskstack = np.stack([np.ma.getmaskarray(data[i]) for i in range(len(data))] + [np.ma.getmaskarray(truth)])
-    allmasks = np.any(maskstack, axis = 0)
     for i in range(len(data)):
         label = labels[i]
         print(ek.tstamp(), "Plotting %s . . ." % (label), file = sys.stderr)
         assert np.ndim(data[i]) == 1
-        estimate = np.ma.masked_where(allmasks, data[i], copy = True)
-        est_p = q_to_p(estimate)
-        unmask = np.logical_not(allmasks)
+        est_p = q_to_p(data[i])
         try:
-            bscore = sklearn.metrics.brier_score_loss(truth[unmask].reshape(-1), est_p[unmask].reshape(-1))
+            bscore = sklearn.metrics.brier_score_loss(truth.reshape(-1), est_p.reshape(-1))
         except ValueError:
             print(est_p)
-            print(unmask)
-            print(est_p[unmask])
             raise
-        numtotal = np.bincount(estimate[unmask].reshape(-1), minlength = (maxscore+1))
+        numtotal = np.bincount(data[i].reshape(-1), minlength = (maxscore+1))
         numerrs = np.bincount(estimate[np.logical_and(unmask, truth)].reshape(-1), minlength = len(numtotal)) #not masked and error
-        numtotal = np.ma.masked_equal(numtotal, 0)
-        p = np.ma.divide(numerrs,numtotal)
+        # numtotal = np.ma.masked_equal(numtotal, 0)
+        p = np.true_divide(numerrs[numtotal != 0],numtotal[numtotal != 0])
         q = p_to_q(p)
-        ax1.plot(np.arange(len(q))[np.logical_not(q.mask)], q[np.logical_not(q.mask)], 'o-', alpha = .6, label ="%s, %1.5f" % (label, bscore))
-        ax2.plot(np.arange(len(q))[np.logical_not(q.mask)], numtotal[np.logical_not(q.mask)], 'o-', alpha = .6, label = "%s, %1.5f" % (label, bscore))
+        ax1.plot(np.arange(len(numtotal))[numtotal != 0], q, 'o-', alpha = .6, label ="%s, %1.5f" % (label, bscore))
+        ax2.plot(np.arange(len(numtotal))[numtotal != 0], numtotal[numtotal != 0], 'o-', alpha = .6, label = "%s, %1.5f" % (label, bscore))
     plt.xlabel("Predicted Quality Score")
     ax1.set_ylabel("Actual Quality Score")
     ax1.legend(loc = "upper left")
