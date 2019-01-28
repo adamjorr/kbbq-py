@@ -316,9 +316,9 @@ def get_delta_qs(meanq, rg_errs, rg_total, q_errs, q_total, pos_errs, pos_total,
 
     return rgdeltaq.copy(), qscoredeltaq.copy(), positiondeltaq.copy(), dinucdq.copy()
 
-def plot_calibration(data, truth, labels, plotname, plottitle = None, maxscore = 42):
+def plot_calibration(data, erroneous, labels, plotname, plottitle = None, maxscore = 42):
     print(ek.tstamp(), "Making Quality Score Plot . . .", file = sys.stderr)
-    assert np.ndim(truth) == 1
+    assert np.ndim(erroneous) == 1
     plottitle = (plottitle if plottitle is not None else plotname)
     sns.set()
     qualplot, (ax1, ax2) = plt.subplots(2, sharex = True, gridspec_kw = { 'height_ratios' : [2, 1] }, figsize = (7,9))
@@ -337,12 +337,12 @@ def plot_calibration(data, truth, labels, plotname, plottitle = None, maxscore =
         assert np.ndim(data[i]) == 1
         est_p = q_to_p(data[i])
         try:
-            bscore = sklearn.metrics.brier_score_loss(truth.reshape(-1), est_p.reshape(-1))
+            bscore = sklearn.metrics.brier_score_loss(erroneous.reshape(-1), est_p.reshape(-1))
         except ValueError:
             print(est_p)
             raise
         numtotal = np.bincount(data[i].reshape(-1), minlength = (maxscore+1))
-        numerrs = np.bincount(estimate[np.logical_and(unmask, truth)].reshape(-1), minlength = len(numtotal)) #not masked and error
+        numerrs = np.bincount(data[i][erroneous].reshape(-1), minlength = len(numtotal)) #not masked and error
         # numtotal = np.ma.masked_equal(numtotal, 0)
         p = np.true_divide(numerrs[numtotal != 0],numtotal[numtotal != 0])
         q = p_to_q(p)
@@ -523,6 +523,9 @@ def main():
     # bam_test("only_confident.sorted.recal.bam", tablefile, rg_to_int, unique_pus, dinuc_order, seqlen)
     # quit()
 
+    reversecycle = np.zeros(len(names), dtype = np.bool)
+    reversecycle[names.values()] = np.array(names.keys(), dtype = np.unicode).endswith('/2')
+
     dq_calibrated = delta_q_recalibrate(rawquals, rgs, dinucleotide, np.logical_not(rcorrected), reversecycle)
     custom_gatk_calibrated = delta_q_recalibrate(rawquals, rgs, dinucleotide, erroneous, reversecycle)
     from_table = table_recalibrate(rawquals, tablefile, unique_pus, dinuc_order, seqlen, reversecycle, rgs, dinucleotide)
@@ -542,7 +545,7 @@ def main():
         raise
 
     plot_calibration([rawquals.flatten(), gatkcalibratedquals.flatten(), dq_calibrated.flatten(), custom_gatk_calibrated.flatten(), from_table.flatten()],
-        truth = erroneous.flatten(),
+        erroneous = erroneous.flatten(),
         labels = ["Uncalibrated Scores", "GATK Calibration", "KBBQ", "GATK Python Implementation", "From Table"],
         plotname = 'qualscores.png',
         plottitle = "Comparison of Calibration Methods")
