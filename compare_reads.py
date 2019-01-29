@@ -98,7 +98,9 @@ def find_errors(bamfilename, fastafilename, var_pos, names, seqlen):
     for read in bam:
         readcounter = 0
         suffix = ("/2" if read.is_read2 else "/1")
-        readidx = names[read.query_name + suffix]
+        readidx = names.get(read.query_name + suffix)
+        if readidx is None:
+            continue
 
         #rawquals[readidx,:] = np.array(bamread_get_fwd_oq(read), dtype = np.int)
         gatkcalibratedquals[readidx,:] = np.array(read.get_forward_qualities(), dtype = np.int)
