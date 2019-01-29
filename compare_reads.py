@@ -487,7 +487,7 @@ def main():
     uncorrfile = "nospace.reads.fq"
     corrfile = "nospace.reads.cor.fq"
     bamfilename = "only_confident.sorted.recal.bam"
-    fastafilename = "../chr1.fa"
+    fastafilename = "../chr1.renamed.fa"
     names, rawquals, rcorrected, seqs, rgs, seqlen = find_rcorrected_sites(uncorrfile, corrfile)
 
     #rcorrected is true when the bases match the original, false otherwise
