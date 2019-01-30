@@ -221,7 +221,7 @@ def delta_q_recalibrate(q, rgs, dinucleotide, errors, reversecycle, minscore = 6
     print(ek.tstamp(), "Finding Delta Q's . . .", file=sys.stderr)
     globaldeltaq, qscoredeltaq, positiondeltaq, dinucdeltaq = get_delta_qs(meanq, global_errs, global_total, q_errs, q_total, pos_errs, pos_total, dinuc_errs, dinuc_total)
     print(ek.tstamp(), "Recalibrating . . .", file=sys.stderr)
-    recal_q = np.zeros(q.shape, dtype = np.longdouble)
+    recal_q = np.zeros(q.shape, dtype = np.int)
     #qmask = np.ma.getmaskarray(q)
     #recal_q = np.ma.masked_array(np.zeros(q.shape, dtype = np.longdouble), copy = True) #+ meanq + globaldeltaq
     #recal_q = np.ma.masked_where(qmask, recal_q)
@@ -239,7 +239,7 @@ def delta_q_recalibrate(q, rgs, dinucleotide, errors, reversecycle, minscore = 6
     poscov = pos[valid_positions]
     dinuccov = dinucleotide[valid_positions]
 
-    recal_q = (meanq[rgcov] + globaldeltaq[rgcov] + qscoredeltaq[rgcov,qcov] + positiondeltaq[rgcov, qcov, poscov] + dinucdeltaq[rgcov, qcov, dinuccov]).astype(np.int)
+    recal_q[valid_positions] = (meanq[rgcov] + globaldeltaq[rgcov] + qscoredeltaq[rgcov,qcov] + positiondeltaq[rgcov, qcov, poscov] + dinucdeltaq[rgcov, qcov, dinuccov]).astype(np.int)
     return recal_q.copy()
 
 def get_dinucleotide(seqs, q):
@@ -553,8 +553,8 @@ def main():
         print("sum(from_table.mask != gatkcalibratedquals.mask)", np.sum(from_table.mask != gatkcalibratedquals.mask))
         raise
 
-    plot_calibration([rawquals.flatten(), gatkcalibratedquals.flatten(), dq_calibrated.flatten(), custom_gatk_calibrated.flatten(), from_table.flatten()],
-        erroneous = erroneous.flatten(),
+    plot_calibration([rawquals[~skips].flatten(), gatkcalibratedquals[~skips].flatten(), dq_calibrated[~skips].flatten(), custom_gatk_calibrated[~skips].flatten(), from_table[~skips].flatten()],
+        erroneous = erroneous[~skips].flatten(),
         labels = ["Uncalibrated Scores", "GATK Calibration", "KBBQ", "GATK Python Implementation", "From Table"],
         plotname = 'qualscores.png',
         plottitle = "Comparison of Calibration Methods")
