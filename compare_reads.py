@@ -109,7 +109,7 @@ def find_errors(bamfilename, fastafilename, var_pos, names, seqlen):
         seq = np.array(list(read.get_forward_sequence()), dtype = np.unicode)
         assert len(seq) == seqlen
         erroneous[readidx,:] = (seq == refseq)
-        skips[readidx,:] = fullskips[ref[read.reference_name]][pos_0 : pos_0 + seqlen]
+        skips[readidx,:] = fullskips[read.reference_name][pos_0 : pos_0 + seqlen]
 
         readcounter = readcounter + 1
         #seqs[readidx,:] = seq
