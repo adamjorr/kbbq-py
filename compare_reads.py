@@ -95,8 +95,8 @@ def find_errors(bamfilename, fastafilename, var_pos, names, seqlen):
         fullskips[chrom][variable_positions] = True
 
     bam = pysam.AlignmentFile(bamfilename, 'r')
+    readcounter = 0
     for read in bam:
-        readcounter = 0
         suffix = ("/2" if read.is_read2 else "/1")
         readidx = names.get(read.query_name + suffix)
         if readidx is None:
@@ -113,7 +113,13 @@ def find_errors(bamfilename, fastafilename, var_pos, names, seqlen):
 
         readcounter = readcounter + 1
         #seqs[readidx,:] = seq
-    assert readcounter == len(names)
+    try:
+        assert readcounter == len(names)
+    except AssertionError:
+        print("readcounter",readcounter)
+        print("len(names)",len(names))
+        print("num reads missing:", np.sum(np.all(gatkcalibratedquals == 0, axis = 1)))
+        raise
     return gatkcalibratedquals, erroneous, skips
 
 class RescaledNormal:
@@ -333,6 +339,7 @@ def plot_calibration(data, erroneous, labels, plotname, plottitle = None, maxsco
     except AssertionError:
         for i in range(len(data)):
             print(labels[i], 'Shape:', data[i].shape)
+        raise
     for i in range(len(data)):
         label = labels[i]
         print(ek.tstamp(), "Plotting %s . . ." % (label), file = sys.stderr)
@@ -526,7 +533,7 @@ def main():
     # quit()
 
     reversecycle = np.zeros(len(names), dtype = np.bool)
-    reversecycle[names.values()] = np.array(names.keys(), dtype = np.unicode).endswith('/2')
+    reversecycle[np.array(list(names.values()), dtype = np.int)] = np.char.endswith(np.array(list(names.keys()), dtype = np.unicode),'/2')
 
     dq_calibrated = delta_q_recalibrate(rawquals, rgs, dinucleotide, np.logical_not(rcorrected), reversecycle)
     custom_gatk_calibrated = delta_q_recalibrate(rawquals, rgs, dinucleotide, erroneous, reversecycle)
