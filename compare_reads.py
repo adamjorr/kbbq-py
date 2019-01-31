@@ -364,8 +364,8 @@ def plot_calibration(data, erroneous, labels, plotname, plottitle = None, maxsco
     qualplot.savefig(plotname)
 
 def p_to_q(p, maxscore = 42):
-    q = -10.0*np.log10(p)
-    q = np.array(np.rint(q), dtype=np.int, copy = True)
+    q = np.zeros(p.shape, dtype = np.int)
+    q[p != 0] = -10.0*np.log10(p[p != 0]) #avoid divide by 0
     q = np.clip(q, 0, maxscore)
     return q.copy()
 
@@ -553,11 +553,21 @@ def main():
         print("sum(from_table.mask != gatkcalibratedquals.mask)", np.sum(from_table.mask != gatkcalibratedquals.mask))
         raise
 
-    plot_calibration([rawquals[~skips].flatten(), gatkcalibratedquals[~skips].flatten(), dq_calibrated[~skips].flatten(), custom_gatk_calibrated[~skips].flatten(), from_table[~skips].flatten()],
-        erroneous = erroneous[~skips].flatten(),
+    nonsnp = (np.sum(erroneous, axis = 1) > 1) #reads with more than 1 "error" (ie an indel)
+    skips[nonsnp,:] = True
+
+    raw = rawquals[~skips]
+    gatk = gatkcalibratedquals[~skips]
+    dq = dq_calibrated[~skips]
+    custom = custom_gatk_calibrated[~skips]
+    table = from_table[~skips]
+    truth = erroneous[~skips]
+
+    plot_calibration([raw, gatk, dq, custom, table],
+        erroneous = truth,
         labels = ["Uncalibrated Scores", "GATK Calibration", "KBBQ", "GATK Python Implementation", "From Table"],
         plotname = 'qualscores.png',
-        plottitle = "Comparison of Calibration Methods")
+        plottitle = "Substitution Error Calibration")
 
 
 if __name__ == '__main__':
