@@ -76,6 +76,17 @@ def recalibrate(lr, q):
     assert newq.shape == q.shape
     return q.copy()
 
+def find_read_errors(read, ref):
+    #TODO
+    #use the CIGAR to find errors in the read
+    # here's how gatk does it: https://github.com/broadinstitute/gatk/blob/78df6b2f6573b3cd2807a71ec8950d7dfbc9a65d/src/main/java/org/broadinstitute/hellbender/utils/recalibration/BaseRecalibrationEngine.java#L370
+
+def find_variable_sites(read, ref):
+    #TODO
+    #use CIGAR and ref-coordinate sites to find
+    # which read bases are on variable sites
+    # here's how gatk does it: https://github.com/broadinstitute/gatk/blob/78df6b2f6573b3cd2807a71ec8950d7dfbc9a65d/src/main/java/org/broadinstitute/hellbender/utils/recalibration/BaseRecalibrationEngine.java#L329
+
 def find_errors(bamfilename, fastafilename, var_pos, names, seqlen):
     #this function may be better optimized that using the pileup
     #since we have to jump around a lot when using the pileup method
