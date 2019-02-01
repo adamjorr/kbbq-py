@@ -80,6 +80,30 @@ def find_read_errors(read, ref):
     #TODO
     #use the CIGAR to find errors in the read
     # here's how gatk does it: https://github.com/broadinstitute/gatk/blob/78df6b2f6573b3cd2807a71ec8950d7dfbc9a65d/src/main/java/org/broadinstitute/hellbender/utils/recalibration/BaseRecalibrationEngine.java#L370
+    seq = np.array(list(read.query_sequence), dtype = np.unicode)
+    cigartuples = read.cigartuples #list of tuples [(operation, length)]
+    cigarops, cigarlen = zip(*cigartuples)
+    readidx = 0
+    refidx = 0
+    for op in cigarops:
+        if op == 0 or op == 7 or op == 8:
+            #match
+        elif op == 1:
+            #insertion in read
+        elif op == 2:
+            #deletion in read
+        elif op == 3:
+            #N op (ref skip, like deletion, consumes ref not query)
+        elif op == 4:
+            #soft clip, consumes query not ref
+        elif op == 5 or op == 6:
+            #hard clip or pad, do nothing
+            continue
+        else:
+            #unrecognized
+            raise ValueError("Uncrecognized Cigar Operation " + str(op) + "\n")
+
+
 
 def find_variable_sites(read, ref):
     #TODO
