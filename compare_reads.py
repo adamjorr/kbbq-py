@@ -124,14 +124,6 @@ def find_read_errors(read, ref, variable):
             raise ValueError("Uncrecognized Cigar Operation " + str(op) + " In Read\n" + str(read))
     return readerrors, skips
 
-
-def find_variable_sites(read, ref):
-    #TODO
-    #use CIGAR and ref-coordinate sites to find
-    # which read bases are on variable sites
-    # here's how gatk does it: https://github.com/broadinstitute/gatk/blob/78df6b2f6573b3cd2807a71ec8950d7dfbc9a65d/src/main/java/org/broadinstitute/hellbender/utils/recalibration/BaseRecalibrationEngine.java#L329
-    pass
-
 def find_errors(bamfilename, fastafilename, var_pos, names, seqlen):
     #this function may be better optimized that using the pileup
     #since we have to jump around a lot when using the pileup method
@@ -381,14 +373,14 @@ def get_delta_qs(meanq, rg_errs, rg_total, q_errs, q_total, pos_errs, pos_total,
 
     return rgdeltaq.copy(), qscoredeltaq.copy(), positiondeltaq.copy(), dinucdq.copy()
 
-def plot_calibration(data, erroneous, labels, plotname, plottitle = None, maxscore = 42):
+def plot_calibration(data, truth, labels, plotname, plottitle = None, maxscore = 42):
     print(ek.tstamp(), "Making Quality Score Plot . . .", file = sys.stderr)
     assert np.ndim(erroneous) == 1
     plottitle = (plottitle if plottitle is not None else plotname)
     sns.set()
     qualplot, (ax1, ax2) = plt.subplots(2, sharex = True, gridspec_kw = { 'height_ratios' : [2, 1] }, figsize = (7,9))
     #ax1.set_aspect('equal')
-    ax2.set_ylim(top = 3e7)
+    # ax2.set_ylim(top = 3e7)
     qualplot.suptitle(plottitle)
     ax1.plot(np.arange(maxscore + 1), 'k:', label = "Perfect")
     try:
@@ -409,7 +401,6 @@ def plot_calibration(data, erroneous, labels, plotname, plottitle = None, maxsco
             raise
         numtotal = np.bincount(data[i].reshape(-1), minlength = (maxscore+1))
         numerrs = np.bincount(data[i][erroneous].reshape(-1), minlength = len(numtotal)) #not masked and error
-        # numtotal = np.ma.masked_equal(numtotal, 0)
         p = np.true_divide(numerrs[numtotal != 0],numtotal[numtotal != 0])
         q = p_to_q(p)
         ax1.plot(np.arange(len(numtotal))[numtotal != 0], q, 'o-', alpha = .6, label ="%s, %1.5f" % (label, bscore))
@@ -422,7 +413,8 @@ def plot_calibration(data, erroneous, labels, plotname, plottitle = None, maxsco
 
 def p_to_q(p, maxscore = 42):
     q = np.zeros(p.shape, dtype = np.int)
-    q[p != 0] = -10.0*np.log10(p[p != 0]) #avoid divide by 0
+    q[p != 0] = (-10.0*np.log10(p[p != 0])).astype(np.int) #avoid divide by 0
+    q[p == 0] = maxscore
     q = np.clip(q, 0, maxscore)
     return q.copy()
 
@@ -613,6 +605,7 @@ def main():
     #nonsnp = (np.sum(erroneous, axis = 1) > 1) #reads with more than 1 "error" (ie an indel)
     #skips[nonsnp,:] = True
 
+    print(ek.tstamp(), "Skipping", sum(skips), "of", skips.size, "Sites . . .", file=sys.stderr)
     raw = rawquals[~skips]
     gatk = gatkcalibratedquals[~skips]
     dq = dq_calibrated[~skips]
@@ -620,8 +613,10 @@ def main():
     table = from_table[~skips]
     truth = erroneous[~skips]
 
+
+
     plot_calibration([raw, gatk, dq, custom, table],
-        erroneous = truth,
+        truth = truth,
         labels = ["Uncalibrated Scores", "GATK Calibration", "KBBQ", "GATK Python Implementation", "From Table"],
         plotname = 'qualscores.png',
         plottitle = "Substitution Error Calibration")
