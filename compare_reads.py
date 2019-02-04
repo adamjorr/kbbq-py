@@ -100,7 +100,7 @@ def find_read_errors(read, ref, variable):
     for op, l in cigartuples:
         if op == 0 or op == 7 or op == 8:
             #match
-            readerrors[readidx : readidx + l] = (refseq[refidx : refidx + l] == seq[readidx : readidx + l])
+            readerrors[readidx : readidx + l] = (refseq[refidx : refidx + l] != seq[readidx : readidx + l])
             skips[readidx : readidx + l] = subset_variable[refidx : refidx + l]
             readidx = readidx + l
             refidx = refidx + l
@@ -375,7 +375,7 @@ def get_delta_qs(meanq, rg_errs, rg_total, q_errs, q_total, pos_errs, pos_total,
 
 def plot_calibration(data, truth, labels, plotname, plottitle = None, maxscore = 42):
     print(ek.tstamp(), "Making Quality Score Plot . . .", file = sys.stderr)
-    assert np.ndim(erroneous) == 1
+    assert np.ndim(truth) == 1
     plottitle = (plottitle if plottitle is not None else plotname)
     sns.set()
     qualplot, (ax1, ax2) = plt.subplots(2, sharex = True, gridspec_kw = { 'height_ratios' : [2, 1] }, figsize = (7,9))
@@ -395,12 +395,12 @@ def plot_calibration(data, truth, labels, plotname, plottitle = None, maxscore =
         assert np.ndim(data[i]) == 1
         est_p = q_to_p(data[i])
         try:
-            bscore = sklearn.metrics.brier_score_loss(erroneous.reshape(-1), est_p.reshape(-1))
+            bscore = sklearn.metrics.brier_score_loss(truth.reshape(-1), est_p.reshape(-1))
         except ValueError:
             print(est_p)
             raise
         numtotal = np.bincount(data[i].reshape(-1), minlength = (maxscore+1))
-        numerrs = np.bincount(data[i][erroneous].reshape(-1), minlength = len(numtotal)) #not masked and error
+        numerrs = np.bincount(data[i][truth].reshape(-1), minlength = len(numtotal)) #not masked and error
         p = np.true_divide(numerrs[numtotal != 0],numtotal[numtotal != 0])
         q = p_to_q(p)
         ax1.plot(np.arange(len(numtotal))[numtotal != 0], q, 'o-', alpha = .6, label ="%s, %1.5f" % (label, bscore))
@@ -605,15 +605,13 @@ def main():
     #nonsnp = (np.sum(erroneous, axis = 1) > 1) #reads with more than 1 "error" (ie an indel)
     #skips[nonsnp,:] = True
 
-    print(ek.tstamp(), "Skipping", sum(skips), "of", skips.size, "Sites . . .", file=sys.stderr)
+    print(ek.tstamp(), "Skipping", np.sum(skips), "of", skips.size, "(", np.sum(skips)/skips.size ,"%)", "Sites . . .", file=sys.stderr)
     raw = rawquals[~skips]
     gatk = gatkcalibratedquals[~skips]
     dq = dq_calibrated[~skips]
     custom = custom_gatk_calibrated[~skips]
     table = from_table[~skips]
     truth = erroneous[~skips]
-
-
 
     plot_calibration([raw, gatk, dq, custom, table],
         truth = truth,
