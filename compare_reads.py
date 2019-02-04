@@ -270,12 +270,8 @@ def delta_q_recalibrate(q, rgs, dinucleotide, errors, reversecycle, minscore = 6
     print(ek.tstamp(), "Finding Delta Q's . . .", file=sys.stderr)
     globaldeltaq, qscoredeltaq, positiondeltaq, dinucdeltaq = get_delta_qs(meanq, global_errs, global_total, q_errs, q_total, pos_errs, pos_total, dinuc_errs, dinuc_total)
     print(ek.tstamp(), "Recalibrating . . .", file=sys.stderr)
-    recal_q = np.zeros(q.shape, dtype = np.int)
-    #qmask = np.ma.getmaskarray(q)
-    #recal_q = np.ma.masked_array(np.zeros(q.shape, dtype = np.longdouble), copy = True) #+ meanq + globaldeltaq
-    #recal_q = np.ma.masked_where(qmask, recal_q)
-    #recal_q[q <= 6] = np.ma.masked
-
+    recal_q = np.array(q, copy = True, dtype = np.int)
+    
     #vectorize cycle covariates:
     pos = np.broadcast_to(np.arange(q.shape[1]), (q.shape[0], q.shape[1])).copy()
     np.add.at(pos, reversecycle, 1)
