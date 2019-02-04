@@ -76,48 +76,53 @@ def recalibrate(lr, q):
     assert newq.shape == q.shape
     return q.copy()
 
-# def find_read_errors(read, ref):
-#     #TODO
-#     #use the CIGAR to find errors in the read
-#     # here's how gatk does it: https://github.com/broadinstitute/gatk/blob/78df6b2f6573b3cd2807a71ec8950d7dfbc9a65d/src/main/java/org/broadinstitute/hellbender/utils/recalibration/BaseRecalibrationEngine.java#L370
-#     seq = np.array(list(read.query_sequence), dtype = np.unicode)
-#     cigartuples = read.cigartuples #list of tuples [(operation, length)]
-#     cigarops, cigarlen = zip(*cigartuples)
-#     cigarops = np.array(cigarops, dtype = np.int)
-#     cigarlen = np.array(cigarlen, dtype = np.int)
+def find_read_errors(read, ref, variable):
+    #use the CIGAR to find errors in the read or sites to skip
+    #we will add softclipped bases to a skip array and return the error array and the skip array
+    #we don't consider indel errors and just track them to properly navigate the reference
+    # here's how gatk does it: https://github.com/broadinstitute/gatk/blob/78df6b2f6573b3cd2807a71ec8950d7dfbc9a65d/src/main/java/org/broadinstitute/hellbender/utils/recalibration/BaseRecalibrationEngine.java#L370
+    seq = np.array(list(read.query_sequence), dtype = np.unicode)
+    skips = np.array(len(seq), dtype = np.bool)
+    cigartuples = read.cigartuples #list of tuples [(operation, length)]
+    cigarops, cigarlen = zip(*cigartuples)
+    cigarops = np.array(cigarops, dtype = np.int)
+    cigarlen = np.array(cigarlen, dtype = np.int)
 
-#     #reference length from CIGAR: https://github.com/samtools/htsjdk/blob/942e3d6b4c28a8e97c457dfc89625bb403bdf83c/src/main/java/htsjdk/samtools/Cigar.java#L76
-#     #sum lengths of MDN=X
-#     #reflen = np.sum(cigarlen[np.any([cigarops == 0, cigarops == 2, cigarops == 3, cigarops == 7, cigarops == 8], axis = 0)])
-#     refseq = np.array(list(ref[read.reference_name][read.reference_start : read.reference_end]), dtype = np.unicode)
+    #reference length from CIGAR: https://github.com/samtools/htsjdk/blob/942e3d6b4c28a8e97c457dfc89625bb403bdf83c/src/main/java/htsjdk/samtools/Cigar.java#L76
+    #sum lengths of MDN=X
+    #reflen = np.sum(cigarlen[np.any([cigarops == 0, cigarops == 2, cigarops == 3, cigarops == 7, cigarops == 8], axis = 0)])
+    subset_variable = ref[read.reference_name][read.reference_start : read.reference_end]
+    refseq = np.array(list(ref[read.reference_name][read.reference_start : read.reference_end]), dtype = np.unicode)
 
-#     readerrors = np.zeros(seq.shape, dtype = np.bool)
-#     readidx = 0
-#     refidx = 0
-#     for op, l in cigartuples:
-#         if op == 0 or op == 7 or op == 8:
-#             #match
-#             readerrors[readidx : readidx + l] = (refseq[refidx : refidx + l] == seq[readidx : readidx + l])
-#             readidx = readidx + l
-#             refidx = refidx + l
-#         elif op == 1:
-#             #insertion in read
-#             # we should skip indels for recording errors
-
-#         elif op == 2:
-#             #deletion in read
-#         elif op == 3:
-#             #N op (ref skip, like deletion, consumes ref not query.)
-#             #supposed to represent introns in mRNA -> genome alignment
-#         elif op == 4:
-#             #soft clip, consumes query not ref
-#         elif op == 5 or op == 6:
-#             #hard clip or pad, do nothing
-#             continue
-#         else:
-#             #unrecognized
-#             raise ValueError("Uncrecognized Cigar Operation " + str(op) + "\n")
-
+    readerrors = np.zeros(seq.shape, dtype = np.bool)
+    readidx = 0
+    refidx = 0
+    for op, l in cigartuples:
+        if op == 0 or op == 7 or op == 8:
+            #match
+            readerrors[readidx : readidx + l] = (refseq[refidx : refidx + l] == seq[readidx : readidx + l])
+            skips[readidx : readidx + l] = subset_variable[refidx : refidx + l]
+            readidx = readidx + l
+            refidx = refidx + l
+        elif op == 1:
+            #insertion in read
+            skips[readidx : readidx + l] = True
+            readidx = readidx + l
+        elif op == 2 or op == 3:
+            #deletion in read or N op
+            # N is for introns in mRNA
+            refidx = refidx + l
+        elif op == 4:
+            #soft clip, consumes query not ref
+            skips[readidx:readidx + l] = True
+            readidx = readidx + l
+        elif op == 5 or op == 6:
+            #hard clip or pad, do nothing
+            continue
+        else:
+            #unrecognized
+            raise ValueError("Uncrecognized Cigar Operation " + str(op) + " In Read\n" + str(read))
+    return readerrors, skips
 
 
 def find_variable_sites(read, ref):
@@ -154,28 +159,9 @@ def find_errors(bamfilename, fastafilename, var_pos, names, seqlen):
             continue
 
         gatkcalibratedquals[readidx,:] = np.array(read.query_qualities, dtype = np.int)
-        pos_0 = read.reference_start
-        refseq = np.array(list(ref[read.reference_name][pos_0 : read.reference_end]), dtype = np.unicode)
-        
-        #read.query_alignment_sequence excludes flanking clipped bases
-        seq = np.array(list(read.query_alignment_sequence), dtype = np.unicode)
-        #read.query_alignment_end is 1-past the non-clipped segment
-        #read.query_alignment_start is the index of the start of the non-clipped segment
-        #we will add clipped parts to skip and only consider non-clipped bases for errors
-        #however, we'll still record the GATK calibrated qualities in that array.
-
-        try:
-            assert len(seq) == len(refseq)
-        except AssertionError:
-            print('len(seq)',len(seq))
-            print('len(refseq)',len(refseq))
-            print('seq',seq)
-            print('refseq',refseq)
-            print('read\n',read)
-        erroneous[readidx,read.query_alignment_start:read.query_alignment_end] = (seq == refseq)
-        skips[readidx,read.query_alignment_start:read.query_alignment_end] = fullskips[read.reference_name][pos_0 : read.reference_end]
-        skips[readidx,:read.query_alignment_start] = True
-        skips[readidx,read.query_alignment_end:] = True
+        e, s = find_read_errors(read, ref, fullskips)
+        erroneous[readidx,:] = e
+        skips[readidx,:] = s
 
         readcounter = readcounter + 1
 
