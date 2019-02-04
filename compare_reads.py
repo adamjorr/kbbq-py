@@ -76,32 +76,47 @@ def recalibrate(lr, q):
     assert newq.shape == q.shape
     return q.copy()
 
-def find_read_errors(read, ref):
-    #TODO
-    #use the CIGAR to find errors in the read
-    # here's how gatk does it: https://github.com/broadinstitute/gatk/blob/78df6b2f6573b3cd2807a71ec8950d7dfbc9a65d/src/main/java/org/broadinstitute/hellbender/utils/recalibration/BaseRecalibrationEngine.java#L370
-    seq = np.array(list(read.query_sequence), dtype = np.unicode)
-    cigartuples = read.cigartuples #list of tuples [(operation, length)]
-    cigarops, cigarlen = zip(*cigartuples)
-    readidx = 0
-    refidx = 0
-    for op in cigarops:
-        if op == 0 or op == 7 or op == 8:
-            #match
-        elif op == 1:
-            #insertion in read
-        elif op == 2:
-            #deletion in read
-        elif op == 3:
-            #N op (ref skip, like deletion, consumes ref not query)
-        elif op == 4:
-            #soft clip, consumes query not ref
-        elif op == 5 or op == 6:
-            #hard clip or pad, do nothing
-            continue
-        else:
-            #unrecognized
-            raise ValueError("Uncrecognized Cigar Operation " + str(op) + "\n")
+# def find_read_errors(read, ref):
+#     #TODO
+#     #use the CIGAR to find errors in the read
+#     # here's how gatk does it: https://github.com/broadinstitute/gatk/blob/78df6b2f6573b3cd2807a71ec8950d7dfbc9a65d/src/main/java/org/broadinstitute/hellbender/utils/recalibration/BaseRecalibrationEngine.java#L370
+#     seq = np.array(list(read.query_sequence), dtype = np.unicode)
+#     cigartuples = read.cigartuples #list of tuples [(operation, length)]
+#     cigarops, cigarlen = zip(*cigartuples)
+#     cigarops = np.array(cigarops, dtype = np.int)
+#     cigarlen = np.array(cigarlen, dtype = np.int)
+
+#     #reference length from CIGAR: https://github.com/samtools/htsjdk/blob/942e3d6b4c28a8e97c457dfc89625bb403bdf83c/src/main/java/htsjdk/samtools/Cigar.java#L76
+#     #sum lengths of MDN=X
+#     #reflen = np.sum(cigarlen[np.any([cigarops == 0, cigarops == 2, cigarops == 3, cigarops == 7, cigarops == 8], axis = 0)])
+#     refseq = np.array(list(ref[read.reference_name][read.reference_start : read.reference_end]), dtype = np.unicode)
+
+#     readerrors = np.zeros(seq.shape, dtype = np.bool)
+#     readidx = 0
+#     refidx = 0
+#     for op, l in cigartuples:
+#         if op == 0 or op == 7 or op == 8:
+#             #match
+#             readerrors[readidx : readidx + l] = (refseq[refidx : refidx + l] == seq[readidx : readidx + l])
+#             readidx = readidx + l
+#             refidx = refidx + l
+#         elif op == 1:
+#             #insertion in read
+#             # we should skip indels for recording errors
+
+#         elif op == 2:
+#             #deletion in read
+#         elif op == 3:
+#             #N op (ref skip, like deletion, consumes ref not query.)
+#             #supposed to represent introns in mRNA -> genome alignment
+#         elif op == 4:
+#             #soft clip, consumes query not ref
+#         elif op == 5 or op == 6:
+#             #hard clip or pad, do nothing
+#             continue
+#         else:
+#             #unrecognized
+#             raise ValueError("Uncrecognized Cigar Operation " + str(op) + "\n")
 
 
 
@@ -110,6 +125,7 @@ def find_variable_sites(read, ref):
     #use CIGAR and ref-coordinate sites to find
     # which read bases are on variable sites
     # here's how gatk does it: https://github.com/broadinstitute/gatk/blob/78df6b2f6573b3cd2807a71ec8950d7dfbc9a65d/src/main/java/org/broadinstitute/hellbender/utils/recalibration/BaseRecalibrationEngine.java#L329
+    pass
 
 def find_errors(bamfilename, fastafilename, var_pos, names, seqlen):
     #this function may be better optimized that using the pileup
@@ -138,16 +154,22 @@ def find_errors(bamfilename, fastafilename, var_pos, names, seqlen):
             continue
 
         #rawquals[readidx,:] = np.array(bamread_get_fwd_oq(read), dtype = np.int)
-        gatkcalibratedquals[readidx,:] = np.array(read.get_forward_qualities(), dtype = np.int)
+        gatkcalibratedquals[readidx,:] = np.array(read.query_qualities, dtype = np.int)
         pos_0 = read.reference_start
-        refseq = np.array(list(ref[read.reference_name][pos_0 : pos_0 + seqlen]), dtype = np.unicode)
-        seq = np.array(list(read.get_forward_sequence()), dtype = np.unicode)
+        refseq = np.array(list(ref[read.reference_name][pos_0 : read.reference_end]), dtype = np.unicode)
+        seq = np.array(list(read.query_sequence), dtype = np.unicode)
         assert len(seq) == seqlen
         erroneous[readidx,:] = (seq == refseq)
-        skips[readidx,:] = fullskips[read.reference_name][pos_0 : pos_0 + seqlen]
+        skips[readidx,:] = fullskips[read.reference_name][pos_0 : read.reference_end]
 
         readcounter = readcounter + 1
         #seqs[readidx,:] = seq
+
+        if read.is_reverse:
+            gatkcalibratedquals[readidx,:] = np.flip(gatkcalibratedquals[readidx,:])
+            erroneous[readidx,:] = np.flip(erroneous[readidx,:])
+            skips[readidx,:] = np.flip(skips[readidx,:])
+
     try:
         assert readcounter == len(names)
     except AssertionError:
@@ -588,8 +610,8 @@ def main():
         print("sum(from_table.mask != gatkcalibratedquals.mask)", np.sum(from_table.mask != gatkcalibratedquals.mask))
         raise
 
-    nonsnp = (np.sum(erroneous, axis = 1) > 1) #reads with more than 1 "error" (ie an indel)
-    skips[nonsnp,:] = True
+    #nonsnp = (np.sum(erroneous, axis = 1) > 1) #reads with more than 1 "error" (ie an indel)
+    #skips[nonsnp,:] = True
 
     raw = rawquals[~skips]
     gatk = gatkcalibratedquals[~skips]
