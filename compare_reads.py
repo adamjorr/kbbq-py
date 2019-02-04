@@ -82,7 +82,7 @@ def find_read_errors(read, ref, variable):
     #we don't consider indel errors and just track them to properly navigate the reference
     # here's how gatk does it: https://github.com/broadinstitute/gatk/blob/78df6b2f6573b3cd2807a71ec8950d7dfbc9a65d/src/main/java/org/broadinstitute/hellbender/utils/recalibration/BaseRecalibrationEngine.java#L370
     seq = np.array(list(read.query_sequence), dtype = np.unicode)
-    skips = np.array(len(seq), dtype = np.bool)
+    skips = np.zeros(seq.shape, dtype = np.bool)
     cigartuples = read.cigartuples #list of tuples [(operation, length)]
     cigarops, cigarlen = zip(*cigartuples)
     cigarops = np.array(cigarops, dtype = np.int)
@@ -91,7 +91,7 @@ def find_read_errors(read, ref, variable):
     #reference length from CIGAR: https://github.com/samtools/htsjdk/blob/942e3d6b4c28a8e97c457dfc89625bb403bdf83c/src/main/java/htsjdk/samtools/Cigar.java#L76
     #sum lengths of MDN=X
     #reflen = np.sum(cigarlen[np.any([cigarops == 0, cigarops == 2, cigarops == 3, cigarops == 7, cigarops == 8], axis = 0)])
-    subset_variable = ref[read.reference_name][read.reference_start : read.reference_end]
+    subset_variable = variable[read.reference_name][read.reference_start : read.reference_end]
     refseq = np.array(list(ref[read.reference_name][read.reference_start : read.reference_end]), dtype = np.unicode)
 
     readerrors = np.zeros(seq.shape, dtype = np.bool)
@@ -114,7 +114,7 @@ def find_read_errors(read, ref, variable):
             refidx = refidx + l
         elif op == 4:
             #soft clip, consumes query not ref
-            skips[readidx:readidx + l] = True
+            skips[readidx : readidx + l] = True
             readidx = readidx + l
         elif op == 5 or op == 6:
             #hard clip or pad, do nothing
