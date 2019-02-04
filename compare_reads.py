@@ -153,17 +153,31 @@ def find_errors(bamfilename, fastafilename, var_pos, names, seqlen):
         if readidx is None:
             continue
 
-        #rawquals[readidx,:] = np.array(bamread_get_fwd_oq(read), dtype = np.int)
         gatkcalibratedquals[readidx,:] = np.array(read.query_qualities, dtype = np.int)
         pos_0 = read.reference_start
         refseq = np.array(list(ref[read.reference_name][pos_0 : read.reference_end]), dtype = np.unicode)
-        seq = np.array(list(read.query_sequence), dtype = np.unicode)
-        assert len(seq) == seqlen
-        erroneous[readidx,:] = (seq == refseq)
-        skips[readidx,:] = fullskips[read.reference_name][pos_0 : read.reference_end]
+        
+        #read.query_alignment_sequence excludes flanking clipped bases
+        seq = np.array(list(read.query_alignment_sequence), dtype = np.unicode)
+        #read.query_alignment_end is 1-past the non-clipped segment
+        #read.query_alignment_start is the index of the start of the non-clipped segment
+        #we will add clipped parts to skip and only consider non-clipped bases for errors
+        #however, we'll still record the GATK calibrated qualities in that array.
+
+        try:
+            assert len(seq) == len(refseq)
+        except AssertionError:
+            print('len(seq)',len(seq))
+            print('len(refseq)',len(refseq))
+            print('seq',seq)
+            print('refseq',refseq)
+            print('read\n',read)
+        erroneous[readidx,read.query_alignment_start:read.query_alignment_end] = (seq == refseq)
+        skips[readidx,read.query_alignment_start:read.query_alignment_end] = fullskips[read.reference_name][pos_0 : read.reference_end]
+        skips[readidx,:read.query_alignment_start] = True
+        skips[readidx,read.query_alignment_end:] = True
 
         readcounter = readcounter + 1
-        #seqs[readidx,:] = seq
 
         if read.is_reverse:
             gatkcalibratedquals[readidx,:] = np.flip(gatkcalibratedquals[readidx,:])
