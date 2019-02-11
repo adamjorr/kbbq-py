@@ -539,7 +539,7 @@ def main():
     np.seterr(all = 'raise')
     print(ek.tstamp(), "Starting . . .", file=sys.stderr)
     uncorrfile = "nospace.reads.fq"
-    corrfile = "nospace.reads.cor.fq"
+    corrfile = "nospace.lighter.fq"
     bamfilename = "only_confident.sorted.recal.bam"
     fastafilename = "../chr1.renamed.fa"
     names, rawquals, rcorrected, seqs, rgs, seqlen = find_rcorrected_sites(uncorrfile, corrfile)
@@ -609,9 +609,9 @@ def main():
     table = from_table[~skips]
     truth = erroneous[~skips]
 
-    plot_calibration([raw, gatk, dq, custom, table],
+    plot_calibration([raw, gatk, dq, custom],
         truth = truth,
-        labels = ["Uncalibrated Scores", "GATK Calibration", "KBBQ", "GATK Python Implementation", "From Table"],
+        labels = ["Uncalibrated Scores", "GATK Calibration", "KBBQ", "GATK Python Implementation"],
         plotname = 'qualscores.png',
         plottitle = "Substitution Error Calibration")
 
