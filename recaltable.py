@@ -7,7 +7,7 @@ class GATKReport:
     A base class representing a GATK Report file that contains many tables.
 
     Variables: 
-        header - a header line (such as #:GATKReport.v1.1:5)
+        header - a header line (such as ``#:GATKReport.v1.1:5``)
         tables - a list of GATKTable objects
 
     Methods:
@@ -19,8 +19,10 @@ class GATKReport:
         """Initialize by reading a file specified by filename."""
         with open(filename) as fh:
             self.header = fh.readline()
+            """A header line (such as ``#:GATKReport.v1.1:5``)"""
             table_strings = fh.read().split('\n\n')
             self.tables = [GATKTable(s) for s in table_strings if s != '']
+            """A list of GATKTable objects."""
 
     def write(self, filename):
         """Write the report to filename."""
@@ -42,13 +44,13 @@ class GATKTable:
 
     Variables:
         format - the format string representing the data in the table.
-            This is like: #:GATKTable:ncol:nrow:%f:%f:%f:;
-            It is ':' delimited and ';' terminated.
+            This is like ``#:GATKTable:ncol:nrow:%f:%f:%f:;``.
+            It is ``:`` delimited and ``;`` terminated.
         ncols - The number of columns in the table
         nrows - The number of rows in the table
         fmtstrings - A list of the format strings for each column in the table
         name - The entire line specifying the name of the table. It is
-            formatted like '#:GATKTable:title:subtitle'. subtitle can be
+            formatted like `#:GATKTable:title:subtitle``. ``subtitle`` can be
             an empty string.
         title - The title of the table
         subtitle - The subtitle of the table
@@ -64,17 +66,35 @@ class GATKTable:
         """Initialize the table from a string"""
         rows = tablestring.splitlines()
         self.format = rows[0]
+        """
+        The format string representing the data in the table.
+        This is like ``#:GATKTable:ncol:nrow:%f:%f:%f:;``
+        It is ``:`` delimited and ``;`` terminated.
+        """
         splitfmt = self.format.split(':')
         self.ncols = splitfmt[2]
+        """The number of columns in the table"""
         self.nrows = splitfmt[3]
+        """The number of rows in the table"""
         self.fmtstrings = splitfmt[4:-1]
+        """A list of the format strings for each column in the table"""
         self.name = rows[1]
+        """
+        The entire line specifying the name of the table. It is formatted like
+        ``#:GATKTable:title:subtitle``. ``subtitle`` can be an empty string.
+        """
         self.title = self.name.split(':')[2]
+        """The title of the table."""
         self.header = rows[2].split()
+        """A list containing the title of each column"""
         assert len(self.header) == len(self.fmtstrings)
         strdata = [s.split() for s in rows[3:]]
         d = dict(zip(self.header, zip(*strdata))) #dictionary {colname : coldata}
         self.data = pd.DataFrame(d)
+        """
+        A Pandas dataframe containing the table data. Accessing this
+        attribute is the primary way to interact with the data.
+        """
         typedict = {}
         for i,h in enumerate(self.header):
             f = self.fmtstrings[i]
