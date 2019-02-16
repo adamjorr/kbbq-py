@@ -1,0 +1,5 @@
+kbbq
+====
+
+.. automodule:: kbbq
+    :members:

@@ -10,7 +10,7 @@ Welcome to kbbq's documentation!
    :maxdepth: 2
    :caption: Contents:
 
-
+   modules/kbbq
 
 Indices and tables
 ==================
