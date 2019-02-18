@@ -5,9 +5,6 @@ import sklearn
 from sklearn.linear_model import LogisticRegression as LR
 from sklearn.isotonic import IsotonicRegression as IR
 import importlib.util
-spec = importlib.util.spec_from_file_location("ek", "/home/ajorr1/bin/jelly/error_kmers.py")
-ek = importlib.util.module_from_spec(spec)
-spec.loader.exec_module(ek)
 import os
 import os.path
 import sys
@@ -19,10 +16,11 @@ import seaborn as sns
 import khmer
 import pystan
 import scipy.stats
-spec = importlib.util.spec_from_file_location("recaltable", "/home/ajorr1/bin/kbbq/recaltable.py")
-recaltable = importlib.util.module_from_spec(spec)
-spec.loader.exec_module(recaltable)
+from . import recaltable
 import pandas as pd
+
+def tstamp():
+    return '[ ' + datetime.datetime.today().isoformat(' ', 'seconds') + ' ]'
 
 def load_positions(posfile):
     d = dict()
@@ -33,7 +31,7 @@ def load_positions(posfile):
     return d
 
 def find_rcorrected_sites(uncorrfile, corrfile):
-    print(ek.tstamp(), "Finding Rcorrected sites . . .", file=sys.stderr)
+    print(tstamp(), "Finding Rcorrected sites . . .", file=sys.stderr)
     uncorr_reads = list(pysam.FastxFile(uncorrfile))
     corr_reads = list(pysam.FastxFile(corrfile))
     #verify the sequences are the same and can be accessed by index
@@ -63,13 +61,13 @@ def find_rcorrected_sites(uncorrfile, corrfile):
     return names, rawquals.copy(), rcorrected.copy(), seqs.copy(), rgs.copy(), seqlen
 
 def train_regression(rawquals, rcorrected, tol = 1e-4):
-    print(ek.tstamp(), "Doing Logit Regression", file=sys.stderr)
+    print(tstamp(), "Doing Logit Regression", file=sys.stderr)
     lr = LR(tol = tol)
     lr = lr.fit(rawquals.flatten().reshape(-1,1), rcorrected.flatten())
     return lr
 
 def recalibrate(lr, q):
-    print(ek.tstamp(), "Recalibrating Quality Scores . . .", file = sys.stderr)
+    print(tstamp(), "Recalibrating Quality Scores . . .", file = sys.stderr)
     newprobs = lr.predict_proba(q.flatten().reshape(-1,1))[:,1]
     newq = p_to_q(newprobs)
     newq.reshape(q.shape)
@@ -128,7 +126,7 @@ def find_errors(bamfilename, fastafilename, var_pos, names, seqlen):
     #this function may be better optimized that using the pileup
     #since we have to jump around a lot when using the pileup method
     #need to return gatkcalibratedquals, erroneous, skips
-    print(ek.tstamp(), "Finding Errors...", file = sys.stderr)
+    print(tstamp(), "Finding Errors...", file = sys.stderr)
     #rawquals = np.zeros([len(names), seqlen], dtype = np.int)
     gatkcalibratedquals = np.zeros([len(names), seqlen], dtype = np.int)
     erroneous = np.zeros([len(names), seqlen], dtype = np.bool)
@@ -265,11 +263,11 @@ def table_recalibrate(q, tablefile, rg_order, dinuc_order, seqlen, reversecycle,
 
 
 def delta_q_recalibrate(q, rgs, dinucleotide, errors, reversecycle, minscore = 6, maxscore = 42):
-    print(ek.tstamp(), "Getting Covariate Arrays . . .", file=sys.stderr)
+    print(tstamp(), "Getting Covariate Arrays . . .", file=sys.stderr)
     meanq, global_errs, global_total, q_errs, q_total, pos_errs, pos_total, dinuc_errs, dinuc_total = get_covariate_arrays(q, rgs, dinucleotide, errors, reversecycle)
-    print(ek.tstamp(), "Finding Delta Q's . . .", file=sys.stderr)
+    print(tstamp(), "Finding Delta Q's . . .", file=sys.stderr)
     globaldeltaq, qscoredeltaq, positiondeltaq, dinucdeltaq = get_delta_qs(meanq, global_errs, global_total, q_errs, q_total, pos_errs, pos_total, dinuc_errs, dinuc_total)
-    print(ek.tstamp(), "Recalibrating . . .", file=sys.stderr)
+    print(tstamp(), "Recalibrating . . .", file=sys.stderr)
     recal_q = np.array(q, copy = True, dtype = np.int)
     
     #vectorize cycle covariates:
@@ -292,7 +290,7 @@ def get_dinucleotide(seqs, q):
     #nucleotides at the beginning of the sequence have an empty string before them
     #we should: ignore any context containing an N, ignore any context at beginning of sequence
     #we also ignore the longest string at the start and end of the sequence that have scores <=2
-    print(ek.tstamp(), "Getting dinucleotide context . . .", file=sys.stderr)
+    print(tstamp(), "Getting dinucleotide context . . .", file=sys.stderr)
     nucs = ['A','T','G','C']
     seqs = seqs.copy() #we may need to alter this
     dinucs = [i + j for i in  nucs for j in nucs]
@@ -370,7 +368,7 @@ def get_delta_qs(meanq, rg_errs, rg_total, q_errs, q_total, pos_errs, pos_total,
     return rgdeltaq.copy(), qscoredeltaq.copy(), positiondeltaq.copy(), dinucdq.copy()
 
 def plot_calibration(data, truth, labels, plotname, plottitle = None, maxscore = 42):
-    print(ek.tstamp(), "Making Quality Score Plot . . .", file = sys.stderr)
+    print(tstamp(), "Making Quality Score Plot . . .", file = sys.stderr)
     assert np.ndim(truth) == 1
     plottitle = (plottitle if plottitle is not None else plotname)
     sns.set()
@@ -387,7 +385,7 @@ def plot_calibration(data, truth, labels, plotname, plottitle = None, maxscore =
         raise
     for i in range(len(data)):
         label = labels[i]
-        print(ek.tstamp(), "Plotting %s . . ." % (label), file = sys.stderr)
+        print(tstamp(), "Plotting %s . . ." % (label), file = sys.stderr)
         assert np.ndim(data[i]) == 1
         est_p = q_to_p(data[i])
         try:
@@ -419,7 +417,7 @@ def q_to_p(q):
     return p
 
 def bam_test(bamfile, tablefile, rg_to_int, rg_order, dinuc_order, seqlen, minscore = 6, maxscore = 42):
-    print(ek.tstamp(), "Beginning BAM test . . .", file = sys.stderr)
+    print(tstamp(), "Beginning BAM test . . .", file = sys.stderr)
     meanq, global_errs, global_total, q_errs, q_total, pos_errs, pos_total, dinuc_errs, dinuc_total = table_to_vectors(tablefile, rg_order, dinuc_order, seqlen, maxscore)
     globaldeltaq, qscoredeltaq, positiondeltaq, dinucdeltaq = get_delta_qs(meanq, global_errs, global_total, q_errs, q_total, pos_errs, pos_total, dinuc_errs, dinuc_total)
     dinuc_to_int = {d : i for i,d in enumerate(dinuc_order)}
@@ -433,7 +431,7 @@ def bam_test(bamfile, tablefile, rg_to_int, rg_order, dinuc_order, seqlen, minsc
             print('GATK calibrated:', gatk_calibrated_quals)
             print('Recalibrated:', recalibrated_quals)
             raise
-    print(ek.tstamp(), "BAM test completed successfully.", file = sys.stderr)
+    print(tstamp(), "BAM test completed successfully.", file = sys.stderr)
 
 ## Generic covariate functions
 
@@ -537,7 +535,7 @@ def rcorrected_to_vectors(names, rawquals, rcorrected, seqs, rgs, seqlen):
 
 def main():
     np.seterr(all = 'raise')
-    print(ek.tstamp(), "Starting . . .", file=sys.stderr)
+    print(tstamp(), "Starting . . .", file=sys.stderr)
     uncorrfile = "nospace.reads.fq"
     corrfile = "nospace.lighter.fq"
     bamfilename = "only_confident.sorted.recal.bam"
@@ -551,7 +549,7 @@ def main():
     cachefile = 'cached_recal_errs.npz'
     tablefile = 'only_confident.sorted.recal.txt'
     if os.path.exists(cachefile):
-        print(ek.tstamp(), "Loading cached errors . . .", file=sys.stderr)
+        print(tstamp(), "Loading cached errors . . .", file=sys.stderr)
         loaded = np.load(cachefile)
         gatkcalibratedquals = loaded['gatkcalibratedquals']
         erroneous = loaded['erroneous']
@@ -601,7 +599,7 @@ def main():
     #nonsnp = (np.sum(erroneous, axis = 1) > 1) #reads with more than 1 "error" (ie an indel)
     #skips[nonsnp,:] = True
 
-    print(ek.tstamp(), "Skipping", np.sum(skips), "of", skips.size, "(", np.sum(skips)/skips.size ,"%)", "Sites . . .", file=sys.stderr)
+    print(tstamp(), "Skipping", np.sum(skips), "of", skips.size, "(", np.sum(skips)/skips.size ,"%)", "Sites . . .", file=sys.stderr)
     raw = rawquals[~skips]
     gatk = gatkcalibratedquals[~skips]
     dq = dq_calibrated[~skips]
