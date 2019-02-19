@@ -6,13 +6,14 @@ class GATKReport:
     """
     A base class representing a GATK Report file that contains many tables.
 
-    Variables: 
-        header - a header line (such as ``#:GATKReport.v1.1:5``)
-        tables - a list of GATKTable objects
+    Attributes
 
-    Methods:
-        write - write the report to a file
+        * :attr:`header` - a header line (such as ``#:GATKReport.v1.1:5``)
+        * :attr:`tables` - a list of GATKTable objects
 
+    Methods
+
+        * :meth:`write` - write the report to a file
     """
 
     def __init__(self, filename):
@@ -42,24 +43,26 @@ class GATKTable:
     The intended method of interacting with the table is using the data
     attribute, which is a standard Pandas dataframe.
 
-    Variables:
-        format - the format string representing the data in the table.
+    Attributes
+
+        * :attr:`format` - the format string representing the data in the table.
             This is like ``#:GATKTable:ncol:nrow:%f:%f:%f:;``.
             It is ``:`` delimited and ``;`` terminated.
-        ncols - The number of columns in the table
-        nrows - The number of rows in the table
-        fmtstrings - A list of the format strings for each column in the table
-        name - The entire line specifying the name of the table. It is
-            formatted like `#:GATKTable:title:subtitle``. ``subtitle`` can be
+        * :attr:`ncols` - The number of columns in the table
+        * :attr:`nrows` - The number of rows in the table
+        * :attr:`fmtstrings` - A list of the format strings for each column in the table
+        * :attr:`name` - The entire line specifying the name of the table. It is
+            formatted like ``#:GATKTable:title:subtitle``. ``subtitle`` can be
             an empty string.
-        title - The title of the table
-        subtitle - The subtitle of the table
-        header - A list containing the title of each column
-        data - A Pandas dataframe containing the table data. Accessing this
+        * :attr:`title` - The title of the table
+        * :attr:`subtitle` - The subtitle of the table
+        * :attr:`header` - A list containing the title of each column
+        * :attr:`data` - A Pandas dataframe containing the table data. Accessing this
             attribute is the primary way to interact with the data.
 
-    Methods:
-        write - Write the table to a filehandle.
+    Methods
+
+        * :meth:`write` - Write the table to a filehandle.
     """
 
     def __init__(self, tablestring):
@@ -126,6 +129,46 @@ class GATKTable:
         return self.format + self.name + repr(self.data)
 
 class RecalibrationReport(GATKReport):
+    """
+    A class representing a GATK Recalibration Report used for Base Quality 
+    Score Recalibration.
+
+    It extends the :class:`GATKReport`, so the primary
+    method of interacting with the table is the :attr:`tables` attribute.
+    The primary difference is the :func:`__init__` function will set indices
+    and data types as they should be for a recalibration report.
+
+    * Table :attr:`tables[0]` contains the arguments used to call the program
+        that generated the table.
+    * Table :attr:`tables[1]` contains the quanization map
+    * Table :attr:`tables[2]` contains read group error information.
+    * Table :attr:`tables[3]` contains error information subset by read group,
+        then reported quality score.
+    * Table :attr:`tables[4]` contains error information subset by read group,
+        then reported quality score, then covariate name and value. Both
+        Context and Cycle are valid for the covariate name.
+
+    See the table below for a schema.
+
+    =====  =================  ===========================================
+    Table  Number of Columns  Variables
+    =====  =================  ===========================================
+    0      2                  Argument, Value
+    1      3                  QualityScore, Count, QuantizedScore
+    2      6                  ReadGroup, QualityScore, EventType,
+                              EmpiricalQuality, Observations, Errors
+    3      6                  ReadGroup, QualityScore, EventType,
+                              EmpiricalQuality, Observations, Errors
+    4      8                  ReadGroup, QualityScore, CovariateValue,
+                              CovariateName, EventType, EmpiricalQuality,
+                              Observations, Errors
+    =====  =================  ===========================================
+
+    For current GATK parameters, EventType will be ``M`` for mismatch though
+    ``I`` for insertion and ``D`` for deletion are possible. Valid values for
+    CovariateName are ``Context`` and ``Cycle``.
+
+    """
     def __init__(self, filename):
         super().__init__(filename)
         #self.data[0] is argument / value

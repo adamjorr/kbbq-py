@@ -152,7 +152,7 @@ man_pages = [
 #  dir menu entry, description, category)
 texinfo_documents = [
     (master_doc, 'kbbq', u'kbbq Documentation',
-     author, 'kbbq', 'One line description of project.',
+     author, 'kbbq', 'Reference-free Base Quality Score Recalibration.',
      'Miscellaneous'),
 ]
 
@@ -176,3 +176,9 @@ epub_exclude_files = ['search.html']
 
 
 # -- Extension configuration -------------------------------------------------
+autodoc_default_options = {
+    'members' : None,
+    'undoc-members' : None,
+    'member-order' : 'bysource',
+    'special-members' : '__init__'
+    }
