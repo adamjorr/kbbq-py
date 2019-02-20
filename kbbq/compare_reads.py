@@ -277,7 +277,7 @@ def vectors_to_table(meanq, global_errs, global_total, q_errs, q_total,
     :rtype: :class:`kbbq.recaltable.RecalibrationReport`
 
     """
-
+    
 
     return table
 

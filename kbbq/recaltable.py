@@ -14,19 +14,45 @@ class GATKReport:
     Methods
 
         * :meth:`write` - write the report to a file
+        * :meth:`fromfile` - read the report from a file
     """
 
-    def __init__(self, filename):
-        """Initialize by reading a file specified by filename."""
+    def __init__(self, header, tables):
+        """
+        Initialize a GATKReport.
+
+        :param str header: The header string
+        :param list(str) tables: a list of tables.
+        :ret: a representation of a report
+        :rtype: :class:`.GATKReport`
+        """
+        self.header = header
+        """A header line (such as ``#:GATKReport.v1.1:5``)"""
+        self.tables = tables
+        """A list of :class:`.GATKTable` objects."""
+
+    @classmethod
+    def fromfile(cls, filename):
+        """
+        Initialize the GATKReport from a file.
+
+        :param str filename: The file to be read.
+        :ret: a representation of a report
+        :rtype: :class:`.GATKReport`
+        """
         with open(filename) as fh:
-            self.header = fh.readline()
-            """A header line (such as ``#:GATKReport.v1.1:5``)"""
+            header = fh.readline()
             table_strings = fh.read().split('\n\n')
-            self.tables = [GATKTable(s) for s in table_strings if s != '']
-            """A list of :obj:`GATKTable` objects."""
+            tables = [GATKTable(s) for s in table_strings if s != '']
+            return cls(header, tables)
+            
 
     def write(self, filename):
-        """Write the report to filename."""
+        """
+        Write the report to filename.
+
+        :param str filename: The file name to write.
+        """
         with open(filename, 'w') as fh:
             fh.write(self.header)
             for t in self.tables:
@@ -65,7 +91,33 @@ class GATKTable:
         * :meth:`write` - Write the table to a filehandle.
     """
 
-    def __init__(self, tablestring):
+    def __init__(self, title, description, data):
+    """
+    Initialize the table.
+
+    TODO: refactor such that the doesn't store ncols, nrows, fmtstrings
+    and uses a function that inspects the data to create the format line.
+    Do the same with title and subtitle to recreate the name line.
+    Header should be a part of data and not its own attribute.
+    These ensure the attributes are all consistent even if the underlying
+    data are manipulated by the user. (in short, move to getter functions)
+
+    :param str title:
+    :param str description:
+    :param DataFrame data:
+
+    """
+    self.title = title
+    """The title of the table."""
+    self.subtitle = subtitle
+    """A short description of the table."""
+    self.data = data
+    """
+    A Pandas dataframe containing the table data. Accessing this
+    attribute is the primary way to interact with the data.
+    """
+
+    def _old_init__(self, tablestring):
         """Initialize the table from a string"""
         rows = tablestring.splitlines()
         self.format = rows[0]
@@ -169,7 +221,27 @@ class RecalibrationReport(GATKReport):
     CovariateName are ``Context`` and ``Cycle``.
 
     """
+
+    def __init__(self):
+        """
+        __init__()
+        Initialize an empty object.
+
+        See :meth:`kbbq.recaltable.RecalibrationReport.__init__`
+
+        See :meth:`.__init__`
+        """
+        super().__init__()
+
     def __init__(self, filename):
+        """
+        __init__([filename])
+        Initialize the recalibration report from a file.
+
+        This initializes the tables with some data wrangling to set indices
+        and data types properly. If you don't want this, use a 
+        :class:`.GATKReport` instead.
+        """
         super().__init__(filename)
         #self.data[0] is argument / value
         #self.data[1] is quantization map
@@ -189,3 +261,5 @@ class RecalibrationReport(GATKReport):
         self.tables[3].data = self.tables[3].data.set_index(['ReadGroup','QualityScore'])
         self.tables[4].data = self.tables[4].data.astype(typer)
         self.tables[4].data = self.tables[4].data.set_index(['ReadGroup','QualityScore','CovariateName','CovariateValue'])
+
+
