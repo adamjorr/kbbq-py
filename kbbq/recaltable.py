@@ -23,7 +23,7 @@ class GATKReport:
             """A header line (such as ``#:GATKReport.v1.1:5``)"""
             table_strings = fh.read().split('\n\n')
             self.tables = [GATKTable(s) for s in table_strings if s != '']
-            """A list of GATKTable objects."""
+            """A list of :obj:`GATKTable` objects."""
 
     def write(self, filename):
         """Write the report to filename."""
