@@ -242,6 +242,45 @@ def table_to_vectors(tablefile, rg_order, dinuc_order, seqlen, maxscore = 42):
 
     return meanq, global_errs, global_total, q_errs, q_total, pos_errs, pos_total, dinuc_errs, dinuc_total
 
+def vectors_to_table(meanq, global_errs, global_total, q_errs, q_total,
+    pos_errs, pos_total, dinuc_errs, dinuc_total, rg_order, dinuc_order,
+    seqlen, maxscore = 42):
+    """
+    Turn the set of recalibration vectors into a
+    :class:`kbbq.recaltable.RecalibrationReport` object.
+
+    For the recalibration vectors, each dimension corresponds to a covariate.
+    The first index is always the read group, and the second (if it exists)
+    represents the raw quality score, the final index is either the cycle or
+    dinucleotide covariate.
+
+    :param np.array[\:] meanq: Mean q for each read group
+    :param np.array[\:] global_errs: Number of errors for each read group
+    :param np.array[\:] global_total: Number of observations for each read group
+    :param np.array[\:,\:] q_errs: Number of errors for each read group and q
+        score subset.
+    :param np.array[\:,\:] q_total: Number of observations for each read group
+        and q score subset.
+    :param np.array[\:,\:,\:] pos_errs: Number of errors for each read group, q,
+        and cycle subset.
+    :param np.array[\:,\:,\:] pos_total: Number of observations for each read
+        group, q, and cycle subset.
+    :param np.array[\:,\:,\:] dinuc_errs: Number of errors for each read group, q,
+        and dinucleotide subset.
+    :param np.array[\:,\:,\:] dinuc_total: Number of observations for each read
+        group, q, and dinucleotide subset.
+    :param list(str) rg_order: The order of read groups
+    :param list(str) dinuc_order: The order of dinucleotides
+    :param int seqlen: The length of the sequences
+    :param int maxscore: The maximum possible quality score
+    :return: the recalibration table
+    :rtype: :class:`kbbq.recaltable.RecalibrationReport`
+
+    """
+
+
+    return table
+
 def table_recalibrate(q, tablefile, rg_order, dinuc_order, seqlen, reversecycle, rgs, dinucleotide, minscore = 6, maxscore = 42):
     meanq, global_errs, global_total, q_errs, q_total, pos_errs, pos_total, dinuc_errs, dinuc_total = table_to_vectors(tablefile, rg_order, dinuc_order, seqlen, maxscore)
     globaldeltaq, qscoredeltaq, positiondeltaq, dinucdeltaq = get_delta_qs(meanq, global_errs, global_total, q_errs, q_total, pos_errs, pos_total, dinuc_errs, dinuc_total)
