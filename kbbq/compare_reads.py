@@ -4,7 +4,6 @@ import numpy as np
 import sklearn
 from sklearn.linear_model import LogisticRegression as LR
 from sklearn.isotonic import IsotonicRegression as IR
-import importlib.util
 import os
 import os.path
 import sys
@@ -14,7 +13,6 @@ matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 import seaborn as sns
 import khmer
-import pystan
 import scipy.stats
 from . import recaltable
 import pandas as pd
