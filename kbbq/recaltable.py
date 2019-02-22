@@ -136,7 +136,12 @@ class GATKTable:
         """
 
         rows = tablestring.splitlines()
+        title, description = rows[1].split(':')[2:4]
+
         typedict = parse_fmtstring(rows[2].split(), rows[0])
+        strdata = [s.split() for s in rows[3:]]
+        d = dict(zip(self.header, zip(*strdata))) #dictionary {colname : coldata}
+        data = pd.DataFrame(d).astype(typedict)
         return cls(title, description, data)
 
     @staticmethod
@@ -164,7 +169,13 @@ class GATKTable:
                 typedict[h] = t
         return typedict
 
-    def get_fmtstring():
+    def get_fmtstring(self):
+        pass
+
+    def get_titlestring(self):
+        pass
+
+    def get_headerstring(self):
         pass
 
     def get_nrows(self):
@@ -221,7 +232,8 @@ class GATKTable:
 
     def write(self, filehandle):
         """Write the table to a filehandle."""
-        filehandle.writelines([self.format + '\n'] + [self.name + '\n'])
+        filehandle.writelines([self.get_fmtstring() + '\n'] + [self.get_titlestring() + '\n'])
+        ##TODO
         datawidths = self.data.apply(lambda x: x.str.len().max()).get(self.header).values
         headwidths = np.array([len(s) for s in self.header])
         colwidths = np.maximum(datawidths, headwidths)
