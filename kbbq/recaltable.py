@@ -43,7 +43,7 @@ class GATKReport:
         with open(filename) as fh:
             header = fh.readline()
             table_strings = fh.read().split('\n\n')
-            tables = [GATKTable(s) for s in table_strings if s != '']
+            tables = [GATKTable.fromstring(s) for s in table_strings if s != '']
             return cls(header, tables)
             
 
@@ -109,13 +109,69 @@ class GATKTable:
     """
     self.title = title
     """The title of the table."""
-    self.subtitle = subtitle
+    self.description = description
     """A short description of the table."""
     self.data = data
     """
     A Pandas dataframe containing the table data. Accessing this
     attribute is the primary way to interact with the data.
     """
+
+    @classmethod
+    def fromstring(cls, tablestring):
+        """
+        Initialize the table from a string
+
+        The first line of the table contains the a string describing the table
+        format and is like ``#:GATKTable:ncol:nrow:%f:%f:%f:;``. It is ``:``
+        delimited and ``;`` terminated. The last format string will be empty.
+        The second line of the table specifies the name of the table. It is
+        formatted like ``#:GATKTable:title:description``. :attr:`description`
+        can be an empty string. It is ``:`` delimited. The third line contains
+        the header. The header and row data are delimited by two or more spaces.
+        The number of spaces are determined by padding each value in the row
+        such that the the character width of the column is constant and can
+        represent all the  data in the column. Strings (including column
+        headings) are left justified and numeric types are right justified.
+        """
+
+        rows = tablestring.splitlines()
+        typedict = parse_fmtstring(rows[2].split(), rows[0])
+        return cls(title, description, data)
+
+    @staticmethod
+    def parse_fmtstring(header, fmtstring):
+        """
+        Turn a fmtstring into a dictionary of {col_title : type}
+
+        :param list(str) header:
+        :param str fmtstring:
+        :return: A dictionary mapping {col_title : type}
+        :rtype: dict(str, :obj:`type`)
+        """
+        splitfmt = fmtstring.split(':')
+        fmtstrings = splitfmt[4:-1]
+        typedict = {}
+        for i,h in enumerate(header):
+            f = fmtstrings[i]
+            if f.endswith('d'):
+                t = np.int64
+            elif f.endswith('f'):
+                t = np.float64
+            else:
+                t = None
+            if t is not None:
+                typedict[h] = t
+        return typedict
+
+    def get_fmtstring():
+        pass
+
+    def get_nrows(self):
+        return self.data.shape[0]
+
+    def get_ncols(self):
+        return self.data.shape[1]
 
     def _old_init__(self, tablestring):
         """Initialize the table from a string"""
