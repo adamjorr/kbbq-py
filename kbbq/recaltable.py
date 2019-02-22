@@ -116,6 +116,7 @@ class GATKTable:
     A Pandas dataframe containing the table data. Accessing this
     attribute is the primary way to interact with the data.
     """
+    self.typemap = {np.int : '%d', np.float : '%f', str : '%s'}
 
     @classmethod
     def fromstring(cls, tablestring):
@@ -170,6 +171,10 @@ class GATKTable:
         return typedict
 
     def get_fmtstring(self):
+        #:GATKTable:ncol:nrow:%f:%f:%f:;
+        fmtlist = ['#', self.get_ncols(), self.get_nrows()]
+        types = self.data.dtypes
+        for t in types
         pass
 
     def get_titlestring(self):
