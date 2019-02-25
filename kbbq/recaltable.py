@@ -92,31 +92,38 @@ class GATKTable:
     """
 
     def __init__(self, title, description, data):
-    """
-    Initialize the table.
+        """
+        Initialize the table.
 
-    TODO: refactor such that the doesn't store ncols, nrows, fmtstrings
-    and uses a function that inspects the data to create the format line.
-    Do the same with title and subtitle to recreate the name line.
-    Header should be a part of data and not its own attribute.
-    These ensure the attributes are all consistent even if the underlying
-    data are manipulated by the user. (in short, move to getter functions)
+        TODO: refactor such that the doesn't store ncols, nrows, fmtstrings
+        and uses a function that inspects the data to create the format line.
+        Do the same with title and subtitle to recreate the name line.
+        Header should be a part of data and not its own attribute.
+        These ensure the attributes are all consistent even if the underlying
+        data are manipulated by the user. (in short, move to getter functions)
 
-    :param str title:
-    :param str description:
-    :param DataFrame data:
+        :param str title:
+        :param str description:
+        :param DataFrame data:
 
-    """
-    self.title = title
-    """The title of the table."""
-    self.description = description
-    """A short description of the table."""
-    self.data = data
-    """
-    A Pandas dataframe containing the table data. Accessing this
-    attribute is the primary way to interact with the data.
-    """
-    self.typemap = {np.int : '%d', np.float : '%f', str : '%s'}
+        """
+
+        self.title = title
+        """The title of the table."""
+        self.description = description
+        """A short description of the table."""
+        self.data = data
+        """
+        A Pandas dataframe containing the table data. Accessing this
+        attribute is the primary way to interact with the data.
+        """
+        self.typemap = {np.int : '%d', np.float : '%f', str : '%s'}
+        """
+        A dictionary of `{type : str}` to determine the string for each type.
+
+        Note that in the current implementation this only affects
+        :meth:`get_fmtstring`.
+        """
 
     @classmethod
     def fromstring(cls, tablestring):
@@ -148,12 +155,12 @@ class GATKTable:
     @staticmethod
     def parse_fmtstring(header, fmtstring):
         """
-        Turn a fmtstring into a dictionary of {col_title : type}
+        Turn a fmtstring into a dictionary of `{col_title : type}`
 
         :param list(str) header:
         :param str fmtstring:
-        :return: A dictionary mapping {col_title : type}
-        :rtype: dict(str, :obj:`type`)
+        :return: A dictionary mapping `{col_title : type}`
+        :rtype: dict(:class:`str`, :obj:`type`)
         """
         splitfmt = fmtstring.split(':')
         fmtstrings = splitfmt[4:-1]
@@ -171,17 +178,46 @@ class GATKTable:
         return typedict
 
     def get_fmtstring(self):
-        #:GATKTable:ncol:nrow:%f:%f:%f:;
-        fmtlist = ['#', self.get_ncols(), self.get_nrows()]
+        """
+        Get the format string by inspecting the data.
+
+        Uses the dtypes, number of rows, and number of columns in the data
+        frame along with :attr:`typemap` to create the format string, which is
+        formatted like ``#:GATKTable:ncol:nrow:%f:%f:%f:;``.
+
+        :return: The format string
+        :rtype: str
+
+        """
+        fmtlist = ['#', 'GATKTable', self.get_ncols(), self.get_nrows()]
         types = self.data.dtypes
-        for t in types
-        pass
+        for t in types:
+            fmtlist.append(self.typemap.get(t))
+        fmtlist.append(';')
+        return ':'.join(fmtlist)
 
     def get_titlestring(self):
-        pass
+        """
+        Get the titlestring.
 
-    def get_headerstring(self):
-        pass
+        Uses the :attr:`title` and :attr:`description` to create the title
+        line. It is formatted like ``#:GATKTable:title:subtitle.``
+        """
+        titlelist = ['#', 'GATKTable', self.title, self.description]
+        return ':'.join(titlelist)
+
+    def get_datastring(self):
+        """
+        Get the data string. Includes the header line and the data in
+        the table. 
+        """
+        datawidths = self.data.apply(lambda x: x.str.len().max()).to_numpy()
+        headwidths = np.array([len(s) for s in self.header])
+        colwidths = np.maximum(datawidths, headwidths)
+        print(*[h.ljust(colwidths[i]) for i,h in enumerate(self.header)], sep = '  ', file = filehandle)
+        for row in self.data.itertuples(index = False):
+            formatted = [getattr(row,self.header[i]).ljust(colwidths[i]) if f == '%s' else (f % float(getattr(row,self.header[i]))).rjust(colwidths[i]) for i,f in enumerate(self.fmtstrings)]
+            print(*formatted, sep = '  ', file = filehandle)
 
     def get_nrows(self):
         return self.data.shape[0]
