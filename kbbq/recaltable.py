@@ -117,7 +117,7 @@ class GATKTable:
         A Pandas dataframe containing the table data. Accessing this
         attribute is the primary way to interact with the data.
         """
-        self.typemap = {np.int : '%d', np.float : '%f', str : '%s'}
+        self.typemap = {np.dtype(np.int) : '%d', np.dtype(np.float) : '%f', str : '%s', np.dtype(np.object) : '%s'}
         """
         A dictionary of `{type : str}` to determine the string for each type.
 
@@ -145,10 +145,10 @@ class GATKTable:
 
         rows = tablestring.splitlines()
         title, description = rows[1].split(':')[2:4]
-
-        typedict = parse_fmtstring(rows[2].split(), rows[0])
+        header = rows[2].split()
+        typedict = cls.parse_fmtstring(header, rows[0])
         strdata = [s.split() for s in rows[3:]]
-        d = dict(zip(self.header, zip(*strdata))) #dictionary {colname : coldata}
+        d = dict(zip(header, zip(*strdata))) #dictionary {colname : coldata}
         data = pd.DataFrame(d).astype(typedict)
         return cls(title, description, data)
 
@@ -171,6 +171,8 @@ class GATKTable:
                 t = np.int64
             elif f.endswith('f'):
                 t = np.float64
+            elif f.endswith('s'):
+                t = str #pandas will convert this to 'object'
             else:
                 t = None
             if t is not None:
@@ -189,10 +191,10 @@ class GATKTable:
         :rtype: str
 
         """
-        fmtlist = ['#', 'GATKTable', self.get_ncols(), self.get_nrows()]
+        fmtlist = ['#', 'GATKTable', str(self.get_ncols()), str(self.get_nrows())]
         types = self.data.dtypes
         for t in types:
-            fmtlist.append(self.typemap.get(t))
+            fmtlist.append(self.typemap[t])
         fmtlist.append(';')
         return ':'.join(fmtlist)
 
@@ -212,11 +214,15 @@ class GATKTable:
         the table. 
         """
         datawidths = self.data.apply(lambda x: x.str.len().max()).to_numpy()
-        headwidths = np.array([len(s) for s in self.header])
+        headwidths = self.data.columns.str.len().to_numpy()
+        header = self.data.columns.to_list()
         colwidths = np.maximum(datawidths, headwidths)
-        print(*[h.ljust(colwidths[i]) for i,h in enumerate(self.header)], sep = '  ', file = filehandle)
+        fmstrings = [self.typemap.get(t) for t in self.data.dtypes]
+        datastr = '  '.join([h.ljust(colwidths[i]) for i,h in enumerate(header)] + '\n'
         for row in self.data.itertuples(index = False):
-            formatted = [getattr(row,self.header[i]).ljust(colwidths[i]) if f == '%s' else (f % float(getattr(row,self.header[i]))).rjust(colwidths[i]) for i,f in enumerate(self.fmtstrings)]
+            formatted = [getattr(row,header[i]).ljust(colwidths[i]) if f == '%s' \
+                else (f % float(getattr(row,header[i]))).rjust(colwidths[i]) \
+                for i,f in enumerate(fmtstrings)]
             print(*formatted, sep = '  ', file = filehandle)
 
     def get_nrows(self):
@@ -287,7 +293,7 @@ class GATKTable:
         return str(self.data)
 
     def __repr__(self):
-        return self.format + self.name + repr(self.data)
+        return self.get_fmtstring() + '\n' + self.get_titlestring() + '\n' + repr(self.data)
 
 class RecalibrationReport(GATKReport):
     """
