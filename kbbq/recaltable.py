@@ -54,13 +54,16 @@ class GATKReport:
         :param str filename: The file name to write.
         """
         with open(filename, 'w') as fh:
-            fh.write(self.header)
-            for t in self.tables:
-                t.write(fh)
-                fh.write('\n')
+            fh.write(str(self))
 
     def __str__():
-        pass #TODO
+        """
+        A string containing the report.
+
+        Each table is separated by two newlines.
+        """
+        return str(self.header) + '\n' +
+            '\n\n'.join([str(t) for t in self.tables] + [''])
 
 class GATKTable:
     """
@@ -81,13 +84,19 @@ class GATKTable:
             formatted like ``#:GATKTable:title:subtitle``. ``subtitle`` can be
             an empty string.
         * :attr:`title` - The title of the table
-        * :attr:`subtitle` - The subtitle of the table
-        * :attr:`header` - A list containing the title of each column
+        * :attr:`description` - The a description of the table. May be ``''``.
         * :attr:`data` - A Pandas dataframe containing the table data. Accessing this
             attribute is the primary way to interact with the data.
 
     Methods
 
+        * :meth:`fromstring` - Initialize a :class:`GATKTable` from a string.
+        * :meth:`parse_fmtstring` - Parse a fmtstring into a dictionary of types
+        * :meth:`get_fmtstring` - Get a formatstring by inspecting the dataframe.
+        * :meth:`get_titlestring` - Get the title string
+        * :meth:`get_datastring` - Format the dataframe into a string
+        * :meth:`get_nrows` - Get the number of rows in the dataframe.
+        * :meth:`get_ncols` - Get the number of columns in the dataframe.
         * :meth:`write` - Write the table to a filehandle.
     """
 
@@ -104,7 +113,7 @@ class GATKTable:
 
         :param str title:
         :param str description:
-        :param DataFrame data:
+        :param pandas.DataFrame data:
 
         """
 
@@ -181,7 +190,7 @@ class GATKTable:
 
     def get_fmtstring(self):
         """
-        Get the format string by inspecting the data.
+        Get the format string by inspecting the dataframe.
 
         Uses the dtypes, number of rows, and number of columns in the data
         frame along with :attr:`typemap` to create the format string, which is
@@ -204,6 +213,9 @@ class GATKTable:
 
         Uses the :attr:`title` and :attr:`description` to create the title
         line. It is formatted like ``#:GATKTable:title:subtitle.``
+
+        :return: the title string
+        :rtype: str
         """
         titlelist = ['#', 'GATKTable', self.title, self.description]
         return ':'.join(titlelist)
@@ -211,86 +223,58 @@ class GATKTable:
     def get_datastring(self):
         """
         Get the data string. Includes the header line and the data in
-        the table. 
+        the table.
+
+        :return: the data table as a formatted string
+        :rtype: str
         """
         datawidths = self.data.apply(lambda x: x.str.len().max()).to_numpy()
         headwidths = self.data.columns.str.len().to_numpy()
         header = self.data.columns.to_list()
         colwidths = np.maximum(datawidths, headwidths)
         fmstrings = [self.typemap.get(t) for t in self.data.dtypes]
-        datastr = '  '.join([h.ljust(colwidths[i]) for i,h in enumerate(header)] + '\n'
+        datastr = '  '.join([h.ljust(colwidths[i]) for i,h in enumerate(header)])
         for row in self.data.itertuples(index = False):
-            formatted = [getattr(row,header[i]).ljust(colwidths[i]) if f == '%s' \
-                else (f % float(getattr(row,header[i]))).rjust(colwidths[i]) \
+            formatted = [getattr(row,header[i]).ljust(colwidths[i]) if \
+                f == '%s' else \
+                (f % float(getattr(row,header[i]))).rjust(colwidths[i]) \
                 for i,f in enumerate(fmtstrings)]
-            print(*formatted, sep = '  ', file = filehandle)
+            datastr = datastr + '\n' + '  '.join(formatted)
+        return datastr
 
     def get_nrows(self):
+        """
+        Get the number of rows in the dataframe.
+
+        :return: The number of rows in the dataframe.
+        :rtype: int
+        """
         return self.data.shape[0]
 
     def get_ncols(self):
+        """
+        Get the number of columns in the dataframe.
+
+        :return: The number of columns in the dataframe.
+        :rtype: int
+        """
         return self.data.shape[1]
 
-    def _old_init__(self, tablestring):
-        """Initialize the table from a string"""
-        rows = tablestring.splitlines()
-        self.format = rows[0]
-        """
-        The format string representing the data in the table.
-        This is like ``#:GATKTable:ncol:nrow:%f:%f:%f:;``
-        It is ``:`` delimited and ``;`` terminated.
-        """
-        splitfmt = self.format.split(':')
-        self.ncols = splitfmt[2]
-        """The number of columns in the table"""
-        self.nrows = splitfmt[3]
-        """The number of rows in the table"""
-        self.fmtstrings = splitfmt[4:-1]
-        """A list of the format strings for each column in the table"""
-        self.name = rows[1]
-        """
-        The entire line specifying the name of the table. It is formatted like
-        ``#:GATKTable:title:subtitle``. ``subtitle`` can be an empty string.
-        """
-        self.title = self.name.split(':')[2]
-        """The title of the table."""
-        self.header = rows[2].split()
-        """A list containing the title of each column"""
-        assert len(self.header) == len(self.fmtstrings)
-        strdata = [s.split() for s in rows[3:]]
-        d = dict(zip(self.header, zip(*strdata))) #dictionary {colname : coldata}
-        self.data = pd.DataFrame(d)
-        """
-        A Pandas dataframe containing the table data. Accessing this
-        attribute is the primary way to interact with the data.
-        """
-        typedict = {}
-        for i,h in enumerate(self.header):
-            f = self.fmtstrings[i]
-            if f.endswith('d'):
-                type = np.int64
-            elif f.endswith('f'):
-                type = np.float64
-            else:
-                type = None
-            if type is not None:
-                typedict[h] = type
-        self.data = self.data.astype(typedict)
-
     def write(self, filehandle):
-        """Write the table to a filehandle."""
-        filehandle.writelines([self.get_fmtstring() + '\n'] + [self.get_titlestring() + '\n'])
-        ##TODO
-        datawidths = self.data.apply(lambda x: x.str.len().max()).get(self.header).values
-        headwidths = np.array([len(s) for s in self.header])
-        colwidths = np.maximum(datawidths, headwidths)
-        print(*[h.ljust(colwidths[i]) for i,h in enumerate(self.header)], sep = '  ', file = filehandle)
-        for row in self.data.itertuples(index = False):
-            formatted = [getattr(row,self.header[i]).ljust(colwidths[i]) if f == '%s' else (f % float(getattr(row,self.header[i]))).rjust(colwidths[i]) for i,f in enumerate(self.fmtstrings)]
-            print(*formatted, sep = '  ', file = filehandle)
+        """
+        Write the table to a filehandle.
+
+        Adds a newline to the end that isn't present in :meth:`__str__`
+        :param filehandle: The file object to write the table to.
+        :type filehandle: File Object
+        :return: The file object's return (usually the number of characters written)
+        :rtype: Usually int
+
+        """
+        return filehandle.write(str(self) + '\n')
 
     def __str__(self):
-        return str(self.data)
+        return self.get_fmtstring() + '\n' + self.get_titlestring() + '\n' + get_datastring()
 
     def __repr__(self):
         return self.get_fmtstring() + '\n' + self.get_titlestring() + '\n' + repr(self.data)
@@ -337,20 +321,8 @@ class RecalibrationReport(GATKReport):
 
     """
 
-    def __init__(self):
-        """
-        __init__()
-        Initialize an empty object.
-
-        See :meth:`kbbq.recaltable.RecalibrationReport.__init__`
-
-        See :meth:`.__init__`
-        """
-        super().__init__()
-
     def __init__(self, filename):
         """
-        __init__([filename])
         Initialize the recalibration report from a file.
 
         This initializes the tables with some data wrangling to set indices
