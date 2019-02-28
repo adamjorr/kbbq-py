@@ -8,28 +8,35 @@ class GATKReport:
 
     Attributes
 
-        * :attr:`header` - a header line (such as ``#:GATKReport.v1.1:5``)
         * :attr:`tables` - a list of GATKTable objects
+        * :attr:`version` - the GATKReport format version. The default is
+            ``'1.1'``.
 
     Methods
 
         * :meth:`write` - write the report to a file
         * :meth:`fromfile` - read the report from a file
+        * :meth:`get_headerstring` - get the header line.
+            Does not include a newline.
     """
 
-    def __init__(self, header, tables):
+    def __init__(self, tables, version = '1.1'):
         """
         Initialize a GATKReport.
 
-        :param str header: The header string
-        :param list(str) tables: a list of tables.
+        This module was written by reverse engineering a version 1.1 report.
+        If you have a table with a newer version, please file a bug report,
+        especially if this module fails to parse it.
+
+        :param list(:class:`GATKTable`) tables: a list of tables.
+        :param str version: The report version as a string.
         :ret: a representation of a report
         :rtype: :class:`.GATKReport`
         """
-        self.header = header
-        """A header line (such as ``#:GATKReport.v1.1:5``)"""
         self.tables = tables
         """A list of :class:`.GATKTable` objects."""
+        self.version = version
+        """The report version identifier (such as ``'1.1'``)"""
 
     @classmethod
     def fromfile(cls, filename):
@@ -41,11 +48,33 @@ class GATKReport:
         :rtype: :class:`.GATKReport`
         """
         with open(filename) as fh:
-            header = fh.readline()
+            fullheader = fh.readline()
+            _, version, ntables = fullheader.strip().split(':')
+            version = version.split(sep = 'v', maxsplit = 1)[-1]
             table_strings = fh.read().split('\n\n')
             tables = [GATKTable.fromstring(s) for s in table_strings if s != '']
-            return cls(header, tables)
+            if (len(tables) != ntables):
+                raise ValueError(f"""Malformed or truncated file {filename}.
+                    The header ({fullheader}) implies there should be
+                    {ntables} tables in this report, but we only found
+                    {len(tables)}. If you are sure the file is intact,
+                    modify the header line and try again.""")
+            return cls(tables, version)
             
+
+    def get_headerstring(self):
+        """
+        Get the header line.
+
+        The header line identifies the file as a report, shows the version,
+        and shows the number of tables that should be present
+        (such as ``#:GATKReport.v1.1:5``). This method returns a string
+        that does not include a trailing newline.
+
+        :ret: the header line without a newline.
+        :rtype: str
+        """
+        return '#:GATKReport.v' + self.version + ':' + str(len(self.tables))
 
     def write(self, filename):
         """
@@ -56,13 +85,13 @@ class GATKReport:
         with open(filename, 'w') as fh:
             fh.write(str(self))
 
-    def __str__():
+    def __str__(self):
         """
         A string containing the report.
 
         Each table is separated by two newlines.
         """
-        return str(self.header) + '\n' +
+        return self.get_headerstring() + '\n' + \
             '\n\n'.join([str(t) for t in self.tables] + [''])
 
 class GATKTable:
@@ -84,7 +113,7 @@ class GATKTable:
             formatted like ``#:GATKTable:title:subtitle``. ``subtitle`` can be
             an empty string.
         * :attr:`title` - The title of the table
-        * :attr:`description` - The a description of the table. May be ``''``.
+        * :attr:`description` - A description of the table. May be ``''``.
         * :attr:`data` - A Pandas dataframe containing the table data. Accessing this
             attribute is the primary way to interact with the data.
 
@@ -104,16 +133,9 @@ class GATKTable:
         """
         Initialize the table.
 
-        TODO: refactor such that the doesn't store ncols, nrows, fmtstrings
-        and uses a function that inspects the data to create the format line.
-        Do the same with title and subtitle to recreate the name line.
-        Header should be a part of data and not its own attribute.
-        These ensure the attributes are all consistent even if the underlying
-        data are manipulated by the user. (in short, move to getter functions)
-
-        :param str title:
-        :param str description:
-        :param pandas.DataFrame data:
+        :param str title: the table title
+        :param str description: a short description of the table. May be ``''``
+        :param pandas.DataFrame data: the data contained by the table
 
         """
 
@@ -166,8 +188,8 @@ class GATKTable:
         """
         Turn a fmtstring into a dictionary of `{col_title : type}`
 
-        :param list(str) header:
-        :param str fmtstring:
+        :param list(str) header: The column titles as a list
+        :param str fmtstring: The format string to parse
         :return: A dictionary mapping `{col_title : type}`
         :rtype: dict(:class:`str`, :obj:`type`)
         """
@@ -321,20 +343,30 @@ class RecalibrationReport(GATKReport):
 
     """
 
-    def __init__(self, filename):
+    def __init__(self, tables, version = '1.1'):
         """
-        Initialize the recalibration report from a file.
+        Initialize the recalibration report from a list of :class:`GATKTable` s.
 
         This initializes the tables with some data wrangling to set indices
         and data types properly. If you don't want this, use a 
         :class:`.GATKReport` instead.
         """
-        super().__init__(filename)
+        super().__init__(tables, version)
+
+        if len(self.tables) != 5:
+            raise ValueError(f"""A RecalibrationReport should have 5 tables.
+                This report contains {len(self.tables)}.""")
+
         #self.data[0] is argument / value
+        assert self.tables[0].title == 'Arguments'
         #self.data[1] is quantization map
+        assert self.tables[1].title == 'Quantized'
         #self.data[2] is RG
+        assert self.tables[2].title == 'RecalTable0'
         #self.data[3] is RG / reportedqual
+        assert self.tables[3].title == 'RecalTable1'
         #self.data[4] is RG / reportedqual / covariate (Cycle OR Context)
+        assert self.tables[4].title == 'RecalTable2'
         self.tables[0].data = self.tables[0].data.set_index('Argument')
         self.tables[1].data = self.tables[1].data.astype({'QualityScore' : np.int, 'Count' : np.longlong, 'QuantizedScore' : np.int })
         self.tables[1].data = self.tables[1].data.set_index('QualityScore')
