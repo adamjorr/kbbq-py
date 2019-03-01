@@ -214,7 +214,7 @@ def gatk_delta_q(prior_q, numerrs, numtotal, maxscore = 42):
 #this passes bam test
 def table_to_vectors(tablefile, rg_order, dinuc_order, seqlen, maxscore = 42):
     #the recal table uses the PU of the read group as the read group entry in the table
-    table = recaltable.RecalibrationReport(tablefile)
+    table = recaltable.RecalibrationReport.from_file(tablefile)
     rgtable = table.tables[2].data.reindex(rg_order)
     meanq = rgtable['EstimatedQReported'].values.astype(np.float64)
     global_errs = rgtable['Errors'].values.astype(np.int64)
@@ -277,9 +277,16 @@ def vectors_to_table(meanq, global_errs, global_total, q_errs, q_total,
     :rtype: :class:`kbbq.recaltable.RecalibrationReport`
 
     """
-    
+    rgdata = {'ReadGroup' : rg_order,
+        'EventType' : 'M',
+        'EmpiricalQuality' : gatk_delta_q(meanq, global_errs, global_total) + meanq,
+        'EstimatedQReported' : meanq,
+        'Observations' : global_total,
+        'Errors' : global_errs
+        }
+    rgtable = pd.DataFrame(data = rgdata, index = 'ReadGroup')
 
-    return table
+    pass
 
 def table_recalibrate(q, tablefile, rg_order, dinuc_order, seqlen, reversecycle, rgs, dinucleotide, minscore = 6, maxscore = 42):
     meanq, global_errs, global_total, q_errs, q_total, pos_errs, pos_total, dinuc_errs, dinuc_total = table_to_vectors(tablefile, rg_order, dinuc_order, seqlen, maxscore)

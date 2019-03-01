@@ -28,10 +28,11 @@ class GATKReport:
         If you have a table with a newer version, please file a bug report,
         especially if this module fails to parse it.
 
-        :param list(:class:`GATKTable`) tables: a list of tables.
+        :param list(GATKTable) tables: a list of tables.
         :param str version: The report version as a string.
-        :ret: a representation of a report
+        :returns: a representation of a report
         :rtype: :class:`.GATKReport`
+
         """
         self.tables = tables
         """A list of :class:`.GATKTable` objects."""
@@ -44,7 +45,7 @@ class GATKReport:
         Initialize the GATKReport from a file.
 
         :param str filename: The file to be read.
-        :ret: a representation of a report
+        :returns: a representation of a report
         :rtype: :class:`.GATKReport`
         """
         with open(filename) as fh:
@@ -71,7 +72,7 @@ class GATKReport:
         (such as ``#:GATKReport.v1.1:5``). This method returns a string
         that does not include a trailing newline.
 
-        :ret: the header line without a newline.
+        :returns: the header line without a newline.
         :rtype: str
         """
         return '#:GATKReport.v' + self.version + ':' + str(len(self.tables))
@@ -287,9 +288,11 @@ class GATKTable:
         Write the table to a filehandle.
 
         Adds a newline to the end that isn't present in :meth:`__str__`
+
         :param filehandle: The file object to write the table to.
         :type filehandle: File Object
-        :return: The file object's return (usually the number of characters written)
+        :return: Whatever the file object's write method returns.
+            Usually the number of characters written.
         :rtype: Usually int
 
         """
@@ -328,8 +331,8 @@ class RecalibrationReport(GATKReport):
     =====  =================  ===========================================
     0      2                  Argument, Value
     1      3                  QualityScore, Count, QuantizedScore
-    2      6                  ReadGroup, QualityScore, EventType,
-                              EmpiricalQuality, Observations, Errors
+    2      6                  ReadGroup, EventType, EmpiricalQuality,
+                              EstimatedQReported, Observations, Errors
     3      6                  ReadGroup, QualityScore, EventType,
                               EmpiricalQuality, Observations, Errors
     4      8                  ReadGroup, QualityScore, CovariateValue,
