@@ -280,53 +280,33 @@ def vectors_to_table(meanq, global_errs, global_total, q_errs, q_total,
     :rtype: :class:`kbbq.recaltable.RecalibrationReport`
 
     """
-    #TODO: args table
     #these will be mostly default values, except quantization
     #which I don't attempt to implement.
     #I'm afraid bad things will happen if I don't include at least null values
     #for all the args so I'll just include them all.
     #This may need to be cleaned up later.
 
-    args = [
-        'binary_tag_name',
-        'covariate',
-        'default_platform',
-        'deletions_default_quality',
-        'force_platform',
-        'indels_context_size',
-        'insertions_default_quality',
-        'low_quality_tail',
-        'maximum_cycle_value',
-        'mismatches_context_size',
-        'mismatches_default_quality',
-        'no_standard_covs',
-        'quantizing_levels',
-        'recalibration_report',
-        'run_without_dbsnp',
-        'solid_nocall_strategy',
-        'solid_recal_mode'
-        ]
-    vals = [
-        'null',
-        'ReadGroupCovariate,QualityScoreCovariate,ContextCovariate,CycleCovariate',
-        'null',
-        '45',
-        'null',
-        '3',
-        '45',
-        '2',
-        '500',
-        '2',
-        '-1',
-        'false',
-        str(q_total.shape[1]),
-        'null',
-        'false',
-        'THROW_EXCEPTION',
-        'SET_Q_ZERO'
-    ]
-    argdata = {'Argument' : args,
-    'Value' : vals,
+    args = {
+        'binary_tag_name' : 'null',
+        'covariate' : 'ReadGroupCovariate,QualityScoreCovariate,ContextCovariate,CycleCovariate',
+        'default_platform' : 'null',
+        'deletions_default_quality' : '45',
+        'force_platform' : 'null',
+        'indels_context_size' : '3',
+        'insertions_default_quality' : '45',
+        'low_quality_tail' : '2',
+        'maximum_cycle_value' : '500',
+        'mismatches_context_size' : '2',
+        'mismatches_default_quality' : '-1',
+        'no_standard_covs' : 'false',
+        'quantizing_levels' : str(q_total.shape[1]),
+        'recalibration_report' : 'null',
+        'run_without_dbsnp' : 'false',
+        'solid_nocall_strategy' : 'THROW_EXCEPTION',
+        'solid_recal_mode' : 'SET_Q_ZERO'
+        }
+    argdata = {'Argument' : list(args.keys()),
+    'Value' : list(args.values()),
     }
     argtable = pd.DataFrame(data = argdata, index = 'Argument')
 
