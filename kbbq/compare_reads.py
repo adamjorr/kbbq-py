@@ -212,8 +212,11 @@ def gatk_delta_q(prior_q, numerrs, numtotal, maxscore = 42):
     return posterior_q - prior_q
 
 #this passes bam test
-def table_to_vectors(tablefile, rg_order, dinuc_order, seqlen, maxscore = 42):
+def table_to_vectors(tablefile, rg_order, dinuc_order, seqlen,maxscore = 42):
     #the recal table uses the PU of the read group as the read group entry in the table
+    #TODO: inspect the index to find seqlen instead of relying on input
+    #TODO: for maxscore also.
+    #see vectors_to_table for more info
     table = recaltable.RecalibrationReport.from_file(tablefile)
     rgtable = table.tables[2].data.reindex(rg_order)
     meanq = rgtable['EstimatedQReported'].values.astype(np.float64)
@@ -277,6 +280,56 @@ def vectors_to_table(meanq, global_errs, global_total, q_errs, q_total,
     :rtype: :class:`kbbq.recaltable.RecalibrationReport`
 
     """
+    #TODO: args table
+    #these will be mostly default values, except quantization
+    #which I don't attempt to implement.
+    #I'm afraid bad things will happen if I don't include at least null values
+    #for all the args so I'll just include them all.
+    #This may need to be cleaned up later.
+
+    args = [
+        'binary_tag_name',
+        'covariate',
+        'default_platform',
+        'deletions_default_quality',
+        'force_platform',
+        'indels_context_size',
+        'insertions_default_quality',
+        'low_quality_tail',
+        'maximum_cycle_value',
+        'mismatches_context_size',
+        'mismatches_default_quality',
+        'no_standard_covs',
+        'quantizing_levels',
+        'recalibration_report',
+        'run_without_dbsnp',
+        'solid_nocall_strategy',
+        'solid_recal_mode'
+        ]
+    vals = [
+        'null',
+        'ReadGroupCovariate,QualityScoreCovariate,ContextCovariate,CycleCovariate',
+        'null',
+        '45',
+        'null',
+        '3',
+        '45',
+        '2',
+        '500',
+        '2',
+        '-1',
+        'false',
+        str(q_total.shape[1]),
+        'null',
+        'false',
+        'THROW_EXCEPTION',
+        'SET_Q_ZERO'
+    ]
+    argdata = {'Argument' : args,
+    'Value' : vals,
+    }
+    argtable = pd.DataFrame(data = argdata, index = 'Argument')
+
     rgdata = {'ReadGroup' : rg_order,
         'EventType' : 'M',
         'EmpiricalQuality' : gatk_delta_q(meanq, global_errs, global_total) + meanq,
@@ -296,7 +349,40 @@ def vectors_to_table(meanq, global_errs, global_total, q_errs, q_total,
         }
     qualtable = pd.DataFrame(data = qualdata, index = ['ReadGroup','QualityScore'])
 
-    pass
+    #no quantization, but still have to make the quantization table
+    quantdata = {'QualityScore' : qualscore,
+        'Count' : np.sum(q_total, axis = 0),
+        'QuantizedScore' : qualscore
+        }
+    quanttable = pd.DataFrame(data = quantdata, index = 'QualityScore')
+
+    dinuc_q = np.repeat(np.broadcast_to(np.arange(dinuc_total.shape[1]), (dinuc_total.shape[0:2])), dinuc_total.shape[2])
+    dinucdata = {'ReadGroup' : np.repeat(rg_order, np.prod(dinuc_total.shape[1:])),
+        'QualityScore' : dinuc_q,
+        'CovariateValue' : np.broadcast_to(np.arange(dinuc_total.shape[2]), dinuc_total.shape),
+        'CovariateName' : 'Context',
+        'EventType' : 'M',
+        'EmpiricalQuality' : gatk_delta_q(dinuc_q.flatten(), dinuc_errs.flatten(), dinuc_total.flatten()) + dinuc_q.flatten(),
+        'Observations' : dinuc_total,
+        'Errors' : dinuc_errs
+        }
+    dinuctable = pd.DataFrame(data = dinucdata, index = ['ReadGroup', 'QualityScore','CovariateName','CovariateValue'])
+    cycle_q = np.repeat(np.broadcast_to(np.arange(pos_total.shape[1]), (pos_total.shape[0:2])), pos_total.shape[2])
+    ncycles = pos_total.shape[2] / 2
+    cycle_values = np.concatenate([np.arange(ncycles) + 1, np.flip(-(np.arange(ncycles)+1),axis=0)])
+    cycledata = {'ReadGroup' : np.repeat(rg_order, np.prod(pos_total.shape[1:])),
+        'QualityScore' : cycle_q,
+        'CovariateValue' : np.broadcast_to(cycle_values, pos_total.shape),
+        'CovariateName' : 'Cycle',
+        'EventType' : 'M',
+        'EmpiricalQuality' : gatk_delta_q(cycle_q.flatten(), pos_errs.flatten(), pos_total.flatten()) + pos_q.flatten(),
+        'Observations' : pos_total,
+        'Errors' : pos_errs
+        }
+    cycletable = pd.DataFrame(data = cycledata, index = ['ReadGroup', 'QualityScore','CovariateName','CovariateValue'])
+    covariatetable = dinuctable.append(cycletable)
+
+    return recaltable.RecalibrationReport([argtable, quanttable, rgtable, dinuctable, covariatetable])
 
 def table_recalibrate(q, tablefile, rg_order, dinuc_order, seqlen, reversecycle, rgs, dinucleotide, minscore = 6, maxscore = 42):
     meanq, global_errs, global_total, q_errs, q_total, pos_errs, pos_total, dinuc_errs, dinuc_total = table_to_vectors(tablefile, rg_order, dinuc_order, seqlen, maxscore)
