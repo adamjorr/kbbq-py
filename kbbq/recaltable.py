@@ -60,7 +60,7 @@ class GATKReport:
                     {ntables} tables in this report, but we only found
                     {len(tables)}. If you are sure the file is intact,
                     modify the header line and try again.""")
-            return cls(tables, version)
+        return cls(tables, version)
             
 
     def get_headerstring(self):
