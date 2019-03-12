@@ -700,8 +700,8 @@ def main():
     reversecycle[np.array(list(names.values()), dtype = np.int)] = np.char.endswith(np.array(list(names.keys()), dtype = np.unicode),'/2')
 
     dq_calibrated = delta_q_recalibrate(rawquals, rgs, dinucleotide, np.logical_not(rcorrected), reversecycle)
-    custom_gatk_calibrated = delta_q_recalibrate(rawquals, rgs, dinucleotide, erroneous, reversecycle)
-    from_table = table_recalibrate(rawquals, tablefile, unique_pus, dinuc_order, seqlen, reversecycle, rgs, dinucleotide)
+    #custom_gatk_calibrated = delta_q_recalibrate(rawquals, rgs, dinucleotide, erroneous, reversecycle)
+    #from_table = table_recalibrate(rawquals, tablefile, unique_pus, dinuc_order, seqlen, reversecycle, rgs, dinucleotide)
     try:
         assert np.array_equal(from_table, gatkcalibratedquals)
     except AssertionError:
@@ -724,14 +724,14 @@ def main():
     raw = rawquals[~skips]
     gatk = gatkcalibratedquals[~skips]
     dq = dq_calibrated[~skips]
-    custom = custom_gatk_calibrated[~skips]
-    table = from_table[~skips]
+    #custom = custom_gatk_calibrated[~skips]
+    #table = from_table[~skips]
     truth = erroneous[~skips]
 
-    plot_calibration([raw, gatk, dq, custom],
+    plot_calibration([raw, gatk, dq],
         truth = truth,
-        labels = ["Uncalibrated Scores", "GATK Calibration", "KBBQ", "GATK Python Implementation"],
-        plotname = 'qualscores.png',
+        labels = ["Uncalibrated Scores", "GATK BQSR", "Reference-Free BQSR"],
+        plotname = 'qualscores.pdf',
         plottitle = "Substitution Error Calibration")
 
 
