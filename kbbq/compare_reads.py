@@ -492,38 +492,39 @@ def plot_calibration(data, truth, labels, plotname, plottitle = None, maxscore =
     assert np.ndim(truth) == 1
     plottitle = (plottitle if plottitle is not None else plotname)
     sns.set()
-    qualplot, (ax1, ax2) = plt.subplots(2, sharex = True, gridspec_kw = { 'height_ratios' : [2, 1] }, figsize = (7,9))
-    #ax1.set_aspect('equal')
-    # ax2.set_ylim(top = 3e7)
+    qualplot, ax = plt.subplots(figsize = (9,9))
     qualplot.suptitle(plottitle)
-    ax1.plot(np.arange(maxscore + 1), 'k:', label = "Perfect")
-    try:
-        assert np.all([np.array_equal(data[0].shape, data[i].shape) for i in range(len(data))])
-    except AssertionError:
-        for i in range(len(data)):
-            print(labels[i], 'Shape:', data[i].shape)
-        raise
+    ax.plot(np.arange(maxscore + 1), 'k:', label = "Perfect")
+    assert np.all([np.array_equal(data[0].shape, data[i].shape) for i in range(len(data))])
     for i in range(len(data)):
         label = labels[i]
         print(tstamp(), "Plotting %s . . ." % (label), file = sys.stderr)
         assert np.ndim(data[i]) == 1
         est_p = q_to_p(data[i])
-        try:
-            bscore = sklearn.metrics.brier_score_loss(truth.reshape(-1), est_p.reshape(-1))
-        except ValueError:
-            print(est_p)
-            raise
+        bscore = sklearn.metrics.brier_score_loss(truth.reshape(-1), est_p.reshape(-1))
         numtotal = np.bincount(data[i].reshape(-1), minlength = (maxscore+1))
-        numerrs = np.bincount(data[i][truth].reshape(-1), minlength = len(numtotal)) #not masked and error
+        numerrs = np.bincount(data[i][truth].reshape(-1), minlength = len(numtotal)) #errors
         p = np.true_divide(numerrs[numtotal != 0],numtotal[numtotal != 0])
         q = p_to_q(p)
         ax1.plot(np.arange(len(numtotal))[numtotal != 0], q, 'o-', alpha = .6, label ="%s, %1.5f" % (label, bscore))
-        ax2.plot(np.arange(len(numtotal))[numtotal != 0], numtotal[numtotal != 0], 'o-', alpha = .6, label = "%s, %1.5f" % (label, bscore))
     plt.xlabel("Predicted Quality Score")
-    ax1.set_ylabel("Actual Quality Score")
-    ax1.legend(loc = "upper left")
-    ax2.set_ylabel("Sample Size")
+    plt.ylabel("Actual Quality Score")
+    ax.legend(loc = "upper left")
     qualplot.savefig(plotname)
+
+def plot_samplesize(data, labels, plotname, plottitle = None, maxscore = 42):
+    print(tstamp(), "Making Sample Size Plot . . .", file = sys.stderr)
+    plottitle = (plottitle if plottitle is not None else plotname)
+    sns.set()
+    ssplot, ax = plt.subplots(figsize = (9,9))
+    ssplot.suptitle(plottitle)
+    for i in range(len(data)):
+        numtotal = np.bincount(data[i].reshape(-1), minlength = (maxscore+1))
+        ax.plot(np.arange(len(numtotal))[numtotal != 0], numtotal[numtotal != 0], 'o-', alpha = .6, label = f"{labels[i]}")
+    plt.xlabel("Predicted Quality Score")
+    plt.ylabel("Sample Size")
+    ax.legend(loc = "upper left")
+    ssplot.savefig(plotname)
 
 def p_to_q(p, maxscore = 42):
     q = np.zeros(p.shape, dtype = np.int)
