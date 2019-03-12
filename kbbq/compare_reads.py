@@ -731,7 +731,7 @@ def main():
     plot_calibration([raw, gatk, dq],
         truth = truth,
         labels = ["Uncalibrated Scores", "GATK BQSR", "Reference-Free BQSR"],
-        plotname = 'qualscores.pdf',
+        plotname = '~/qualscores.pdf',
         plottitle = "Substitution Error Calibration")
 
 
