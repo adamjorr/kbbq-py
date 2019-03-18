@@ -3,17 +3,23 @@
 #Variables
 NUMREGIONS = 3 #Number of confident regions to use before sampling
 NUMRGS = 2 #Only take sequences from the first NUMRGS rgs in the file
-READSUBSAMPLING = 666.1 #The argument for samtools view -s. See the samtools manual.
+READSUBSAMPLING = -s 666.1 #The argument for samtools view -s. See the samtools manual.
+BAMURL = ftp://ftp.sra.ebi.ac.uk/vol1/run/ERR134/ERR1341796/CHM1_CHM13_2.bam
+#BAMACCESSION = ERR1341796
+TARURL = https://github.com/lh3/CHM-eval/releases/download/v0.5/CHM-evalkit-20180222.tar
+REFURL = http://www.broadinstitute.org/ftp/pub/seq/references/Homo_sapiens_assembly19.fasta
 
 #File names
 FULLBEDNAME = CHM-eval.kit/full.37m.bed.gz
 FULLVCFNAME = CHM-eval.kit/full.37m.vcf.gz
-REFNAME = ref.fa.gz
-REFIDX = ref.fa.gz.fai
+REFNAME = ref.fa
+REFIDX = ref.fa.fai
 
 CONFBEDNAME = conf_regions.bed
 CONFVCFNAME = conf_regions.vcf.gz
 CONFVCFIDX = $(addsuffix .csi, $(CONFVCFNAME))
+FULLBAMNAME = CHM1_CHM13_2.bam
+SUBSETBAMNAME = unsorted.conf_regions.bam
 CONFBAMNAME = conf_regions.bam
 RGSFILE = rgs.txt
 
@@ -44,21 +50,36 @@ data: $(RECALTABLE) $(RECALBAM) $(VARSITES)
 %.vcf.gz.csi: %.vcf.gz
 	bcftools index -c $<
 
-%.fa.gz.fai: %.fa.gz
+%.fa.fai: %.fa
 	samtools faidx $<
 
 $(CONFBEDNAME) $(CONFVCFNAME):
-	wget -qO- https://github.com/lh3/CHM-eval/releases/download/v0.5/CHM-evalkit-20180222.tar | \
+	wget -qO- $(TARURL) | \
 	tar -xnf- --occurrence=1 --to-command=$(TARTOCMD) $(FULLBEDNAME) $(FULLVCFNAME)
 
 $(REFNAME): $(CONFBEDNAME)
-	samtools faidx http://www.broadinstitute.org/ftp/pub/seq/references/Homo_sapiens_assembly19.fasta $(shell cut -f1 $< | sort | uniq) | \
-	bgzip > $@
+	samtools faidx $(REFURL) $(shell cut -f1 $< | sort | uniq) > $@
 
-$(CONFBAMNAME): $(CONFBEDNAME)
-	samtools view -h -L $< -u ftp://ftp.sra.ebi.ac.uk/vol1/run/ERR134/ERR1341796/CHM1_CHM13_2.bam | \
-	samtools view -h -u -F 3844
-	samtools sort -@ 4 -O bam -o $@
+$(RGSFILE): $(FULLBAMNAME)
+	samtools view -H $< | \
+	grep ^@RG | cut -f 2 | cut -d: -f2 | \
+	head -n $(NUMRGS) > $@
+
+#$(FULLBAMNAME): $(CONFBEDNAME)
+#	sam-dump -r -1 $(addprefix --aligned-region=,$(shell cut -f1 $< | sort | uniq)) $(BAMACCESSION) | \
+#	samtools view -b -o $@
+
+$(FULLBAMNAME):
+	lftp -c "pget -n 10 $(BAMURL) -o $@"
+
+$(FULLBAMNAME).bai:
+	lftp -c "pget -n 10 $(BAMURL).bai -o $@"
+
+$(SUBSETBAMNAME): $(FULLBAMNAME) $(CONFBEDNAME) $(RGSFILE) $(FULLBAMNAME).bai
+	samtools view -h -L $(word 2, $^) -F 3844 -R $(word 3, $^) $(READSUBSAMPLING) -b -o $@ $<
+
+$(CONFBAMNAME): $(SUBSETBAMNAME)
+	samtools sort -@ 4 -O bam -o $@ $<
 
 $(VARSITES): $(CONFVCFNAME) $(CONFVCFIDX) $(CONFBEDNAME)
 	bcftools query -R $(word 3, $^) -f '%CHROM\t%POS\n' $< >$@
@@ -76,8 +97,8 @@ $(LIGHTERREADS): $(FULLREADS)
 	cat $${LIGHTERTMP}/$(basename $<).cor$(suffix $<) | tr ' ' _ > $@ &&\
 	rm -rf $${LIGHTERTMP}
 
-$(RECALTABLE): $(CONFBAMNAME) $(REFNAME) $(CONFVCFNAME)
+$(RECALTABLE): $(CONFBAMNAME) $(REFNAME) $(CONFVCFNAME) $(REFIDX)
 	gatk BaseRecalibrator -I $< -R $(word 2, $^) --known-sites $(word 3, $^) --use-original-qualities -O $@
 
-$(RECALBAM): $(CONFBAMNAME) $(REFNAME) $(RECALTABLE)
+$(RECALBAM): $(CONFBAMNAME) $(REFNAME) $(RECALTABLE) $(REFIDX)
 	gatk ApplyBQSR -I $< -R $(word 2, $^) --bqsr-recal-file $(word 3, $^) --use-original-qualities -O $@
