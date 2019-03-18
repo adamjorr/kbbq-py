@@ -14,8 +14,9 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 import khmer
 import scipy.stats
-from . import recaltable
+import recaltable
 import pandas as pd
+import datetime
 
 def tstamp():
     return '[ ' + datetime.datetime.today().isoformat(' ', 'seconds') + ' ]'
@@ -493,7 +494,7 @@ def plot_calibration(data, truth, labels, plotname, plottitle = None, maxscore =
     plottitle = (plottitle if plottitle is not None else plotname)
     sns.set()
     qualplot, ax = plt.subplots(figsize = (9,9))
-    qualplot.suptitle(plottitle)
+    plt.title(plottitle)
     ax.plot(np.arange(maxscore + 1), 'k:', label = "Perfect")
     assert np.all([np.array_equal(data[0].shape, data[i].shape) for i in range(len(data))])
     for i in range(len(data)):
@@ -506,11 +507,11 @@ def plot_calibration(data, truth, labels, plotname, plottitle = None, maxscore =
         numerrs = np.bincount(data[i][truth].reshape(-1), minlength = len(numtotal)) #errors
         p = np.true_divide(numerrs[numtotal != 0],numtotal[numtotal != 0])
         q = p_to_q(p)
-        ax1.plot(np.arange(len(numtotal))[numtotal != 0], q, 'o-', alpha = .6, label ="%s, %1.5f" % (label, bscore))
+        ax.plot(np.arange(len(numtotal))[numtotal != 0], q, 'o-', alpha = .8, label ="%s, %1.5f" % (label, bscore))
     plt.xlabel("Predicted Quality Score")
     plt.ylabel("Actual Quality Score")
     ax.legend(loc = "upper left")
-    qualplot.savefig(plotname)
+    qualplot.savefig(plotname, bbox_inches='tight')
 
 def plot_samplesize(data, labels, plotname, plottitle = None, maxscore = 42):
     print(tstamp(), "Making Sample Size Plot . . .", file = sys.stderr)
@@ -702,20 +703,7 @@ def main():
     dq_calibrated = delta_q_recalibrate(rawquals, rgs, dinucleotide, np.logical_not(rcorrected), reversecycle)
     #custom_gatk_calibrated = delta_q_recalibrate(rawquals, rgs, dinucleotide, erroneous, reversecycle)
     #from_table = table_recalibrate(rawquals, tablefile, unique_pus, dinuc_order, seqlen, reversecycle, rgs, dinucleotide)
-    try:
-        assert np.array_equal(from_table, gatkcalibratedquals)
-    except AssertionError:
-        print("from_table shape:", from_table.shape)
-        print("gatkcalibratedquals shape:", gatkcalibratedquals.shape)
-        print("gatkcalibratedquals[0,:]", gatkcalibratedquals[0,:])
-        print("from_table[0,:]", from_table[0,:])
-        print("rawquals[0,:]", rawquals[0,:])
-        print("foundinplp[0,:]", foundinplp[0,:])
-        ne = (from_table != gatkcalibratedquals)
-        print("ne.shape",ne.shape)
-        print("sum(ne)", np.sum(ne))
-        print("sum(from_table.mask != gatkcalibratedquals.mask)", np.sum(from_table.mask != gatkcalibratedquals.mask))
-        raise
+    #assert np.array_equal(from_table, gatkcalibratedquals)
 
     #nonsnp = (np.sum(erroneous, axis = 1) > 1) #reads with more than 1 "error" (ie an indel)
     #skips[nonsnp,:] = True
@@ -731,7 +719,7 @@ def main():
     plot_calibration([raw, gatk, dq],
         truth = truth,
         labels = ["Uncalibrated Scores", "GATK BQSR", "Reference-Free BQSR"],
-        plotname = '~/qualscores.pdf',
+        plotname = 'qualscores.pdf',
         plottitle = "Substitution Error Calibration")
 
 
