@@ -41,6 +41,9 @@ elif [ $${TAR_FILENAME} == "$(FULLVCFNAME)" ]; then \
 fi'
 endef
 
+BEDTOREGIONS='BEGIN{OFS=""; ORS=" "}{print $$1,":",($$2+1),"-",$$3}'
+
+
 .PHONY: data
 
 .SECONDARY:
@@ -69,14 +72,20 @@ $(RGSFILE): $(FULLBAMNAME)
 #	sam-dump -r -1 $(addprefix --aligned-region=,$(shell cut -f1 $< | sort | uniq)) $(BAMACCESSION) | \
 #	samtools view -b -o $@
 
-$(FULLBAMNAME):
-	lftp -c "pget -n 10 $(BAMURL) -o $@"
+#$(FULLBAMNAME):
+#	lftp -c "pget -n 10 $(BAMURL) -o $@"
 
 $(FULLBAMNAME).bai:
 	lftp -c "pget -n 10 $(BAMURL).bai -o $@"
 
-$(SUBSETBAMNAME): $(FULLBAMNAME) $(CONFBEDNAME) $(RGSFILE) $(FULLBAMNAME).bai
-	samtools view -h -L $(word 2, $^) -F 3844 -R $(word 3, $^) $(READSUBSAMPLING) -b -o $@ $<
+$(SUBSETBAMNAME): $(FULLBAMNAME).bai $(CONFBEDNAME) $(RGSFILE)
+	samtools view -h -b -M -o $@ $(BAMURL) $(shell cat $(word 2, $^) | awk $(BEDTOREGIONS))
+
+#options cut to just see download speed:
+#-F 3844 $(READSUBSAMPLING) -R $(word 3, $^)
+
+#$(SUBSETBAMNAME): $(FULLBAMNAME) $(CONFBEDNAME) $(RGSFILE) $(FULLBAMNAME).bai
+#	samtools view -h -L $(word 2, $^) -F 3844 -R $(word 3, $^) $(READSUBSAMPLING) -b -o $@ $<
 
 $(CONFBAMNAME): $(SUBSETBAMNAME)
 	samtools sort -@ 4 -O bam -o $@ $<
