@@ -13,13 +13,13 @@ REFURL = http://www.broadinstitute.org/ftp/pub/seq/references/Homo_sapiens_assem
 FULLBEDNAME = CHM-eval.kit/full.37m.bed.gz
 FULLVCFNAME = CHM-eval.kit/full.37m.vcf.gz
 REFNAME = ref.fa
-REFIDX = ref.fa.fai
+REFIDX = $(REFNAME).fai
+REFDICT = $(basename $(REFNAME)).dict
 
 CONFBEDNAME = conf_regions.bed
 CONFVCFNAME = conf_regions.vcf.gz
-CONFVCFIDX = $(addsuffix .csi, $(CONFVCFNAME))
+CONFVCFIDX = $(addsuffix .tbi, $(CONFVCFNAME))
 FULLBAMNAME = CHM1_CHM13_2.bam
-SUBSETBAMNAME = unsorted.conf_regions.bam
 CONFBAMNAME = conf_regions.bam
 RGSFILE = rgs.txt
 
@@ -41,20 +41,37 @@ elif [ $${TAR_FILENAME} == "$(FULLVCFNAME)" ]; then \
 fi'
 endef
 
-BEDTOREGIONS='BEGIN{OFS=""; ORS=" "}{print $$1,":",($$2+1),"-",$$3}'
+BEDTOREGIONS='BEGIN{OFS=""}{print $$1,":",($$2+1),"-",$$3}'
 
 
-.PHONY: data
+.PHONY: data clean
 
-.SECONDARY:
 
 data: $(RECALTABLE) $(RECALBAM) $(VARSITES)
+
+clean:
+	rm -f $(RECALTABLE) $(RECALBAM) $(VARSITES) $(FULLBAMNAME).bai \
+	$(CONFBEDNAME) $(REFNAME) $(REFDICT) $(REFIDX) \
+	$(CONFVCFNAME) $(CONFVCFIDX) $(CONFBAMNAME) $(RGSFILE) \
+	$(FIRSTREADS) $(SECONDREADS) $(FULLREADS) $(LIGHTERREADS) \
+	$(basename $(RECALBAM)).bai
+
+# Generic Indexing Rules
+########################
 
 %.vcf.gz.csi: %.vcf.gz
 	bcftools index -c $<
 
+%.vcf.gz.tbi: %.vcf.gz
+	bcftools index -t $<
+
 %.fa.fai: %.fa
 	samtools faidx $<
+
+%.dict: %.fa
+	picard CreateSequenceDictionary R=$<
+
+#
 
 $(CONFBEDNAME) $(CONFVCFNAME):
 	wget -qO- $(TARURL) | \
@@ -63,32 +80,16 @@ $(CONFBEDNAME) $(CONFVCFNAME):
 $(REFNAME): $(CONFBEDNAME)
 	samtools faidx $(REFURL) $(shell cut -f1 $< | sort | uniq) > $@
 
-$(RGSFILE): $(FULLBAMNAME)
-	samtools view -H $< | \
+$(RGSFILE):
+	samtools view -H $(BAMURL) | \
 	grep ^@RG | cut -f 2 | cut -d: -f2 | \
 	head -n $(NUMRGS) > $@
-
-#$(FULLBAMNAME): $(CONFBEDNAME)
-#	sam-dump -r -1 $(addprefix --aligned-region=,$(shell cut -f1 $< | sort | uniq)) $(BAMACCESSION) | \
-#	samtools view -b -o $@
-
-#$(FULLBAMNAME):
-#	lftp -c "pget -n 10 $(BAMURL) -o $@"
 
 $(FULLBAMNAME).bai:
 	lftp -c "pget -n 10 $(BAMURL).bai -o $@"
 
-$(SUBSETBAMNAME): $(FULLBAMNAME).bai $(CONFBEDNAME) $(RGSFILE)
-	samtools view -h -b -M -o $@ $(BAMURL) $(shell cat $(word 2, $^) | awk $(BEDTOREGIONS))
-
-#options cut to just see download speed:
-#-F 3844 $(READSUBSAMPLING) -R $(word 3, $^)
-
-#$(SUBSETBAMNAME): $(FULLBAMNAME) $(CONFBEDNAME) $(RGSFILE) $(FULLBAMNAME).bai
-#	samtools view -h -L $(word 2, $^) -F 3844 -R $(word 3, $^) $(READSUBSAMPLING) -b -o $@ $<
-
-$(CONFBAMNAME): $(SUBSETBAMNAME)
-	samtools sort -@ 4 -O bam -o $@ $<
+$(CONFBAMNAME): $(CONFBEDNAME) $(RGSFILE) | $(FULLBAMNAME).bai
+	samtools view -h -b -M -F 3844 -R $(word 2, $^) $(READSUBSAMPLING) -o $@ $(BAMURL) $(shell cat $< | awk $(BEDTOREGIONS))
 
 $(VARSITES): $(CONFVCFNAME) $(CONFVCFIDX) $(CONFBEDNAME)
 	bcftools query -R $(word 3, $^) -f '%CHROM\t%POS\n' $< >$@
@@ -106,8 +107,8 @@ $(LIGHTERREADS): $(FULLREADS)
 	cat $${LIGHTERTMP}/$(basename $<).cor$(suffix $<) | tr ' ' _ > $@ &&\
 	rm -rf $${LIGHTERTMP}
 
-$(RECALTABLE): $(CONFBAMNAME) $(REFNAME) $(CONFVCFNAME) $(REFIDX)
+$(RECALTABLE): $(CONFBAMNAME) $(REFNAME) $(CONFVCFNAME) $(CONFVCFIDX) $(REFIDX) $(REFDICT)
 	gatk BaseRecalibrator -I $< -R $(word 2, $^) --known-sites $(word 3, $^) --use-original-qualities -O $@
 
-$(RECALBAM): $(CONFBAMNAME) $(REFNAME) $(RECALTABLE) $(REFIDX)
+$(RECALBAM): $(CONFBAMNAME) $(REFNAME) $(RECALTABLE) $(REFIDX) $(REFDICT)
 	gatk ApplyBQSR -I $< -R $(word 2, $^) --bqsr-recal-file $(word 3, $^) --use-original-qualities -O $@
