@@ -54,14 +54,13 @@ class GATKReport:
             version = version.split(sep = 'v', maxsplit = 1)[-1]
             table_strings = fh.read().split('\n\n')
             tables = [GATKTable.fromstring(s) for s in table_strings if s != '']
-            if (len(tables) != ntables):
-                raise ValueError(f"""Malformed or truncated file {filename}.
-                    The header ({fullheader}) implies there should be
-                    {ntables} tables in this report, but we only found
-                    {len(tables)}. If you are sure the file is intact,
-                    modify the header line and try again.""")
+            if (len(tables) != int(ntables)):
+                raise ValueError(f"Malformed or truncated file {filename}.\
+                    The header ({fullheader}) implies there should be\
+                    {ntables} tables in this report, but we only found\
+                    {len(tables)}. If you are sure the file is intact,\
+                    modify the header line and try again.")
         return cls(tables, version)
-            
 
     def get_headerstring(self):
         """
@@ -149,12 +148,17 @@ class GATKTable:
         A Pandas dataframe containing the table data. Accessing this
         attribute is the primary way to interact with the data.
         """
-        self.typemap = {np.dtype(np.int) : '%d', np.dtype(np.float) : '%f', str : '%s', np.dtype(np.object) : '%s'}
+        self.typemap = {np.dtype(np.int) : 'd', np.dtype(np.float) : 'f', str : 's', np.dtype(np.object) : 's'}
         """
         A dictionary of `{type : str}` to determine the string for each type.
 
         Note that in the current implementation this only affects
         :meth:`get_fmtstring`.
+        """
+        self.precisionmap = {'EmpiricalQuality' : '.4', 'EstimatedQReported' : '.4', 'Errors' : '.2'}
+        """
+        A dictionary of `{colname : str}` to determine the precision string to prepend
+        to each formatstring. This only affects :meth:`get_fmtstring`.
         """
 
     @classmethod
@@ -216,19 +220,41 @@ class GATKTable:
         Get the format string by inspecting the dataframe.
 
         Uses the dtypes, number of rows, and number of columns in the data
-        frame along with :attr:`typemap` to create the format string, which is
-        formatted like ``#:GATKTable:ncol:nrow:%f:%f:%f:;``.
+        frame along with the strings returned by :func:`get_colfmts` to
+        create the format string
+
+        which is formatted like ``#:GATKTable:ncol:nrow:%f:%f:%f:;``.
 
         :return: The format string
         :rtype: str
 
         """
         fmtlist = ['#', 'GATKTable', str(self.get_ncols()), str(self.get_nrows())]
-        types = self.data.dtypes
-        for t in types:
-            fmtlist.append(self.typemap[t])
+        for f in self.get_colfmts():
+            fmtlist.append(f)
         fmtlist.append(';')
         return ':'.join(fmtlist)
+
+    def get_colfmts(self):
+        """
+        Get the formats for each column in the dataframe.
+
+        Uses :attr:`typemap` and :attr:`precisionmap` to
+        create the strings. This will return something like
+        ``['%s', '%s', '%.2f', '%.4f']``
+
+        :return: format strings for each column
+        :rtype: list(str)
+        """
+        fmtlist = []
+        unindexed = self.data.reset_index()
+        types = unindexed.dtypes
+        heads = unindexed.columns.to_list()
+        for t,h in zip(types, heads):
+            colfmtstr = '%' + self.precisionmap.get(h,'') + self.typemap[t]
+            fmtlist.append(colfmtstr)
+        return fmtlist
+
 
     def get_titlestring(self):
         """
@@ -251,13 +277,14 @@ class GATKTable:
         :return: the data table as a formatted string
         :rtype: str
         """
-        datawidths = self.data.apply(lambda x: x.str.len().max()).to_numpy()
-        headwidths = self.data.columns.str.len().to_numpy()
-        header = self.data.columns.to_list()
+        unindexed = self.data.reset_index()
+        datawidths = unindexed.apply(lambda x: x.astype('str').str.len().max()).to_numpy()
+        headwidths = unindexed.columns.str.len().to_numpy()
+        header = unindexed.columns.to_list()
         colwidths = np.maximum(datawidths, headwidths)
-        fmstrings = [self.typemap.get(t) for t in self.data.dtypes]
+        fmtstrings = self.get_colfmts()
         datastr = '  '.join([h.ljust(colwidths[i]) for i,h in enumerate(header)])
-        for row in self.data.itertuples(index = False):
+        for row in unindexed.itertuples(index = False):
             formatted = [getattr(row,header[i]).ljust(colwidths[i]) if \
                 f == '%s' else \
                 (f % float(getattr(row,header[i]))).rjust(colwidths[i]) \
@@ -272,7 +299,7 @@ class GATKTable:
         :return: The number of rows in the dataframe.
         :rtype: int
         """
-        return self.data.shape[0]
+        return self.data.reset_index().shape[0]
 
     def get_ncols(self):
         """
@@ -281,7 +308,7 @@ class GATKTable:
         :return: The number of columns in the dataframe.
         :rtype: int
         """
-        return self.data.shape[1]
+        return self.data.reset_index().shape[1]
 
     def write(self, filehandle):
         """
@@ -299,7 +326,7 @@ class GATKTable:
         return filehandle.write(str(self) + '\n')
 
     def __str__(self):
-        return self.get_fmtstring() + '\n' + self.get_titlestring() + '\n' + get_datastring()
+        return self.get_fmtstring() + '\n' + self.get_titlestring() + '\n' + self.get_datastring()
 
     def __repr__(self):
         return self.get_fmtstring() + '\n' + self.get_titlestring() + '\n' + repr(self.data)
@@ -384,4 +411,14 @@ class RecalibrationReport(GATKReport):
         self.tables[4].data = self.tables[4].data.astype(typer)
         self.tables[4].data = self.tables[4].data.set_index(['ReadGroup','QualityScore','CovariateName','CovariateValue'])
 
-
+    def __str__(self):
+        """
+        GATKReports list CovariateValue before CovariateName, which
+        doesn't make much sense for organizing the index. So we switch
+        the columns before printing and switch them back after we get
+        the string.
+        """
+        self.tables[4].data = self.tables[4].data.swaplevel('CovariateValue','CovariateName')
+        selfstr = super().__str__()
+        self.tables[4].data = self.tables[4].data.swaplevel('CovariateValue','CovariateName')
+        return selfstr

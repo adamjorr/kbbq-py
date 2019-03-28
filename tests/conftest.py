@@ -1,8 +1,8 @@
 import pytest
 
-@pytest.fixture(params = ['data/conf_regions.recal.txt'])
+@pytest.fixture(params = ['tests/data/conf_regions.recal.txt'])
 def report_and_file(request):
-    from ..kbbq import recaltable
+    from kbbq import recaltable
     return recaltable.RecalibrationReport.fromfile(request.param), request.param
 
 @pytest.fixture

@@ -1,8 +1,9 @@
 import pytest
-from ..kbbq import recaltable
+from kbbq import recaltable
 
-test_report_readwrite(report_and_file):
+def test_report_readwrite(report_and_file):
     report, file = report_and_file
-    strfh = io.StringIO()
+    reportlines = str(report).splitlines(keepends = True)
     with open(file) as f:
-        assert f.read() == str(report)
+        for fileline, objectline in zip(f, reportlines):
+            assert fileline == objectline
