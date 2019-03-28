@@ -14,7 +14,7 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 import khmer
 import scipy.stats
-import recaltable
+import kbbq.recaltable as recaltable
 import pandas as pd
 import datetime
 

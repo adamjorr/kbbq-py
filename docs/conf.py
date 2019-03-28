@@ -180,5 +180,5 @@ autodoc_default_options = {
     'members' : None,
     'undoc-members' : None,
     'member-order' : 'bysource',
-    'special-members' : '__init__'
+    'special-members' : '__init__,__str__'
     }

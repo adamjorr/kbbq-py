@@ -4,10 +4,9 @@ kbbq
 
 A package for reference-free base quality score recalibration.
 """
-
-from . import compare_reads
-from .compare_reads import *
-from . import recaltable
-from .recaltable import *
+import kbbq.compare_reads
+from kbbq.compare_reads import *
+import kbbq.recaltable
+from kbbq.recaltable import *
 
 __all__ = ['compare_reads','recaltable']
