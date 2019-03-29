@@ -231,12 +231,13 @@ def gatk_delta_q(prior_q, numerrs, numtotal, maxscore = 42):
     return posterior_q - prior_q
 
 #this passes bam test
-def table_to_vectors(tablefile, rg_order, dinuc_order, seqlen,maxscore = 42):
+def table_to_vectors(table, rg_order, seqlen, maxscore = 42):
     #the recal table uses the PU of the read group as the read group entry in the table
     #TODO: inspect the index to find seqlen instead of relying on input
     #TODO: for maxscore also.
     #see vectors_to_table for more info
-    table = recaltable.RecalibrationReport.from_file(tablefile)
+    # table = recaltable.RecalibrationReport.from_file(tablefile)
+    dinuc_order = Dinucleotide.dinuc_order
     rgtable = table.tables[2].data.reindex(rg_order)
     meanq = rgtable['EstimatedQReported'].values.astype(np.float64)
     global_errs = rgtable['Errors'].values.astype(np.int64)
@@ -383,8 +384,8 @@ def vectors_to_table(meanq, global_errs, global_total, q_errs, q_total,
 
     return recaltable.RecalibrationReport([argtable, quanttable, rgtable, dinuctable, covariatetable])
 
-def table_recalibrate(q, tablefile, rg_order, dinuc_order, seqlen, reversecycle, rgs, dinucleotide, minscore = 6, maxscore = 42):
-    meanq, global_errs, global_total, q_errs, q_total, pos_errs, pos_total, dinuc_errs, dinuc_total = table_to_vectors(tablefile, rg_order, dinuc_order, seqlen, maxscore)
+def table_recalibrate(q, table, rg_order, seqlen, reversecycle, rgs, dinucleotide, minscore = 6, maxscore = 42):
+    meanq, global_errs, global_total, q_errs, q_total, pos_errs, pos_total, dinuc_errs, dinuc_total = table_to_vectors(table, rg_order, seqlen, maxscore)
     globaldeltaq, qscoredeltaq, positiondeltaq, dinucdeltaq = get_delta_qs(meanq, global_errs, global_total, q_errs, q_total, pos_errs, pos_total, dinuc_errs, dinuc_total)
 
     recal_q = np.array(q, copy = True, dtype = np.int)
@@ -553,11 +554,11 @@ def q_to_p(q):
     p = np.array(np.power(10.0,-(q / 10.0)), dtype = np.longdouble, copy = True)
     return p
 
-def bam_test(bamfile, tablefile, rg_to_int, rg_order, dinuc_order, seqlen, minscore = 6, maxscore = 42):
+def bam_test(bamfile, table, rg_to_int, rg_order, seqlen, minscore = 6, maxscore = 42):
     print(tstamp(), "Beginning BAM test . . .", file = sys.stderr)
-    meanq, global_errs, global_total, q_errs, q_total, pos_errs, pos_total, dinuc_errs, dinuc_total = table_to_vectors(tablefile, rg_order, dinuc_order, seqlen, maxscore)
+    meanq, global_errs, global_total, q_errs, q_total, pos_errs, pos_total, dinuc_errs, dinuc_total = table_to_vectors(table, rg_order, seqlen, maxscore)
     globaldeltaq, qscoredeltaq, positiondeltaq, dinucdeltaq = get_delta_qs(meanq, global_errs, global_total, q_errs, q_total, pos_errs, pos_total, dinuc_errs, dinuc_total)
-    dinuc_to_int = {d : i for i,d in enumerate(dinuc_order)}
+    dinuc_to_int = Dinucleotide.dinuc_to_int
     bam = pysam.AlignmentFile(bamfile,'r')
     for read in bam:
         gatk_calibrated_quals = np.array(read.query_qualities, dtype = np.int)
@@ -660,15 +661,9 @@ def recalibrate_bamread(read, meanq, globaldeltaq, qscoredeltaq, positiondeltaq,
     recalibrated_quals[valid_positions] = (meanq[rg] + globaldeltaq[rg] + qscoredeltaq[rg, qcov] + dinucdeltaq[rg, qcov, dinuccov] + positiondeltaq[rg, qcov, cycle]).astype(np.int)
     return recalibrated_quals
 
-"""
-given sequences from fastq, get the recalibration vectors
-given: names, rawquals, rcorrected, seqs, rgs, seqlen
-the vectors are: meanq, global_errs, global_total, q_errs, q_total, pos_errs, pos_total, dinuc_errs, dinuc_total
-"""
-def rcorrected_to_vectors(names, rawquals, rcorrected, seqs, rgs, seqlen):
-    firstread = np.isin(names,'/1')
-    secondread = np.logical_not(firstread)
-    pass
+def get_id_to_pu(bamfileobj):
+    id_to_pu = {rg['ID'] : rg['PU'] for rg in bamfile.header.as_dict()['RG']}
+    return id_to_pu
 
 def main():
     np.seterr(all = 'raise')
