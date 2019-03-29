@@ -103,25 +103,22 @@ class GATKTable:
 
     Attributes
 
-        * :attr:`format` - the format string representing the data in the table.
-            This is like ``#:GATKTable:ncol:nrow:%f:%f:%f:;``.
-            It is ``:`` delimited and ``;`` terminated.
-        * :attr:`ncols` - The number of columns in the table
-        * :attr:`nrows` - The number of rows in the table
-        * :attr:`fmtstrings` - A list of the format strings for each column in the table
-        * :attr:`name` - The entire line specifying the name of the table. It is
-            formatted like ``#:GATKTable:title:subtitle``. ``subtitle`` can be
-            an empty string.
         * :attr:`title` - The title of the table
         * :attr:`description` - A description of the table. May be ``''``.
         * :attr:`data` - A Pandas dataframe containing the table data. Accessing this
             attribute is the primary way to interact with the data.
+        * :attr:`typemap` - A dict mapping types to a character to be used
+            for constructing the format string.
+        * :attr:`precisionmap` - A dict mapping column headers to precision
+            to be used for constructing the format string.
 
     Methods
 
         * :meth:`fromstring` - Initialize a :class:`GATKTable` from a string.
         * :meth:`parse_fmtstring` - Parse a fmtstring into a dictionary of types
         * :meth:`get_fmtstring` - Get a formatstring by inspecting the dataframe.
+        * :meth:`get_colfmts` - Get a list of format strings for the data in 
+            the dataframe
         * :meth:`get_titlestring` - Get the title string
         * :meth:`get_datastring` - Format the dataframe into a string
         * :meth:`get_nrows` - Get the number of rows in the dataframe.
