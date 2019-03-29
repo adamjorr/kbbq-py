@@ -183,6 +183,24 @@ class RescaledNormal:
     def prior(self, difference):
         return prior_dist[difference]
 
+class Dinucleotide:
+    """
+    A class to cache dinucleotides and maintain a consistent dinuc -> int
+    map throughout the module.
+    """
+    nucleotides = ['A','T','G','C']
+    """
+    List of valid nucleotides
+    """
+    dinucs = [i + j for i in  nucs for j in nucs]
+    """
+    List of valid dinucleotides
+    """
+    dinuc_to_int = dict(zip(dinucs, range(len(dinucs))))
+    """
+    Dictionary mapping dinuc -> int
+    """
+
 def gatk_delta_q(prior_q, numerrs, numtotal, maxscore = 42):
     assert prior_q.shape == numerrs.shape == numtotal.shape
     possible_q = np.arange(maxscore, dtype = np.int)
@@ -412,12 +430,9 @@ def get_dinucleotide(seqs, q):
     #we should: ignore any context containing an N, ignore any context at beginning of sequence
     #we also ignore the longest string at the start and end of the sequence that have scores <=2
     print(tstamp(), "Getting dinucleotide context . . .", file=sys.stderr)
-    nucs = ['A','T','G','C']
     seqs = seqs.copy() #we may need to alter this
-    dinucs = [i + j for i in  nucs for j in nucs]
-    dinuc_to_int = dict(zip(dinucs, range(len(dinucs))))
-    dinucleotide = generic_dinuc_covariate(seqs.view('U1').reshape((seqs.size, -1)), q, dinuc_to_int)
-    return dinucleotide.copy(), dinucs.copy()
+    dinucleotide = generic_dinuc_covariate(seqs.view('U1').reshape((seqs.size, -1)), q, Dinucleotide.dinuc_to_int)
+    return dinucleotide.copy()
 
 def get_covariate_arrays(q, rgs, dinucleotide, errors, reversecycle, maxscore = 42, minscore = 6):
     #input arrays are the same dimensions: (numsequences, seqlen)
@@ -682,7 +697,7 @@ def main():
 
     #important arrays: names, rawquals, rcorrected, calibquals, gatkcalibratedquals, erroneous, hmmquals
 
-    dinucleotide, dinuc_order = get_dinucleotide(seqs, rawquals)
+    dinucleotide = get_dinucleotide(seqs, rawquals)
     unique_rgs = np.unique(rgs)
 
     rg_to_int = dict(zip(unique_rgs, range(len(unique_rgs))))
