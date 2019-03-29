@@ -233,8 +233,6 @@ def gatk_delta_q(prior_q, numerrs, numtotal, maxscore = 42):
 #this passes bam test
 def table_to_vectors(table, rg_order, seqlen, maxscore = 42):
     #the recal table uses the PU of the read group as the read group entry in the table
-    #TODO: inspect the index to find seqlen instead of relying on input
-    #TODO: for maxscore also.
     #see vectors_to_table for more info
     # table = recaltable.RecalibrationReport.from_file(tablefile)
     dinuc_order = Dinucleotide.dinuc_order
@@ -250,6 +248,7 @@ def table_to_vectors(table, rg_order, seqlen, maxscore = 42):
 
     postable = table.tables[4].data.loc[rg_order, np.arange(maxscore + 1), 'Cycle']
     postable = postable.reset_index(level = 'CovariateValue').astype({'CovariateValue' : np.int_}).set_index('CovariateValue', append = True)
+    seqlen = postable.index.get_level_values('CovariateValue').max()
     postable = postable.reindex(pd.MultiIndex.from_product(
         [rg_order, np.arange(maxscore + 1), ['Cycle'],
         np.concatenate([np.arange(seqlen)+1, np.flip(-(np.arange(seqlen)+1),axis = 0)])
