@@ -231,7 +231,7 @@ def gatk_delta_q(prior_q, numerrs, numtotal, maxscore = 42):
     return posterior_q - prior_q
 
 #this passes bam test
-def table_to_vectors(table, rg_order, seqlen, maxscore = 42):
+def table_to_vectors(table, rg_order, maxscore = 42):
     #the recal table uses the PU of the read group as the read group entry in the table
     #see vectors_to_table for more info
     # table = recaltable.RecalibrationReport.from_file(tablefile)
@@ -660,9 +660,9 @@ def recalibrate_bamread(read, meanq, globaldeltaq, qscoredeltaq, positiondeltaq,
     recalibrated_quals[valid_positions] = (meanq[rg] + globaldeltaq[rg] + qscoredeltaq[rg, qcov] + dinucdeltaq[rg, qcov, dinuccov] + positiondeltaq[rg, qcov, cycle]).astype(np.int)
     return recalibrated_quals
 
-def get_id_to_pu(bamfileobj):
-    id_to_pu = {rg['ID'] : rg['PU'] for rg in bamfile.header.as_dict()['RG']}
-    return id_to_pu
+def get_rg_to_pu(bamfileobj):
+    rg_to_pu = {rg['ID'] : rg['PU'] for rg in bamfile.header.as_dict()['RG']}
+    return rg_to_pu
 
 def main():
     np.seterr(all = 'raise')
