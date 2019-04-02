@@ -188,14 +188,27 @@ class Dinucleotide:
     A class to cache dinucleotides and maintain a consistent dinuc -> int
     map throughout the module.
     """
+
     nucleotides = ['A','T','G','C']
     """
     List of valid nucleotides
     """
-    dinucs = [i + j for i in  nucs for j in nucs]
+
+    complement = {'A' : 'T', 'T' : 'A', 'G' : 'C', 'C' : 'G'}
+    """
+    Dictionary for complementing nucleotides
+    """
+
+    #dinucs = [i + j for i in nucleotides for j in nucleotides]
+    #the above won't work because list comprehensions ignore
+    #class scope except the outermost variable. we can use
+    # a temporary function, even though it looks bad :(
+    dinucs = lambda d:[i + j for i in d for j in d]
+    dinucs = dinucs(nucleotides)
     """
     List of valid dinucleotides
     """
+
     dinuc_to_int = dict(zip(dinucs, range(len(dinucs))))
     """
     Dictionary mapping dinuc -> int
@@ -235,7 +248,7 @@ def table_to_vectors(table, rg_order, maxscore = 42):
     #the recal table uses the PU of the read group as the read group entry in the table
     #see vectors_to_table for more info
     # table = recaltable.RecalibrationReport.from_file(tablefile)
-    dinuc_order = Dinucleotide.dinuc_order
+    dinuc_order = Dinucleotide.dinuc_to_int.keys()
     rgtable = table.tables[2].data.reindex(rg_order)
     meanq = rgtable['EstimatedQReported'].values.astype(np.float64)
     global_errs = rgtable['Errors'].values.astype(np.int64)
@@ -297,8 +310,8 @@ def vectors_to_table(meanq, global_errs, global_total, q_errs, q_total,
     :param int maxscore: The maximum possible quality score
     :return: the recalibration table
     :rtype: :class:`kbbq.recaltable.RecalibrationReport`
-
     """
+
     #these will be mostly default values, except quantization
     #which I don't attempt to implement.
     #I'm afraid bad things will happen if I don't include at least null values
@@ -636,7 +649,7 @@ def bamread_dinuc_covariates(read, dinuc_to_int, complement, minscore = 6):
     if read.is_reverse:
         seq = ''.join([complement.get(x,'N') for x in reversed(seq)])
         quals = np.flip(quals)
-    dinuccov = generic_dinuc_covariate(seq, quals, dinuc_to_int, minscore)
+    dinuccov = generic_dinuc_covariate(np.array(list(seq), dtype = 'U1'), quals, dinuc_to_int, minscore)
     if read.is_reverse:
         dinuccov = np.flip(dinuccov)
     return dinuccov
@@ -661,7 +674,7 @@ def recalibrate_bamread(read, meanq, globaldeltaq, qscoredeltaq, positiondeltaq,
     return recalibrated_quals
 
 def get_rg_to_pu(bamfileobj):
-    rg_to_pu = {rg['ID'] : rg['PU'] for rg in bamfile.header.as_dict()['RG']}
+    rg_to_pu = {rg['ID'] : rg['PU'] for rg in bamfileobj.header.as_dict()['RG']}
     return rg_to_pu
 
 def main():
