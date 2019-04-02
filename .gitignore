@@ -1,3 +1,6 @@
+#test data should be made with Make
+tests/data/*
+
 #for vscode users
 .vscode
 
