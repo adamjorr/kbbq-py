@@ -1,5 +1,111 @@
-version: 2
-jobs:
-  build:
+version: 2.1
+
+executors:
+  default-executor:
     docker:
       - image: circleci/python:3.7
+        environment:
+          PIPENV_VENV_IN_PROJECT: true
+    working_directory: ~/kbbq
+
+
+commands:
+  manual-install:
+    description: "download, extract, configure, make, and make install a program"
+    parameters:
+      url:
+        type: string
+      name:
+        type: string
+        default: program
+      dir:
+        type: string
+        default: '/usr/local'
+      unzip:
+        type: string
+        default: gunzip
+      steps:
+        - run:
+            name: install from << parameters.url >>
+            command: |
+              wget << parameters.url >> -O - | << parameters.unzip >> -c > << parameters.name >>.tar
+              tar -xf << parameters.name >>.tar
+              cd << parameters.name >>
+              ./configure
+              make
+              sudo make install
+              cd ..
+
+  install-ubuntu-dependencies:
+    description: "install ubuntu dependencies from apt"
+      steps:
+        - run: sudo apt-get update
+        - run:
+            command: |
+              sudo apt-get install -y lftp samtools bcftools picard-tools seqtk
+
+  install-gatk:
+    description: "install gatk and add to PATH"
+      steps:
+        - restore_cache:
+            keys:
+              - gatk-package-4.1.1.0
+        - run:
+            command: |
+            if [ ! -e ~/gatk-4.1.1.0 ]; then
+              cd
+              wget https://github.com/broadinstitute/gatk/releases/download/4.1.1.0/gatk-4.1.1.0.zip
+              unzip gatk-4.1.1.0.zip
+            fi
+            export PATH=PATH:~/gatk-4.1.1.0
+        - save_cache:
+            key: gatk-package-4.1.1.0
+            paths:
+              - "~/gatk-4.1.1.0"
+
+  install-py-dependencies:
+    description: "checkout & install & cache python dependencies"
+      steps:
+        - checkout
+        - restore_cache:
+            keys:
+              - pip-packages-v1-{{ .Branch }}-{{ checksum "Pipfile.lock" }}
+        - run:
+            command: |
+              pip install --user pipenv
+              pipenv install --user --dev
+        - save_cache:
+            key: pip-packages-v1-{{ .Branch }}-{{ checksum "Pipfile.lock" }}
+            paths:
+              - ".venv"
+
+  download-test-data:
+    description: "download & cache test data"
+      steps:
+        - checkout
+        - restore_cache:
+            keys:
+              - data-cache-v1-{{ .Branch }}-{{ checksum "tests/data/Makefile" }}
+        - run: make -C tests/data data
+        - save_cache:
+            key: data-cache-v1-{{ .Branch }}-{{ checksum "tests/data/Makefile" }}
+            paths:
+              - tests/data
+
+
+jobs:
+  build:
+    executor: default-executor
+    steps:
+      - checkout
+      - install-ubuntu-dependencies
+      - install-py-dependencies
+      - install-gatk
+      - download-test-data
+      - run:
+          command: |
+            pipenv run python -m pytest --junitxml=test-reports/junit.xml --cov=./
+      - store_test_results:
+          path: test-reports
+      - store_artifacts:
+          path: test-reports
