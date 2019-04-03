@@ -52,13 +52,13 @@ commands:
             - gatk-package-4.1.1.0
       - run:
           command: |
-          if [ ! -e ~/gatk-4.1.1.0 ]; then
-            cd
-            wget https://github.com/broadinstitute/gatk/releases/download/4.1.1.0/gatk-4.1.1.0.zip
-            unzip gatk-4.1.1.0.zip
-            cd -
-          fi
-          export PATH=PATH:~/gatk-4.1.1.0
+            if [ ! -e ~/gatk-4.1.1.0 ]; then
+              cd
+              wget https://github.com/broadinstitute/gatk/releases/download/4.1.1.0/gatk-4.1.1.0.zip
+              unzip gatk-4.1.1.0.zip
+              cd -
+            fi
+            export PATH=PATH:~/gatk-4.1.1.0
       - save_cache:
           key: gatk-package-4.1.1.0
           paths:
