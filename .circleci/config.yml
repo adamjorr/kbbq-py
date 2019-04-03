@@ -15,10 +15,10 @@ commands:
     parameters:
       url:
         type: string
-      name:
+      progname:
         type: string
         default: program
-      dir:
+      installdir:
         type: string
         default: '/usr/local'
       unzip:
