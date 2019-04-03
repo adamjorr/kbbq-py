@@ -74,7 +74,7 @@ commands:
       - run:
           command: |
             pip install --user pipenv
-            pipenv install --user --dev
+            pipenv install --dev
       - save_cache:
           key: pip-packages-v1-{{ .Branch }}-{{ checksum "Pipfile.lock" }}
           paths:
