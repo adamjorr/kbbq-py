@@ -8,6 +8,7 @@ BAMURL = ftp://ftp.sra.ebi.ac.uk/vol1/run/ERR134/ERR1341796/CHM1_CHM13_2.bam
 #BAMACCESSION = ERR1341796
 TARURL = https://github.com/lh3/CHM-eval/releases/download/v0.5/CHM-evalkit-20180222.tar
 REFURL = http://www.broadinstitute.org/ftp/pub/seq/references/Homo_sapiens_assembly19.fasta
+SHELL = /bin/bash
 
 #File names
 FULLBEDNAME = CHM-eval.kit/full.37m.bed.gz
