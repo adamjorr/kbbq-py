@@ -24,73 +24,74 @@ commands:
       unzip:
         type: string
         default: gunzip
-      steps:
-        - run:
-            name: install from << parameters.url >>
-            command: |
-              wget << parameters.url >> -O - | << parameters.unzip >> -c > << parameters.name >>.tar
-              tar -xf << parameters.name >>.tar
-              cd << parameters.name >>
-              ./configure
-              make
-              sudo make install
-              cd ..
+    steps:
+      - run:
+          name: install from << parameters.url >>
+          command: |
+            wget << parameters.url >> -O - | << parameters.unzip >> -c > << parameters.name >>.tar
+            tar -xf << parameters.name >>.tar
+            cd << parameters.name >>
+            ./configure
+            make
+            sudo make install
+            cd ..
 
   install-ubuntu-dependencies:
     description: "install ubuntu dependencies from apt"
-      steps:
-        - run: sudo apt-get update
-        - run:
-            command: |
-              sudo apt-get install -y lftp samtools bcftools picard-tools seqtk
+    steps:
+      - run: sudo apt-get update
+      - run:
+          command: |
+            sudo apt-get install -y lftp samtools bcftools picard-tools seqtk
 
   install-gatk:
     description: "install gatk and add to PATH"
-      steps:
-        - restore_cache:
-            keys:
-              - gatk-package-4.1.1.0
-        - run:
-            command: |
-            if [ ! -e ~/gatk-4.1.1.0 ]; then
-              cd
-              wget https://github.com/broadinstitute/gatk/releases/download/4.1.1.0/gatk-4.1.1.0.zip
-              unzip gatk-4.1.1.0.zip
-            fi
-            export PATH=PATH:~/gatk-4.1.1.0
-        - save_cache:
-            key: gatk-package-4.1.1.0
-            paths:
-              - "~/gatk-4.1.1.0"
+    steps:
+      - restore_cache:
+          keys:
+            - gatk-package-4.1.1.0
+      - run:
+          command: |
+          if [ ! -e ~/gatk-4.1.1.0 ]; then
+            cd
+            wget https://github.com/broadinstitute/gatk/releases/download/4.1.1.0/gatk-4.1.1.0.zip
+            unzip gatk-4.1.1.0.zip
+            cd -
+          fi
+          export PATH=PATH:~/gatk-4.1.1.0
+      - save_cache:
+          key: gatk-package-4.1.1.0
+          paths:
+            - "~/gatk-4.1.1.0"
 
   install-py-dependencies:
     description: "checkout & install & cache python dependencies"
-      steps:
-        - checkout
-        - restore_cache:
-            keys:
-              - pip-packages-v1-{{ .Branch }}-{{ checksum "Pipfile.lock" }}
-        - run:
-            command: |
-              pip install --user pipenv
-              pipenv install --user --dev
-        - save_cache:
-            key: pip-packages-v1-{{ .Branch }}-{{ checksum "Pipfile.lock" }}
-            paths:
-              - ".venv"
+    steps:
+      - checkout
+      - restore_cache:
+          keys:
+            - pip-packages-v1-{{ .Branch }}-{{ checksum "Pipfile.lock" }}
+      - run:
+          command: |
+            pip install --user pipenv
+            pipenv install --user --dev
+      - save_cache:
+          key: pip-packages-v1-{{ .Branch }}-{{ checksum "Pipfile.lock" }}
+          paths:
+            - ".venv"
 
   download-test-data:
     description: "download & cache test data"
-      steps:
-        - checkout
-        - restore_cache:
-            keys:
-              - data-cache-v1-{{ .Branch }}-{{ checksum "tests/data/Makefile" }}
-        - run: make -C tests/data data
-        - save_cache:
-            key: data-cache-v1-{{ .Branch }}-{{ checksum "tests/data/Makefile" }}
-            paths:
-              - tests/data
+    steps:
+      - checkout
+      - restore_cache:
+          keys:
+            - data-cache-v1-{{ .Branch }}-{{ checksum "tests/data/Makefile" }}
+      - run: make -C tests/data data
+      - save_cache:
+          key: data-cache-v1-{{ .Branch }}-{{ checksum "tests/data/Makefile" }}
+          paths:
+            - tests/data
 
 
 jobs:
