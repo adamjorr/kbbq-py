@@ -39,10 +39,9 @@ commands:
   install-ubuntu-dependencies:
     description: "install ubuntu dependencies from apt"
     steps:
-      - run: sudo apt-get update
-      - run: sudo apt-get upgrade
       - run:
           command: |
+            sudo apt-get update
             sudo apt-get install -y lftp samtools bcftools picard-tools seqtk
 
   install-gatk:
