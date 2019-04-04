@@ -87,7 +87,11 @@ commands:
       - restore_cache:
           keys:
             - data-cache-v1-{{ .Branch }}-{{ checksum "tests/data/Makefile" }}
-      - run: make -C tests/data data
+      - run:
+          command: make -C tests/data data
+          shell: /bin/bash
+          environment:
+            SHELL: /bin/bash
       - save_cache:
           key: data-cache-v1-{{ .Branch }}-{{ checksum "tests/data/Makefile" }}
           paths:
