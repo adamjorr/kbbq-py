@@ -81,7 +81,7 @@ $(CONFBEDNAME) $(CONFVCFNAME):
 $(REFNAME): $(CONFBEDNAME)
 	samtools faidx $(REFURL) $(shell cut -f1 $< | sort | uniq) > $@
 
-$(RGSFILE):
+$(RGSFILE): | $(FULLBAMNAME).bai
 	samtools view -H $(BAMURL) | \
 	grep ^@RG | cut -f 2 | cut -d: -f2 | \
 	head -n $(NUMRGS) > $@
