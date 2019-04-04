@@ -35,7 +35,7 @@ VARSITES = variable_sites.txt
 
 #note this TAR cmd will fail unless the BED is made first.
 define TARTOCMD =
-'/bin/bash if [ $${TAR_FILENAME} == "$(FULLBEDNAME)" ]; then \
+'/bin/bash -eo pipefail -c if [ $${TAR_FILENAME} == "$(FULLBEDNAME)" ]; then \
 	zcat - | head -n $(NUMREGIONS) >$(CONFBEDNAME) ; \
 elif [ $${TAR_FILENAME} == "$(FULLVCFNAME)" ]; then \
 	bcftools view -T $(CONFBEDNAME) -Oz -o $(CONFVCFNAME) - ; \
