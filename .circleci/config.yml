@@ -25,7 +25,7 @@ commands:
           name: install from << parameters.url >>
           command: |
             KBBQ_INST_URL=<< parameters.url >>
-            tar x<< parameters.unzip >>vf $KBBQ_INST_URL
+            wget -qO- $KBBQ_INST_URL | tar x<< parameters.unzip >>vf-
             cd $(basename ${KBBQ_INST_URL%.*.*})
             ./configure --prefix=<< parameters.installdir >>
             make -j2
