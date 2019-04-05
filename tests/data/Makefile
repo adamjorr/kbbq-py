@@ -35,11 +35,11 @@ VARSITES = variable_sites.txt
 
 #note this TAR cmd will fail unless the BED is made first.
 define TARTOCMD =
-'if [ $${TAR_FILENAME} == "$(FULLBEDNAME)" ]; then \
+'bash -c "if [ $${TAR_FILENAME} == \"$(FULLBEDNAME)\" ]; then \
 	zcat - | head -n $(NUMREGIONS) >$(CONFBEDNAME) ; \
-elif [ $${TAR_FILENAME} == "$(FULLVCFNAME)" ]; then \
+elif [ $${TAR_FILENAME} == \"$(FULLVCFNAME)\" ]; then \
 	bcftools view -T $(CONFBEDNAME) -Oz -o $(CONFVCFNAME) - ; \
-fi'
+fi"'
 endef
 
 BEDTOREGIONS='BEGIN{OFS=""}{print $$1,":",($$2+1),"-",$$3}'
@@ -75,8 +75,6 @@ clean:
 #
 
 $(CONFBEDNAME) $(CONFVCFNAME):
-	echo $$SHELL
-	echo $$0
 	wget -qO- $(TARURL) | \
 	tar -xnf- --occurrence=1 --to-command=$(TARTOCMD) $(FULLBEDNAME) $(FULLVCFNAME)
 
