@@ -44,7 +44,7 @@ commands:
     description: "install external programs from their project urls"
     steps:
       - manual-install:
-          url: ftp://ftp.gnu.org/gnu/tar/tar-latest.tar.bz2
+          url: http://ftp.gnu.org/gnu/tar/tar-latest.tar.bz2
       - manual-install:
           url: https://github.com/samtools/htslib/releases/download/1.9/htslib-1.9.tar.bz2
       - manual-install:
@@ -104,7 +104,6 @@ commands:
           key: data-cache-v1-{{ .Branch }}-{{ checksum "tests/data/Makefile" }}
           paths:
             - tests/data
-
 
 jobs:
   build:
