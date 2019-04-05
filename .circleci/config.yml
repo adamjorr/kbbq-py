@@ -39,7 +39,7 @@ commands:
       - run:
           command: |
             sudo apt-get update
-            sudo apt-get install -y zlib1g-dev libbz2-dev liblzma-dev lftp picard-tools seqtk
+            sudo apt-get install -y zlib1g-dev libbz2-dev liblzma-dev lftp seqtk
 
   install-external-dependencies:
     description: "install external programs from their project urls"
@@ -72,6 +72,26 @@ commands:
           key: gatk-package-4.1.1.0
           paths:
             - "~/gatk-4.1.1.0"
+
+  install-picard:
+    description: "install picard and add to PATH"
+    steps:
+      - restore_cache:
+          keys:
+            - picard-package-2.19.0
+      - run:
+          command: |
+            if [ ! -e ~/picard ]; then
+              mkdir -p ~/picard
+              cd ~/picard
+              wget https://github.com/broadinstitute/picard/releases/download/2.19.0/picard.jar
+            fi
+            export PATH=PATH:~/picard
+            alias picard="java -jar ~/picard/picard.jar"
+      - save_cache:
+          key: picard-package-2.19.0
+          paths:
+            - "~/picard"
 
   install-py-dependencies:
     description: "checkout & install & cache python dependencies"
@@ -116,6 +136,7 @@ jobs:
       - install-external-dependencies
       - install-py-dependencies
       - install-gatk
+      - install-picard
       - download-test-data
       - run:
           command: |
