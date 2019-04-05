@@ -8,31 +8,27 @@ executors:
           PIPENV_VENV_IN_PROJECT: true
     working_directory: ~/kbbq
 
-
 commands:
   manual-install:
     description: "download, extract, configure, make, and make install a program"
     parameters:
       url:
         type: string
-      progname:
-        type: string
-        default: program
       installdir:
         type: string
         default: '/usr/local'
       unzip:
         type: string
-        default: gunzip
+        default: j
     steps:
       - run:
           name: install from << parameters.url >>
           command: |
-            wget << parameters.url >> -O - | << parameters.unzip >> -c > << parameters.name >>.tar
-            tar -xf << parameters.name >>.tar
-            cd << parameters.name >>
-            ./configure
-            make
+            KBBQ_INST_URL=<< parameters.url >>
+            tar x<< parameters.unzip >>vf $KBBQ_INST_URL
+            cd $(basename ${KBBQ_INST_URL%.*.*})
+            ./configure --prefix=<< parameters.installdir >>
+            make -j2
             sudo make install
             cd ..
 
@@ -42,7 +38,19 @@ commands:
       - run:
           command: |
             sudo apt-get update
-            sudo apt-get install -y lftp samtools bcftools picard-tools seqtk
+            sudo apt-get install -y lftp picard-tools seqtk
+
+  install-external-dependencies:
+    description: "install external programs from their project urls"
+    steps:
+      - manual-install:
+          url: ftp://ftp.gnu.org/gnu/tar/tar-latest.tar.bz2
+      - manual-install:
+          url: https://github.com/samtools/htslib/releases/download/1.9/htslib-1.9.tar.bz2
+      - manual-install:
+          url: https://github.com/samtools/samtools/releases/download/1.9/samtools-1.9.tar.bz2
+      - manual-install:
+          url: https://github.com/samtools/bcftools/releases/download/1.9/bcftools-1.9.tar.bz2
 
   install-gatk:
     description: "install gatk and add to PATH"
@@ -88,7 +96,7 @@ commands:
           keys:
             - data-cache-v1-{{ .Branch }}-{{ checksum "tests/data/Makefile" }}
       - run:
-          command: make -C tests/data data
+          command: make -j2 -C tests/data data
           shell: /bin/bash
           environment:
             SHELL: /bin/bash
@@ -103,6 +111,7 @@ jobs:
     executor: default-executor
     steps:
       - checkout
+      - install-external-dependencies
       - install-ubuntu-dependencies
       - install-py-dependencies
       - install-gatk
