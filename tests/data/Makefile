@@ -75,6 +75,8 @@ clean:
 #
 
 $(CONFBEDNAME) $(CONFVCFNAME):
+	echo $$SHELL
+	echo $$0
 	wget -qO- $(TARURL) | \
 	tar -xnf- --occurrence=1 --to-command=$(TARTOCMD) $(FULLBEDNAME) $(FULLVCFNAME)
 
