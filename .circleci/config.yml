@@ -97,10 +97,12 @@ commands:
           keys:
             - data-cache-v1-{{ .Branch }}-{{ checksum "tests/data/Makefile" }}
       - run:
-          command: make -j2 -C tests/data data
           shell: /bin/bash
           environment:
             SHELL: /bin/bash
+          command: |
+            tar --version
+            make -j2 -C tests/data data
       - save_cache:
           key: data-cache-v1-{{ .Branch }}-{{ checksum "tests/data/Makefile" }}
           paths:
