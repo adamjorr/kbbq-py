@@ -39,7 +39,7 @@ commands:
       - run:
           command: |
             sudo apt-get update
-            sudo apt-get install -y lftp picard-tools seqtk
+            sudo apt-get install -y zlib1g-dev libbz2-dev liblzma-dev lftp picard-tools seqtk
 
   install-external-dependencies:
     description: "install external programs from their project urls"
@@ -111,8 +111,8 @@ jobs:
     executor: default-executor
     steps:
       - checkout
-      - install-external-dependencies
       - install-ubuntu-dependencies
+      - install-external-dependencies
       - install-py-dependencies
       - install-gatk
       - download-test-data
