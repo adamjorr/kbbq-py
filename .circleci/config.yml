@@ -121,6 +121,7 @@ commands:
           environment:
             SHELL: /bin/bash
           command: |
+            alias picard="java -jar ~/picard/picard.jar"
             make -j2 -C tests/data SHELL=/bin/bash data
       - save_cache:
           key: data-cache-v1-{{ .Branch }}-{{ checksum "tests/data/Makefile" }}
