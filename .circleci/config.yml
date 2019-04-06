@@ -87,7 +87,7 @@ commands:
               wget https://github.com/broadinstitute/picard/releases/download/2.19.0/picard.jar
             fi
             export PATH=$PATH:~/picard
-            unlink $(which picard)
+            sudo unlink $(which picard)
             alias picard="java -jar ~/picard/picard.jar"
             java -version
             picard -h
