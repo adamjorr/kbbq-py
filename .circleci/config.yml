@@ -86,8 +86,9 @@ commands:
               cd ~/picard
               wget https://github.com/broadinstitute/picard/releases/download/2.19.0/picard.jar
             fi
-            export PATH=PATH:~/picard
+            export PATH=$PATH:~/picard
             alias picard="java -jar ~/picard/picard.jar"
+            picard --version
       - save_cache:
           key: picard-package-2.19.0
           paths:
