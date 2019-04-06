@@ -87,7 +87,7 @@ commands:
               wget https://github.com/broadinstitute/picard/releases/download/2.19.0/picard.jar
             fi
             export PATH=$PATH:~/picard
-            unalias picard
+            unlink $(which picard)
             alias picard="java -jar ~/picard/picard.jar"
             java -version
             picard -h
@@ -124,7 +124,6 @@ commands:
           environment:
             SHELL: /bin/bash
           command: |
-            unalias picard
             alias picard="java -jar ~/picard/picard.jar"
             make -j2 -C tests/data SHELL=/bin/bash data
       - save_cache:
