@@ -88,6 +88,7 @@ commands:
             fi
             export PATH=$PATH:~/picard
             alias picard="java -jar ~/picard/picard.jar"
+            java CreateSequenceDictionary -version
             picard --version
       - save_cache:
           key: picard-package-2.19.0
