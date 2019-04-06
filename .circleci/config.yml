@@ -39,7 +39,7 @@ commands:
       - run:
           command: |
             sudo apt-get update
-            sudo apt-get install -y zlib1g-dev libbz2-dev liblzma-dev lftp seqtk
+            sudo apt-get install -y zlib1g-dev libbz2-dev liblzma-dev lftp seqtk default-jre
 
   install-external-dependencies:
     description: "install external programs from their project urls"
@@ -88,8 +88,8 @@ commands:
             fi
             export PATH=$PATH:~/picard
             alias picard="java -jar ~/picard/picard.jar"
-            java CreateSequenceDictionary -version
-            picard --version
+            java -version
+            picard CreateSequenceDictionary --version
       - save_cache:
           key: picard-package-2.19.0
           paths:
