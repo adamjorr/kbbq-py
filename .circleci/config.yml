@@ -90,8 +90,6 @@ commands:
             sudo unlink $(which picard)
             function picard { java -jar ~/picard/picard.jar $@; }
             export -f picard
-            java -version
-            picard -h
       - save_cache:
           key: picard-package-2.19.0
           paths:
