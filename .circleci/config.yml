@@ -67,7 +67,6 @@ commands:
               unzip gatk-4.1.1.0.zip
               cd -
             fi
-            export PATH=PATH:~/gatk-4.1.1.0
       - save_cache:
           key: gatk-package-4.1.1.0
           paths:
@@ -86,7 +85,6 @@ commands:
               cd ~/picard
               wget https://github.com/broadinstitute/picard/releases/download/2.19.0/picard.jar
             fi
-            export PATH=$PATH:~/picard
             sudo unlink $(which picard)
             function picard { java -jar ~/picard/picard.jar $@; }
             export -f picard
@@ -125,6 +123,7 @@ commands:
           command: |
             function picard { java -jar ~/picard/picard.jar $@; }
             export -f picard
+            export PATH=${PATH}:~/gatk-4.1.1.0
             make -j2 -C tests/data SHELL=/bin/bash data
       - save_cache:
           key: data-cache-v1-{{ .Branch }}-{{ checksum "tests/data/Makefile" }}
