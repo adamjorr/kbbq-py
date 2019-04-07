@@ -88,7 +88,8 @@ commands:
             fi
             export PATH=$PATH:~/picard
             sudo unlink $(which picard)
-            alias picard="java -jar ~/picard/picard.jar"
+            function picard { java -jar ~/picard/picard.jar $@; }
+            export -f picard
             java -version
             picard -h
       - save_cache:
@@ -124,7 +125,8 @@ commands:
           environment:
             SHELL: /bin/bash
           command: |
-            alias picard="java -jar ~/picard/picard.jar"
+            function picard { java -jar ~/picard/picard.jar $@; }
+            export -f picard
             make -j2 -C tests/data SHELL=/bin/bash data
       - save_cache:
           key: data-cache-v1-{{ .Branch }}-{{ checksum "tests/data/Makefile" }}
