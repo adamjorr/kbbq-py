@@ -1,4 +1,8 @@
 # kbbq
+
+[![codecov](https://codecov.io/gh/adamjorr/kbbq/branch/master/graph/badge.svg)](https://codecov.io/gh/adamjorr/kbbq)
+[![CircleCI](https://circleci.com/gh/adamjorr/kbbq.svg?style=svg)](https://circleci.com/gh/adamjorr/kbbq)
+
 k-mer based base quality recalibration
 
 ## a helpful k-mer diagram
