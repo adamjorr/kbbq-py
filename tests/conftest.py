@@ -13,3 +13,8 @@ def report(report_and_file):
 def recalibratedbam(request):
     import pysam
     return pysam.AlignmentFile(request.param,"r")
+
+@pytest.fixture(params = ['tests/data/variable_sites.txt'])
+def variable_sites(request):
+    from kbbq import compare_reads
+    return compare_reads.load_positions(request.param)

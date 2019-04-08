@@ -1,6 +1,7 @@
 import pytest
 from kbbq import compare_reads
 import numpy as np
+import filecmp
 
 def test_bam_calibration(report, recalibratedbam):
     """
@@ -14,3 +15,12 @@ def test_bam_calibration(report, recalibratedbam):
         gatk_calibrated_quals = np.array(read.query_qualities, dtype = np.int)
         recalibrated_quals = compare_reads.recalibrate_bamread(read, meanq, *dqs, rg_to_int, compare_reads.Dinucleotide.dinuc_to_int)
         assert np.array_equal(recalibrated_quals, gatk_calibrated_quals)
+
+# def test_report_creation(report, recalibratedbam, variable_sites):
+#     """
+#     Test our method to make the recalibrationreport from a bam matches GATK
+#     """
+    
+
+
+
