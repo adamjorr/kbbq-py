@@ -1,7 +1,7 @@
 {
     "_meta": {
         "hash": {
-            "sha256": "7af6fb5e6f67d3038d0a2c5bd972aa6d0f1681f706ac498f0847fefc331256ae"
+            "sha256": "fdc08797e51a33e8502dd2b78adb29eb3f9169b2eb0b92cb993750162ffd6c5d"
         },
         "pipfile-spec": 6,
         "requires": {
@@ -150,10 +150,10 @@
         },
         "pyparsing": {
             "hashes": [
-                "sha256:66c9268862641abcac4a96ba74506e594c884e3f57690a696d21ad8210ed667a",
-                "sha256:f6c5ef0d7480ad048c054c37632c67fca55299990fff127850181659eea33fc3"
+                "sha256:1873c03321fc118f4e9746baf201ff990ceb915f433f23b395f5580d1840cb2a",
+                "sha256:9b6323ef4ab914af344ba97510e966d64ba91055d6b9afa6b30799340e89cc03"
             ],
-            "version": "==2.3.1"
+            "version": "==2.4.0"
         },
         "pysam": {
             "hashes": [
@@ -327,6 +327,7 @@
                 "sha256:f8019c5279eb32360ca03e9fac40a12667715546eed5c5eb59eb381f2f501260",
                 "sha256:fc5f4d209733750afd2714e9109816a29500718b32dd9a5db01c0cb3a019b96a"
             ],
+            "index": "pypi",
             "version": "==4.5.3"
         },
         "more-itertools": {
