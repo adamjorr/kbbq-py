@@ -566,23 +566,6 @@ def q_to_p(q):
     p = np.array(np.power(10.0,-(q / 10.0)), dtype = np.longdouble, copy = True)
     return p
 
-def bam_test(bamfile, table, rg_to_int, rg_order, seqlen, minscore = 6, maxscore = 42):
-    print(tstamp(), "Beginning BAM test . . .", file = sys.stderr)
-    meanq, global_errs, global_total, q_errs, q_total, pos_errs, pos_total, dinuc_errs, dinuc_total = table_to_vectors(table, rg_order, seqlen, maxscore)
-    globaldeltaq, qscoredeltaq, positiondeltaq, dinucdeltaq = get_delta_qs(meanq, global_errs, global_total, q_errs, q_total, pos_errs, pos_total, dinuc_errs, dinuc_total)
-    dinuc_to_int = Dinucleotide.dinuc_to_int
-    bam = pysam.AlignmentFile(bamfile,'r')
-    for read in bam:
-        gatk_calibrated_quals = np.array(read.query_qualities, dtype = np.int)
-        recalibrated_quals = recalibrate_bamread(read, meanq, globaldeltaq, qscoredeltaq, positiondeltaq, dinucdeltaq, rg_to_int, dinuc_to_int)
-        try:
-            assert np.array_equal(recalibrated_quals, gatk_calibrated_quals)
-        except AssertionError:
-            print('GATK calibrated:', gatk_calibrated_quals)
-            print('Recalibrated:', recalibrated_quals)
-            raise
-    print(tstamp(), "BAM test completed successfully.", file = sys.stderr)
-
 ## Generic covariate functions
 
 def generic_cycle_covariate(sequencelen, secondinpair = False):
@@ -714,10 +697,6 @@ def main():
     bamfile = pysam.AlignmentFile(bamfilename,"r")
     id_to_pu = {rg['ID'] : rg['PU'] for rg in bamfile.header.as_dict()['RG']}
     unique_pus = [id_to_pu[rg] for rg in unique_rgs]
-
-    # np.set_printoptions(threshold = np.inf)
-    # bam_test("only_confident.sorted.recal.bam", tablefile, rg_to_int, unique_pus, dinuc_order, seqlen)
-    # quit()
 
     reversecycle = np.zeros(len(names), dtype = np.bool)
     reversecycle[np.array(list(names.values()), dtype = np.int)] = np.char.endswith(np.array(list(names.keys()), dtype = np.unicode),'/2')
