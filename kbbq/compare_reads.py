@@ -246,7 +246,7 @@ def gatk_delta_q(prior_q, numerrs, numtotal, maxscore = 42):
 #this passes bam test
 def table_to_vectors(table, rg_order, maxscore = 42):
     #the recal table uses the PU of the read group as the read group entry in the table
-    #see vectors_to_table for more info
+    #see vectors_to_report for more info
     # table = recaltable.RecalibrationReport.from_file(tablefile)
     dinuc_order = Dinucleotide.dinuc_to_int.keys()
     rgtable = table.tables[2].data.reindex(rg_order)
@@ -277,9 +277,8 @@ def table_to_vectors(table, rg_order, maxscore = 42):
 
     return meanq, global_errs, global_total, q_errs, q_total, pos_errs, pos_total, dinuc_errs, dinuc_total
 
-def vectors_to_table(meanq, global_errs, global_total, q_errs, q_total,
-    pos_errs, pos_total, dinuc_errs, dinuc_total, rg_order, dinuc_order,
-    seqlen, maxscore = 42):
+def vectors_to_report(meanq, global_errs, global_total, q_errs, q_total,
+    pos_errs, pos_total, dinuc_errs, dinuc_total, rg_order, maxscore = 42):
     """
     Turn the set of recalibration vectors into a
     :class:`kbbq.recaltable.RecalibrationReport` object.
@@ -305,8 +304,6 @@ def vectors_to_table(meanq, global_errs, global_total, q_errs, q_total,
     :param np.array[\:,\:,\:] dinuc_total: Number of observations for each read
         group, q, and dinucleotide subset.
     :param list(str) rg_order: The order of read groups
-    :param list(str) dinuc_order: The order of dinucleotides
-    :param int seqlen: The length of the sequences
     :param int maxscore: The maximum possible quality score
     :return: the recalibration table
     :rtype: :class:`kbbq.recaltable.RecalibrationReport`
@@ -395,6 +392,81 @@ def vectors_to_table(meanq, global_errs, global_total, q_errs, q_total,
     covariatetable = dinuctable.append(cycletable)
 
     return recaltable.RecalibrationReport([argtable, quanttable, rgtable, dinuctable, covariatetable])
+
+def bam_to_report(bamfileobj, fastafilename, var_pos):
+    # gatkcalibratedquals, erroneous, skips = find_errors(bamfileobj, fastafilename, bad_positions, names, seqlen)
+    # need def get_covariate_arrays(q, rgs, dinucleotide, errors, reversecycle, maxscore = 42, minscore = 6):
+    rgs = get_rg_to_pu(bamfileobj).keys()
+    *vectors = bam_to_covariate_arrays(bamfileobj, fastafilename, var_pos)
+    return vectors_to_report(*vectors, rgs,)
+
+def bam_to_data_arrays():
+    """
+    Given a BAM file object, FASTA reference file name and var_pos dict,
+    get generic data arrays containing q, read names, errors, etc.
+    """
+    pass
+
+def bam_to_covariate_arrays(bamfileobj, fastafilename, var_pos, maxscore = 42):
+    """
+    Given a BAM file object, FASTA reference file name and var_pos dict,
+    get the standard covariate arrays.
+    """
+    rg_to_pu = get_rg_to_pu(bamfileobj)
+    nrgs = len(rg_to_pu.keys())
+    rg_to_int = dict(zip(rg_to_pu, range(len(rg_to_pu))))
+    fasta = pysam.FastaFile(fastafilename)
+    #the below can probably be spun out to a function, i think we only use fullskips
+    ref = {chrom : np.array(list(fasta.fetch(reference = chrom)), dtype = np.unicode) for chrom in fasta.references}
+    varsites = {chrom : np.array(var_pos[chrom], dtype = np.int) for chrom in var_pos.keys()}
+    fullskips = {chrom : np.zeros(len(ref[chrom]), dtype = np.bool) for chrom in ref.keys()}
+    for chrom in fullskips.keys():
+        variable_positions = varsites[chrom]
+        fullskips[chrom][variable_positions] = True
+
+    nreads = np.sum([s.total for s in bamfileobj.get_index_statistics()])
+    counter = 0
+    read = next(bamfileobj)
+    readlen = len(read.get_quality_array())
+
+    rgs = np.array((seqlen), dtype = np.int_)
+    meanq = np.zeros(nrgs, dtype = np.int_)
+    expected_errs = np.zeros(nrgs, dtype = np.longdouble)
+    rg_errs = np.zeros(nrgs, dtype = np.int_)
+    rg_total = np.zeros(nrgs, dtype = np.int_)
+    q_errs = np.zeros((nrgs, maxscore + 1), dtype = np.int_)
+    q_total = np.zeros((nrgs, maxscore + 1), dtype = np.int_)
+    pos_errs = np.zeros((nrgs, maxscore + 1, 2 * seqlen), dtype = np.int_)
+    pos_total = np.zeros((nrgs, maxscore + 1, 2 * seqlen), dtype = np.int_)
+    dinuc_errs = np.zeros((nrgs, maxscore + 1, 16), dtype = np.int_)
+    dinuc_total = np.zeros((nrgs, maxscore + 1, 16), dtype = np.int_)
+    
+    try:
+        while True:
+            rgs[:] = rg_to_int[read.get_tag('RG')]
+            q = bamread_get_oq(read)
+            pos = bamread_cycle_covariates(read)
+            dinucleotide = bamread_dinuc_covariates(read, Dinucleotide.dinuc_to_int, Dinucleotide.complement)
+            errors = find_read_errors(read, ref, fullskips)
+            valid = (dinuc != -1)
+            e_and_valid = np.logical_and(errors, valid)
+            rge = rgs[errors]
+            qe = q[errors]
+
+            np.add.at(expected_errs, rgs, q_to_p(q))
+            np.add.at(rg_errs, rge, 1)
+            np.add.at(rg_total, rgs, 1)
+            np.add.at(q_errs, (rge, qe), 1)
+            np.add.at(q_total, (rgs, q), 1)
+            np.add.at(pos_errs, (rge, qe, pos[errors]), 1)
+            np.add.at(pos_total, (rgs, q, pos), 1)
+            np.add.at(dinuc_errs, (rgs[e_and_valid], q[e_and_valid], dinucleotide[e_and_valid]), 1)
+            np.add.at(dinuc_total, (rgs[valid], q[valid], dinucleotide[valid]), 1)
+            read = next(bamfileobj)
+    except StopIteration:
+        pass
+    meanq = p_to_q(expected_errs / rg_total)
+    return meanq, rg_errs, rg_total, q_errs, q_total, pos_errs, pos_total, dinuc_errs, dinuc_total
 
 def table_recalibrate(q, table, rg_order, seqlen, reversecycle, rgs, dinucleotide, minscore = 6, maxscore = 42):
     meanq, global_errs, global_total, q_errs, q_total, pos_errs, pos_total, dinuc_errs, dinuc_total = table_to_vectors(table, rg_order, seqlen, maxscore)
@@ -610,11 +682,9 @@ def recalibrate_fastq(read, meanq, globaldeltaq, qscoredeltaq, positiondeltaq, d
 
 ## Recalibrate reads from a BAM
 
-def bamread_get_fwd_oq(read):
+def bamread_get_oq(read):
     oq = np.array(list(read.get_tag('OQ')), dtype = np.unicode)
     quals = np.array(oq.view(np.uint32) - 33, dtype = np.uint32)
-    if read.is_reverse:
-        quals = np.flip(quals)
     return quals
 
 def bamread_cycle_covariates(read):
