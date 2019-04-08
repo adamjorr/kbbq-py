@@ -1,7 +1,7 @@
 {
     "_meta": {
         "hash": {
-            "sha256": "fdc08797e51a33e8502dd2b78adb29eb3f9169b2eb0b92cb993750162ffd6c5d"
+            "sha256": "1e7fa15f5a31a2ae665a4c2ccd48f0250489caf76d14ff0e4ceeeb2ccff2cd0b"
         },
         "pipfile-spec": 6,
         "requires": {
@@ -213,6 +213,7 @@
                 "sha256:f650ddc023c95681fccd5e297820f35de039e008265040c08188be95b3275a0f",
                 "sha256:f7d4b3885ad1a7a6f07719ab6b1790d9892d6d41d973e8d4543a93bb15226fb4"
             ],
+            "index": "pypi",
             "version": "==0.20.3"
         },
         "scipy": {
@@ -269,13 +270,6 @@
                 "sha256:d16a0141ec1a18405cd4ce8b4613101da75da0e9a7aec5bdd4fa804d0e0eba73"
             ],
             "version": "==1.12.0"
-        },
-        "sklearn": {
-            "hashes": [
-                "sha256:e23001573aa194b834122d2b9562459bf5ae494a2d59ca6b8aa22c85a44c0e31"
-            ],
-            "index": "pypi",
-            "version": "==0.0"
         }
     },
     "develop": {
