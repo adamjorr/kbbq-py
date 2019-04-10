@@ -17,7 +17,7 @@ def test_bam_calibration(report, recalibratedbam):
         assert np.array_equal(recalibrated_quals, gatk_calibrated_quals)
 
 def test_bam_to_covariate_arrays(report, recalibratedbam, variable_sites):
-    *vectors = compare_reads.bam_to_covariate_arrays(recalibratedbam, 'tests/data/ref.fa', variable_sites)
+    *vectors, = compare_reads.bam_to_covariate_arrays(recalibratedbam, 'tests/data/ref.fa', variable_sites)
     bamreport = vectors_to_report(*vectors, )
 
 # def test_report_creation(report, recalibratedbam, variable_sites):

@@ -397,7 +397,7 @@ def bam_to_report(bamfileobj, fastafilename, var_pos):
     # gatkcalibratedquals, erroneous, skips = find_errors(bamfileobj, fastafilename, bad_positions, names, seqlen)
     # need def get_covariate_arrays(q, rgs, dinucleotide, errors, reversecycle, maxscore = 42, minscore = 6):
     rgs = get_rg_to_pu(bamfileobj).keys()
-    *vectors = bam_to_covariate_arrays(bamfileobj, fastafilename, var_pos)
+    *vectors, = bam_to_covariate_arrays(bamfileobj, fastafilename, var_pos)
     return vectors_to_report(*vectors, rgs,)
 
 def bam_to_data_arrays():
