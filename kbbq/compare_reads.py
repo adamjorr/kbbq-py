@@ -448,7 +448,7 @@ def bam_to_covariate_arrays(bamfileobj, fastafilename, var_pos, maxscore = 42):
             pos = bamread_cycle_covariates(read)
             dinucleotide = bamread_dinuc_covariates(read, Dinucleotide.dinuc_to_int, Dinucleotide.complement)
             errors = find_read_errors(read, ref, fullskips)
-            valid = (dinuc != -1)
+            valid = (dinucleotide != -1)
             e_and_valid = np.logical_and(errors, valid)
             rge = rgs[errors]
             qe = q[errors]
