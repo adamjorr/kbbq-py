@@ -429,7 +429,7 @@ def bam_to_covariate_arrays(bamfileobj, fastafilename, var_pos, maxscore = 42):
     read = next(bamfileobj)
     seqlen = len(read.query_qualities)
 
-    rgs = np.array((seqlen), dtype = np.int_)
+    rgs = np.zeros(seqlen, dtype = np.int_)
     meanq = np.zeros(nrgs, dtype = np.int_)
     expected_errs = np.zeros(nrgs, dtype = np.longdouble)
     rg_errs = np.zeros(nrgs, dtype = np.int_)
