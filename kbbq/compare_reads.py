@@ -427,7 +427,7 @@ def bam_to_covariate_arrays(bamfileobj, fastafilename, var_pos, maxscore = 42):
     nreads = np.sum([s.total for s in bamfileobj.get_index_statistics()])
     counter = 0
     read = next(bamfileobj)
-    readlen = len(read.get_quality_array())
+    readlen = len(read.query_qualities)
 
     rgs = np.array((seqlen), dtype = np.int_)
     meanq = np.zeros(nrgs, dtype = np.int_)
