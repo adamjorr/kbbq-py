@@ -1,6 +1,9 @@
 Module Reference
 ================
 
+.. contents::
+	:local:
+
 .. automodule:: kbbq
     :members:
     :undoc-members:
