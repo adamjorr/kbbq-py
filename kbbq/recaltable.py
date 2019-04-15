@@ -94,6 +94,24 @@ class GATKReport:
         return self.get_headerstring() + '\n' + \
             '\n\n'.join([str(t) for t in self.tables] + [''])
 
+    def __eq__(self, other):
+        """
+        Test whether two reports are equal. Note that the order of tables
+        is significant, and this function will return false if the tables
+        are not in the same order.
+        """
+        if type(other) is type(self):
+            if self.version != other.version:
+                return False
+            elif:
+                for s, o in zip(self.tables, other.tables):
+                    if not s == o:
+                        return False
+            else:
+                return True
+        else:
+            return NotImplemented
+
 class GATKTable:
     """
     A class representing a GATK report table.
@@ -327,6 +345,14 @@ class GATKTable:
 
     def __repr__(self):
         return self.get_fmtstring() + '\n' + self.get_titlestring() + '\n' + repr(self.data)
+
+    def __eq__(self, other):
+        if type(other) is type(self):
+            return self.title == other.title and \
+                self.description == other.description and \
+                self.data.equals(other.data)
+        else:
+            return NotImplemented
 
 class RecalibrationReport(GATKReport):
     """
