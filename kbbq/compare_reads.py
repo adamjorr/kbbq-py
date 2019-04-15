@@ -337,7 +337,8 @@ def vectors_to_report(meanq, global_errs, global_total, q_errs, q_total,
     argdata = {'Argument' : list(args.keys()),
     'Value' : list(args.values())
     }
-    argtable = pd.DataFrame(data = argdata, index = ['Argument'])
+    argtable = pd.DataFrame(data = argdata)
+    argtable.set_index('Argument')
 
     rgdata = {'ReadGroup' : rg_order,
         'EventType' : 'M',
@@ -346,7 +347,8 @@ def vectors_to_report(meanq, global_errs, global_total, q_errs, q_total,
         'Observations' : global_total,
         'Errors' : global_errs
         }
-    rgtable = pd.DataFrame(data = rgdata, index = ['ReadGroup'])
+    rgtable = pd.DataFrame(data = rgdata)
+    rgtable.set_index('ReadGroup')
 
     qualscore = np.broadcast_to(np.arange(q_total.shape[1]), (q_total.shape))
     qualdata = {'ReadGroup' : np.repeat(rg_order, q_total.shape[1]),
@@ -356,14 +358,16 @@ def vectors_to_report(meanq, global_errs, global_total, q_errs, q_total,
         'Observations' : q_total,
         'Errors' : q_errs
         }
-    qualtable = pd.DataFrame(data = qualdata, index = ['ReadGroup','QualityScore'])
+    qualtable = pd.DataFrame(data = qualdata)
+    qualtable.set_index(['ReadGroup','QualityScore'])
 
     #no quantization, but still have to make the quantization table
     quantdata = {'QualityScore' : qualscore,
         'Count' : np.sum(q_total, axis = 0),
         'QuantizedScore' : qualscore
         }
-    quanttable = pd.DataFrame(data = quantdata, index = ['QualityScore'])
+    quanttable = pd.DataFrame(data = quantdata)
+    quanttable.set_index('QualityScore')
 
     dinuc_q = np.repeat(np.broadcast_to(np.arange(dinuc_total.shape[1]), (dinuc_total.shape[0:2])), dinuc_total.shape[2])
     dinucdata = {'ReadGroup' : np.repeat(rg_order, np.prod(dinuc_total.shape[1:])),
@@ -375,7 +379,9 @@ def vectors_to_report(meanq, global_errs, global_total, q_errs, q_total,
         'Observations' : dinuc_total,
         'Errors' : dinuc_errs
         }
-    dinuctable = pd.DataFrame(data = dinucdata, index = ['ReadGroup', 'QualityScore','CovariateName','CovariateValue'])
+    dinuctable = pd.DataFrame(data = dinucdata)
+    dinuctable.set_index(['ReadGroup', 'QualityScore','CovariateName','CovariateValue'])
+
     cycle_q = np.repeat(np.broadcast_to(np.arange(pos_total.shape[1]), (pos_total.shape[0:2])), pos_total.shape[2])
     ncycles = pos_total.shape[2] / 2
     cycle_values = np.concatenate([np.arange(ncycles) + 1, np.flip(-(np.arange(ncycles)+1),axis=0)])
@@ -388,7 +394,8 @@ def vectors_to_report(meanq, global_errs, global_total, q_errs, q_total,
         'Observations' : pos_total,
         'Errors' : pos_errs
         }
-    cycletable = pd.DataFrame(data = cycledata, index = ['ReadGroup', 'QualityScore','CovariateName','CovariateValue'])
+    cycletable = pd.DataFrame(data = cycledata)
+    cyclatable.set_index(['ReadGroup', 'QualityScore','CovariateName','CovariateValue'])
     covariatetable = dinuctable.append(cycletable)
 
     return recaltable.RecalibrationReport([argtable, quanttable, rgtable, dinuctable, covariatetable])
