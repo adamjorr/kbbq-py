@@ -335,7 +335,7 @@ def vectors_to_report(meanq, global_errs, global_total, q_errs, q_total,
         'solid_recal_mode' : 'SET_Q_ZERO'
         }
     argdata = {'Argument' : list(args.keys()),
-    'Value' : list(args.values()),
+    'Value' : list(args.values())
     }
     argtable = pd.DataFrame(data = argdata, index = 'Argument')
 
