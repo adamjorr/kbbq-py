@@ -337,7 +337,7 @@ def vectors_to_report(meanq, global_errs, global_total, q_errs, q_total,
     argdata = {'Argument' : list(args.keys()),
     'Value' : list(args.values())
     }
-    argtable = pd.DataFrame(data = argdata, index = 'Argument')
+    argtable = pd.DataFrame(data = argdata, index = ['Argument'])
 
     rgdata = {'ReadGroup' : rg_order,
         'EventType' : 'M',
@@ -346,7 +346,7 @@ def vectors_to_report(meanq, global_errs, global_total, q_errs, q_total,
         'Observations' : global_total,
         'Errors' : global_errs
         }
-    rgtable = pd.DataFrame(data = rgdata, index = 'ReadGroup')
+    rgtable = pd.DataFrame(data = rgdata, index = ['ReadGroup'])
 
     qualscore = np.broadcast_to(np.arange(q_total.shape[1]), (q_total.shape))
     qualdata = {'ReadGroup' : np.repeat(rg_order, q_total.shape[1]),
@@ -363,7 +363,7 @@ def vectors_to_report(meanq, global_errs, global_total, q_errs, q_total,
         'Count' : np.sum(q_total, axis = 0),
         'QuantizedScore' : qualscore
         }
-    quanttable = pd.DataFrame(data = quantdata, index = 'QualityScore')
+    quanttable = pd.DataFrame(data = quantdata, index = ['QualityScore'])
 
     dinuc_q = np.repeat(np.broadcast_to(np.arange(dinuc_total.shape[1]), (dinuc_total.shape[0:2])), dinuc_total.shape[2])
     dinucdata = {'ReadGroup' : np.repeat(rg_order, np.prod(dinuc_total.shape[1:])),
