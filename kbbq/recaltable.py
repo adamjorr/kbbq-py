@@ -103,12 +103,12 @@ class GATKReport:
         if type(other) is type(self):
             if self.version != other.version:
                 return False
-            elif:
+            else:
                 for s, o in zip(self.tables, other.tables):
                     if not s == o:
                         return False
-            else:
-                return True
+                else:
+                    return True
         else:
             return NotImplemented
 
