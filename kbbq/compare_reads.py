@@ -353,7 +353,7 @@ def vectors_to_report(meanq, global_errs, global_total, q_errs, q_total,
     qualscore = np.broadcast_to(np.arange(q_total.shape[1]), (q_total.shape))
     qualdata = {'ReadGroup' : np.repeat(rg_order, q_total.shape[1]),
         'QualityScore' : qualscore,
-        'EventType' : 'M',
+        'EventType' : np.reapeat('M', q_total.shape[1]),
         'EmpiricalQuality' : gatk_delta_q(qualscore.flatten(), q_errs.flatten(), q_total.flatten()) + qualscore.flatten(),
         'Observations' : q_total,
         'Errors' : q_errs
