@@ -328,7 +328,7 @@ def vectors_to_report(meanq, global_errs, global_total, q_errs, q_total,
         'mismatches_context_size' : '2',
         'mismatches_default_quality' : '-1',
         'no_standard_covs' : 'false',
-        'quantizing_levels' : str(q_total.shape[1]),
+        'quantizing_levels' : '16',
         'recalibration_report' : 'null',
         'run_without_dbsnp' : 'false',
         'solid_nocall_strategy' : 'THROW_EXCEPTION',
@@ -350,34 +350,39 @@ def vectors_to_report(meanq, global_errs, global_total, q_errs, q_total,
     rgtable = pd.DataFrame(data = rgdata)
     rgtable.set_index('ReadGroup')
 
-    qualscore = np.broadcast_to(np.arange(q_total.shape[1]), (q_total.shape))
+    qualscore = np.broadcast_to(np.arange(q_total.shape[1]), (q_total.shape)).copy()
     qualdata = {'ReadGroup' : np.repeat(rg_order, q_total.shape[1]),
-        'QualityScore' : qualscore,
-        'EventType' : np.reapeat('M', q_total.shape[1]),
+        'QualityScore' : qualscore.flatten(),
+        'EventType' : np.broadcast_to('M', (q_total.shape)).flatten(),
         'EmpiricalQuality' : gatk_delta_q(qualscore.flatten(), q_errs.flatten(), q_total.flatten()) + qualscore.flatten(),
-        'Observations' : q_total,
-        'Errors' : q_errs
+        'Observations' : q_total.flatten(),
+        'Errors' : q_errs.flatten()
         }
     qualtable = pd.DataFrame(data = qualdata)
     qualtable.set_index(['ReadGroup','QualityScore'])
 
     #no quantization, but still have to make the quantization table
-    quantdata = {'QualityScore' : qualscore,
-        'Count' : np.sum(q_total, axis = 0),
-        'QuantizedScore' : qualscore
+    #TODO: actual quant algo
+    quantscores = np.arange(94)
+    qcount = np.zeros(quantscores.shape)
+    qcount[qualscore[0,]] = np.sum(q_total, axis = 0)
+    quantized = quantscores #TODO: actually quantize
+    quantdata = {'QualityScore' : quantscores,
+        'Count' : qcount,
+        'QuantizedScore' : quantized
         }
     quanttable = pd.DataFrame(data = quantdata)
     quanttable.set_index('QualityScore')
 
     dinuc_q = np.repeat(np.broadcast_to(np.arange(dinuc_total.shape[1]), (dinuc_total.shape[0:2])), dinuc_total.shape[2])
     dinucdata = {'ReadGroup' : np.repeat(rg_order, np.prod(dinuc_total.shape[1:])),
-        'QualityScore' : dinuc_q,
-        'CovariateValue' : np.broadcast_to(np.arange(dinuc_total.shape[2]), dinuc_total.shape),
-        'CovariateName' : 'Context',
-        'EventType' : 'M',
+        'QualityScore' : dinuc_q.flatten(),
+        'CovariateValue' : np.broadcast_to(np.arange(dinuc_total.shape[2]), dinuc_total.shape).flatten(),
+        'CovariateName' : np.broadcast_to('Context', dinuc_total.shape).flatten(),
+        'EventType' : np.broadcast_to('M',dinuc_total.shape).flatten(),
         'EmpiricalQuality' : gatk_delta_q(dinuc_q.flatten(), dinuc_errs.flatten(), dinuc_total.flatten()) + dinuc_q.flatten(),
-        'Observations' : dinuc_total,
-        'Errors' : dinuc_errs
+        'Observations' : dinuc_total.flatten(),
+        'Errors' : dinuc_errs.flatten()
         }
     dinuctable = pd.DataFrame(data = dinucdata)
     dinuctable.set_index(['ReadGroup', 'QualityScore','CovariateName','CovariateValue'])
@@ -385,25 +390,31 @@ def vectors_to_report(meanq, global_errs, global_total, q_errs, q_total,
     cycle_q = np.repeat(np.broadcast_to(np.arange(pos_total.shape[1]), (pos_total.shape[0:2])), pos_total.shape[2])
     ncycles = pos_total.shape[2] / 2
     cycle_values = np.concatenate([np.arange(ncycles) + 1, np.flip(-(np.arange(ncycles)+1),axis=0)])
-    cycledata = {'ReadGroup' : np.repeat(rg_order, np.prod(pos_total.shape[1:])),
-        'QualityScore' : cycle_q,
-        'CovariateValue' : np.broadcast_to(cycle_values, pos_total.shape),
-        'CovariateName' : 'Cycle',
-        'EventType' : 'M',
-        'EmpiricalQuality' : gatk_delta_q(cycle_q.flatten(), pos_errs.flatten(), pos_total.flatten()) + pos_q.flatten(),
-        'Observations' : pos_total,
-        'Errors' : pos_errs
+    cycledata = {'ReadGroup' : np.repeat(rg_order, np.prod(pos_total.shape[1:])).flatten(),
+        'QualityScore' : cycle_q.flatten(),
+        'CovariateValue' : np.broadcast_to(cycle_values, pos_total.shape).flatten(),
+        'CovariateName' : np.broadcast_to('Cycle',pos_total.shape).flatten(),
+        'EventType' : np.broadcast_to('M',pos_total.shape).flatten(),
+        'EmpiricalQuality' : gatk_delta_q(cycle_q.flatten(), pos_errs.flatten(), pos_total.flatten()) + cycle_q.flatten(),
+        'Observations' : pos_total.flatten(),
+        'Errors' : pos_errs.flatten()
         }
     cycletable = pd.DataFrame(data = cycledata)
-    cyclatable.set_index(['ReadGroup', 'QualityScore','CovariateName','CovariateValue'])
+    cycletable.set_index(['ReadGroup', 'QualityScore','CovariateName','CovariateValue'])
     covariatetable = dinuctable.append(cycletable)
 
-    return recaltable.RecalibrationReport([argtable, quanttable, rgtable, dinuctable, covariatetable])
+    titles = ['Arguments','Quantized','RecalTable0','RecalTable1','RecalTable2']
+    descriptions = ['Recalibration argument collection values used in this run',
+        'Quality quantization map', '' , '' , '']
+    gatktables = [recaltable.GATKTable(title, desc, table) for title, desc, table in \
+        zip(titles, descriptions, [argtable, quanttable, rgtable, dinuctable, covariatetable])]
+
+    return recaltable.RecalibrationReport(gatktables)
 
 def bam_to_report(bamfileobj, fastafilename, var_pos):
     # gatkcalibratedquals, erroneous, skips = find_errors(bamfileobj, fastafilename, bad_positions, names, seqlen)
     # need def get_covariate_arrays(q, rgs, dinucleotide, errors, reversecycle, maxscore = 42, minscore = 6):
-    rgs = get_rg_to_pu(bamfileobj).keys()
+    rgs = list(get_rg_to_pu(bamfileobj).keys())
     *vectors, = bam_to_covariate_arrays(bamfileobj, fastafilename, var_pos)
     return vectors_to_report(*vectors, rgs)
 

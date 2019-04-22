@@ -2,6 +2,7 @@ import pytest
 from kbbq import compare_reads
 import numpy as np
 import filecmp
+from pandas.util.testing import assert_frame_equal
 
 def test_bam_calibration(report, recalibratedbam):
     """
@@ -18,6 +19,13 @@ def test_bam_calibration(report, recalibratedbam):
 
 def test_bam_to_report(report, recalibratedbam, variable_sites):
     bamreport = compare_reads.bam_to_report(recalibratedbam, 'tests/data/ref.fa', variable_sites)
+    assert report.version == bamreport.version
+    for s, o in zip(report.tables, bamreport.tables):
+        assert s.title == o.title
+        assert s.description == o.description
+        assert_frame_equal(s.data, o.data)
+        assert s.data.equals(o.data)
+        assert s == o
     assert report == bamreport
 
 # def test_report_creation(report, recalibratedbam, variable_sites):

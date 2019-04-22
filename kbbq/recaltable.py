@@ -94,6 +94,10 @@ class GATKReport:
         return self.get_headerstring() + '\n' + \
             '\n\n'.join([str(t) for t in self.tables] + [''])
 
+    def __repr__(self):
+        return self.get_headerstring() + '\n' + \
+            '\n'.join([repr(t) for t in self.tables]) + '\n'
+
     def __eq__(self, other):
         """
         Test whether two reports are equal. Note that the order of tables
