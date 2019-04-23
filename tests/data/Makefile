@@ -90,7 +90,7 @@ $(FULLBAMNAME).bai:
 	lftp -c "pget -n 10 $(BAMURL).bai -o $@"
 
 $(CONFBAMNAME): $(CONFBEDNAME) $(RGSFILE) | $(FULLBAMNAME).bai
-	samtools view -h -b -M -F 3844 -R $(word 2, $^) $(READSUBSAMPLING) -o $@ $(BAMURL) $(shell cat $< | awk $(BEDTOREGIONS))
+	samtools view -h -b -M -q 1 -F 3844 -R $(word 2, $^) $(READSUBSAMPLING) -o $@ $(BAMURL) $(shell cat $< | awk $(BEDTOREGIONS))
 
 $(VARSITES): $(CONFVCFNAME) $(CONFVCFIDX) $(CONFBEDNAME)
 	bcftools query -R $(word 3, $^) -f '%CHROM\t%POS\n' $< >$@

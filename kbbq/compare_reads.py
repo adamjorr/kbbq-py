@@ -26,7 +26,7 @@ def load_positions(posfile):
     with open(posfile, 'r') as infh:
         for line in infh:
             chrom, pos = line.rstrip().split()
-            d.setdefault(chrom, list()).append(int(pos))
+            d.setdefault(chrom, list()).append(int(pos)-1)
     return d
 
 def find_rcorrected_sites(uncorrfile, corrfile):
@@ -118,7 +118,7 @@ def find_read_errors(read, ref, variable):
             continue
         else:
             #unrecognized
-            raise ValueError("Uncrecognized Cigar Operation " + str(op) + " In Read\n" + str(read))
+            raise ValueError("Unrecognized Cigar Operation " + str(op) + " In Read\n" + str(read))
     return readerrors, skips
 
 def find_errors(bamfilename, fastafilename, var_pos, names, seqlen):
@@ -277,6 +277,30 @@ def table_to_vectors(table, rg_order, maxscore = 42):
 
     return meanq, global_errs, global_total, q_errs, q_total, pos_errs, pos_total, dinuc_errs, dinuc_total
 
+def quantize(q_errs, q_total, nlevels = 16, minscore = 6, maxscore = 93):
+    #this function will probably not work
+    # and if it does won't match the GATK version
+    qe = np.sum(q_errs, axis = 0)
+    qt = np.sum(q_total, axis = 0)
+    actual_q = np.zeros((maxscore + 1))
+    actual_q[0:qt.shape[0]] = p_to_q(qe / qt)
+    quantizer = np.arange(maxscore + 1)
+    while len(np.unique(quantizer)) > nlevels:
+        levels = np.unique(quantizer)
+        penalty = np.sum(np.absolute(actual_q - quantizer))
+        # newpen = penalty[:-1] + penalty[1:]
+        newpenalty = np.zeros(len(levels))
+        for i in range(len(levels) - 1):
+            newquantizer = quantizer.copy()
+            newquantizer[quantizer == levels[i]] = levels[i + 1]
+            if levels[i] < minscore:
+                newpenalty[i] = 0
+            else:
+                newpenalty[i] = np.sum(np.absolute(actual_q - newquantizer))
+        minlevelidx = np.argmin(newpenalty[:-1])
+        quantizer[quantizer == levels[minlevelidx]] = levels[minlevelidx + 1]
+    return quantizer
+
 def vectors_to_report(meanq, global_errs, global_total, q_errs, q_total,
     pos_errs, pos_total, dinuc_errs, dinuc_total, rg_order, maxscore = 42):
     """
@@ -342,7 +366,7 @@ def vectors_to_report(meanq, global_errs, global_total, q_errs, q_total,
 
     rgdata = {'ReadGroup' : rg_order,
         'EventType' : 'M',
-        'EmpiricalQuality' : gatk_delta_q(meanq, global_errs, global_total) + meanq,
+        'EmpiricalQuality' : gatk_delta_q(meanq, global_errs.copy(), global_total.copy()) + meanq,
         'EstimatedQReported' : meanq,
         'Observations' : global_total,
         'Errors' : global_errs
@@ -366,7 +390,7 @@ def vectors_to_report(meanq, global_errs, global_total, q_errs, q_total,
     quantscores = np.arange(94)
     qcount = np.zeros(quantscores.shape)
     qcount[qualscore[0,]] = np.sum(q_total, axis = 0)
-    quantized = quantscores #TODO: actually quantize
+    quantized = quantize(q_errs, q_total) #TODO: actually quantize
     quantdata = {'QualityScore' : quantscores,
         'Count' : qcount,
         'QuantizedScore' : quantized
@@ -407,14 +431,14 @@ def vectors_to_report(meanq, global_errs, global_total, q_errs, q_total,
     descriptions = ['Recalibration argument collection values used in this run',
         'Quality quantization map', '' , '' , '']
     gatktables = [recaltable.GATKTable(title, desc, table) for title, desc, table in \
-        zip(titles, descriptions, [argtable, quanttable, rgtable, dinuctable, covariatetable])]
+        zip(titles, descriptions, [argtable, quanttable, rgtable, qualtable, covariatetable])]
 
     return recaltable.RecalibrationReport(gatktables)
 
 def bam_to_report(bamfileobj, fastafilename, var_pos):
     # gatkcalibratedquals, erroneous, skips = find_errors(bamfileobj, fastafilename, bad_positions, names, seqlen)
     # need def get_covariate_arrays(q, rgs, dinucleotide, errors, reversecycle, maxscore = 42, minscore = 6):
-    rgs = list(get_rg_to_pu(bamfileobj).keys())
+    rgs = list(get_rg_to_pu(bamfileobj).values())
     *vectors, = bam_to_covariate_arrays(bamfileobj, fastafilename, var_pos)
     return vectors_to_report(*vectors, rgs)
 
@@ -425,7 +449,7 @@ def bam_to_data_arrays():
     """
     pass
 
-def bam_to_covariate_arrays(bamfileobj, fastafilename, var_pos, maxscore = 42):
+def bam_to_covariate_arrays(bamfileobj, fastafilename, var_pos, minscore = 6, maxscore = 42):
     """
     Given a BAM file object, FASTA reference file name and var_pos dict,
     get the standard covariate arrays.
@@ -462,24 +486,30 @@ def bam_to_covariate_arrays(bamfileobj, fastafilename, var_pos, maxscore = 42):
     try:
         while True:
             rgs[:] = rg_to_int[read.get_tag('RG')]
+            errors, skips = find_read_errors(read, ref, fullskips)
             q = bamread_get_oq(read)
             pos = bamread_cycle_covariates(read)
             dinucleotide = bamread_dinuc_covariates(read, Dinucleotide.dinuc_to_int, Dinucleotide.complement)
-            errors, skips = find_read_errors(read, ref, fullskips)
-            valid = np.logical_and(dinucleotide != -1, ~skips)
-            e_and_valid = np.logical_and(errors, valid)
-            rge = rgs[errors]
-            qe = q[errors]
 
-            np.add.at(expected_errs, rgs, q_to_p(q))
+            skips[q < minscore] = True
+            valid = ~skips
+            dinuc_valid = np.logical_and(dinucleotide != -1, valid)
+            e_and_valid = np.logical_and(errors, valid)
+            e_and_dvalid = np.logical_and(errors, dinuc_valid)
+            rge = rgs[e_and_valid]
+            rgv = rgs[valid]
+            qe = q[e_and_valid]
+            qv = q[valid]
+
+            np.add.at(expected_errs, rgv, q_to_p(qv))
             np.add.at(rg_errs, rge, 1)
-            np.add.at(rg_total, rgs, 1)
+            np.add.at(rg_total, rgv, 1)
             np.add.at(q_errs, (rge, qe), 1)
-            np.add.at(q_total, (rgs, q), 1)
-            np.add.at(pos_errs, (rge, qe, pos[errors]), 1)
-            np.add.at(pos_total, (rgs, q, pos), 1)
-            np.add.at(dinuc_errs, (rgs[e_and_valid], q[e_and_valid], dinucleotide[e_and_valid]), 1)
-            np.add.at(dinuc_total, (rgs[valid], q[valid], dinucleotide[valid]), 1)
+            np.add.at(q_total, (rgv, qv), 1)
+            np.add.at(pos_errs, (rge, qe, pos[e_and_valid]), 1)
+            np.add.at(pos_total, (rgv, qv, pos[valid]), 1)
+            np.add.at(dinuc_errs, (rgs[e_and_dvalid], q[e_and_dvalid], dinucleotide[e_and_dvalid]), 1)
+            np.add.at(dinuc_total, (rgs[dinuc_valid], q[dinuc_valid], dinucleotide[dinuc_valid]), 1)
             read = next(bamfileobj)
     except StopIteration:
         pass
