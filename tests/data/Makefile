@@ -8,6 +8,7 @@ BAMURL = ftp://ftp.sra.ebi.ac.uk/vol1/run/ERR134/ERR1341796/CHM1_CHM13_2.bam
 #BAMACCESSION = ERR1341796
 TARURL = https://github.com/lh3/CHM-eval/releases/download/v0.5/CHM-evalkit-20180222.tar
 REFURL = http://www.broadinstitute.org/ftp/pub/seq/references/Homo_sapiens_assembly19.fasta
+FULLREFIDXURL = $(REFURL).fai
 export SHELL = /bin/bash
 
 #File names
@@ -70,7 +71,7 @@ clean:
 	samtools faidx $<
 
 %.dict: %.fa
-	picard CreateSequenceDictionary R=$<
+	rm -rf $@ && picard CreateSequenceDictionary R=$<
 
 #
 
@@ -78,7 +79,10 @@ $(CONFBEDNAME) $(CONFVCFNAME):
 	wget -qO- $(TARURL) | \
 	tar -xnf- --occurrence=1 --to-command=$(TARTOCMD) $(FULLBEDNAME) $(FULLVCFNAME)
 
-$(REFNAME): $(CONFBEDNAME)
+$(notdir $(FULLREFIDXURL)):
+	wget -q $(FULLREFIDXURL) -O $@
+
+$(REFNAME): $(CONFBEDNAME) $(notdir $(FULLREFIDXURL))
 	samtools faidx $(REFURL) $(shell cut -f1 $< | sort | uniq) > $@
 
 $(RGSFILE): | $(FULLBAMNAME).bai

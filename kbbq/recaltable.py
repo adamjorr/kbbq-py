@@ -351,6 +351,9 @@ class GATKTable:
         return self.get_fmtstring() + '\n' + self.get_titlestring() + '\n' + repr(self.data)
 
     def __eq__(self, other):
+        """
+        Note: the pandas df.data.equals function is VERY unforgiving.
+        """
         if type(other) is type(self):
             return self.title == other.title and \
                 self.description == other.description and \
@@ -437,6 +440,7 @@ class RecalibrationReport(GATKReport):
         self.tables[3].data = self.tables[3].data.set_index(['ReadGroup','QualityScore'])
         self.tables[4].data = self.tables[4].data.astype(typer)
         self.tables[4].data = self.tables[4].data.set_index(['ReadGroup','QualityScore','CovariateName','CovariateValue'])
+        self.tables[4].data = self.tables[4].data.sort_index(level = 0, sort_remaining = True)
 
     def __str__(self):
         """

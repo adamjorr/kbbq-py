@@ -23,10 +23,8 @@ def test_bam_to_report(report, recalibratedbam, variable_sites):
     for s, o in zip(report.tables, bamreport.tables):
         assert s.title == o.title
         assert s.description == o.description
+        #assert s.data.equals(o.data) #this is a known issue with floats
         assert_frame_equal(s.data, o.data)
-        assert s.data.equals(o.data)
-        assert s == o
-    assert report == bamreport
 
 # def test_report_creation(report, recalibratedbam, variable_sites):
 #     """

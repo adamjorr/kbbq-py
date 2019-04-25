@@ -216,7 +216,7 @@ class Dinucleotide:
 
 def gatk_delta_q(prior_q, numerrs, numtotal, maxscore = 42):
     assert prior_q.shape == numerrs.shape == numtotal.shape
-    possible_q = np.arange(maxscore, dtype = np.int)
+    possible_q = np.arange(maxscore+1, dtype = np.int)
     diff = np.absolute(np.subtract.outer(possible_q, prior_q).astype(np.int64))
     #1st dim is possible qs
     prior = RescaledNormal.prior_dist[diff]
@@ -282,9 +282,13 @@ def quantize(q_errs, q_total, nlevels = 16, minscore = 6, maxscore = 93):
     # and if it does won't match the GATK version
     qe = np.sum(q_errs, axis = 0)
     qt = np.sum(q_total, axis = 0)
+    unobserved = (qt == 0)
+    qt[unobserved] = 1
     actual_q = np.zeros((maxscore + 1))
     actual_q[0:qt.shape[0]] = p_to_q(qe / qt)
     quantizer = np.arange(maxscore + 1)
+    quantizer[0:qt.shape[0]][unobserved] = maxscore
+    quantizer[qt.shape[0]:] = maxscore
     while len(np.unique(quantizer)) > nlevels:
         levels = np.unique(quantizer)
         penalty = np.sum(np.absolute(actual_q - quantizer))
@@ -362,28 +366,26 @@ def vectors_to_report(meanq, global_errs, global_total, q_errs, q_total,
     'Value' : list(args.values())
     }
     argtable = pd.DataFrame(data = argdata)
-    argtable.set_index('Argument')
 
     rgdata = {'ReadGroup' : rg_order,
         'EventType' : 'M',
-        'EmpiricalQuality' : gatk_delta_q(meanq, global_errs.copy(), global_total.copy()) + meanq,
-        'EstimatedQReported' : meanq,
+        'EmpiricalQuality' : (gatk_delta_q(meanq, global_errs.copy(), global_total.copy()) + meanq).astype(np.float),
+        'EstimatedQReported' : -10.0 * np.log10(np.sum(q_to_p(np.arange(q_total.shape[1])) * q_total, axis = 1) / global_total).round(decimals = 5).astype(np.float),
         'Observations' : global_total,
-        'Errors' : global_errs
+        'Errors' : global_errs.astype(np.float)
         }
     rgtable = pd.DataFrame(data = rgdata)
-    rgtable.set_index('ReadGroup')
 
     qualscore = np.broadcast_to(np.arange(q_total.shape[1]), (q_total.shape)).copy()
     qualdata = {'ReadGroup' : np.repeat(rg_order, q_total.shape[1]),
         'QualityScore' : qualscore.flatten(),
         'EventType' : np.broadcast_to('M', (q_total.shape)).flatten(),
-        'EmpiricalQuality' : gatk_delta_q(qualscore.flatten(), q_errs.flatten(), q_total.flatten()) + qualscore.flatten(),
+        'EmpiricalQuality' : (gatk_delta_q(qualscore.flatten(), q_errs.flatten(), q_total.flatten()) + qualscore.flatten()).astype(np.float),
         'Observations' : q_total.flatten(),
-        'Errors' : q_errs.flatten()
+        'Errors' : q_errs.flatten().astype(np.float)
         }
     qualtable = pd.DataFrame(data = qualdata)
-    qualtable.set_index(['ReadGroup','QualityScore'])
+    qualtable = qualtable[qualtable.Observations != 0]
 
     #no quantization, but still have to make the quantization table
     #TODO: actual quant algo
@@ -396,36 +398,40 @@ def vectors_to_report(meanq, global_errs, global_total, q_errs, q_total,
         'QuantizedScore' : quantized
         }
     quanttable = pd.DataFrame(data = quantdata)
-    quanttable.set_index('QualityScore')
 
     dinuc_q = np.repeat(np.broadcast_to(np.arange(dinuc_total.shape[1]), (dinuc_total.shape[0:2])), dinuc_total.shape[2])
+    dinuc_to_int = Dinucleotide.dinuc_to_int
+    covtable_colorder = ['ReadGroup','QualityScore','CovariateName','CovariateValue']
     dinucdata = {'ReadGroup' : np.repeat(rg_order, np.prod(dinuc_total.shape[1:])),
         'QualityScore' : dinuc_q.flatten(),
-        'CovariateValue' : np.broadcast_to(np.arange(dinuc_total.shape[2]), dinuc_total.shape).flatten(),
+        'CovariateValue' : np.broadcast_to(np.array(Dinucleotide.dinucs), dinuc_total.shape).flatten(),
         'CovariateName' : np.broadcast_to('Context', dinuc_total.shape).flatten(),
         'EventType' : np.broadcast_to('M',dinuc_total.shape).flatten(),
-        'EmpiricalQuality' : gatk_delta_q(dinuc_q.flatten(), dinuc_errs.flatten(), dinuc_total.flatten()) + dinuc_q.flatten(),
+        'EmpiricalQuality' : (gatk_delta_q(dinuc_q.flatten(), dinuc_errs.flatten(), dinuc_total.flatten()) + dinuc_q.flatten()).astype(np.float),
         'Observations' : dinuc_total.flatten(),
-        'Errors' : dinuc_errs.flatten()
+        'Errors' : dinuc_errs.flatten().astype(np.float)
         }
     dinuctable = pd.DataFrame(data = dinucdata)
-    dinuctable.set_index(['ReadGroup', 'QualityScore','CovariateName','CovariateValue'])
 
     cycle_q = np.repeat(np.broadcast_to(np.arange(pos_total.shape[1]), (pos_total.shape[0:2])), pos_total.shape[2])
     ncycles = pos_total.shape[2] / 2
-    cycle_values = np.concatenate([np.arange(ncycles) + 1, np.flip(-(np.arange(ncycles)+1),axis=0)])
+    cycle_values = np.concatenate([np.arange(ncycles) + 1, np.flip(-(np.arange(ncycles)+1),axis=0)]).astype(np.int)
     cycledata = {'ReadGroup' : np.repeat(rg_order, np.prod(pos_total.shape[1:])).flatten(),
         'QualityScore' : cycle_q.flatten(),
-        'CovariateValue' : np.broadcast_to(cycle_values, pos_total.shape).flatten(),
+        'CovariateValue' : np.broadcast_to(cycle_values, pos_total.shape).astype(np.unicode).flatten(),
         'CovariateName' : np.broadcast_to('Cycle',pos_total.shape).flatten(),
         'EventType' : np.broadcast_to('M',pos_total.shape).flatten(),
-        'EmpiricalQuality' : gatk_delta_q(cycle_q.flatten(), pos_errs.flatten(), pos_total.flatten()) + cycle_q.flatten(),
+        'EmpiricalQuality' : (gatk_delta_q(cycle_q.flatten(), pos_errs.flatten(), pos_total.flatten()) + cycle_q.flatten()).astype(np.float),
         'Observations' : pos_total.flatten(),
-        'Errors' : pos_errs.flatten()
+        'Errors' : pos_errs.flatten().astype(np.float)
         }
     cycletable = pd.DataFrame(data = cycledata)
-    cycletable.set_index(['ReadGroup', 'QualityScore','CovariateName','CovariateValue'])
     covariatetable = dinuctable.append(cycletable)
+    covariatetable = covariatetable.set_index(covtable_colorder)
+    covariatetable = covariatetable[covariatetable.Observations != 0]
+    covariatetable = covariatetable.reindex(labels = rg_order,  level = 0)
+    covariatetable = covariatetable.reset_index()
+    #we do this to fix ordering because concatenating the tables ruins it
 
     titles = ['Arguments','Quantized','RecalTable0','RecalTable1','RecalTable2']
     descriptions = ['Recalibration argument collection values used in this run',
