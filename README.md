@@ -2,6 +2,8 @@
 
 [![codecov](https://codecov.io/gh/adamjorr/kbbq/branch/master/graph/badge.svg)](https://codecov.io/gh/adamjorr/kbbq)
 [![CircleCI](https://circleci.com/gh/adamjorr/kbbq.svg?style=svg)](https://circleci.com/gh/adamjorr/kbbq)
+[![Documentation Status](https://readthedocs.org/projects/kbbq/badge/?version=latest)](https://kbbq.readthedocs.io/en/latest/?badge=latest)
+
 
 k-mer based base quality recalibration
 
