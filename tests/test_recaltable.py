@@ -14,3 +14,8 @@ def test_report_readwrite(report_and_file, tmp_path):
     cmppath = tmp_path / 'report.txt'
     report.write(str(cmppath))
     assert filecmp.cmp(file, cmppath)
+
+def test_report_eq(report_and_file):
+    report, file = report_and_file
+    other = recaltable.RecalibrationReport.fromfile(file)
+    assert report == other
