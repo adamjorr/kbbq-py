@@ -440,7 +440,6 @@ class RecalibrationReport(GATKReport):
         self.tables[3].data = self.tables[3].data.set_index(['ReadGroup','QualityScore'])
         self.tables[4].data = self.tables[4].data.astype(typer)
         self.tables[4].data = self.tables[4].data.set_index(['ReadGroup','QualityScore','CovariateName','CovariateValue'])
-        self.tables[4].data = self.tables[4].data.sort_index(level = 0, sort_remaining = True)
 
     def __str__(self):
         """

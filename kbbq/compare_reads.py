@@ -429,7 +429,8 @@ def vectors_to_report(meanq, global_errs, global_total, q_errs, q_total,
     covariatetable = dinuctable.append(cycletable)
     covariatetable = covariatetable.set_index(covtable_colorder)
     covariatetable = covariatetable[covariatetable.Observations != 0]
-    covariatetable = covariatetable.reindex(labels = rg_order,  level = 0)
+    covariatetable = covariatetable.swaplevel('CovariateValue','CovariateName')
+    covariatetable = covariatetable.sort_index(level = 0, sort_remaining = True)
     covariatetable = covariatetable.reset_index()
     #we do this to fix ordering because concatenating the tables ruins it
 
