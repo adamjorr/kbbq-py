@@ -169,8 +169,37 @@ def find_errors(bamfilename, fastafilename, var_pos, names, seqlen):
     return gatkcalibratedquals, erroneous, skips
 
 class RescaledNormal:
+    """
+    A class to cache the rescaled normal prior used in the bayesian recalibration
+    model. 
+
+    Attributes
+
+        * :attr:`maxscore` - max score supported
+        * :attr:`prior_dist` - numpy array of prior probability 
+
+    Methods
+
+        * :meth:`prior` - get the prior probability for a given quality score difference
+
+    Most of these attributes are nonsense; the "proper" way to interact
+    with the class is via the :attr:`prior_dist` array. If that makes you
+    uncomfortable, use the provided accessor function :meth:`prior`.
+
+    Under no circumstances should you attempt to replace any of these attributes,
+    it will most likely not have the desired effect. The caching mechanism here 
+    only works because the class attributes are immediately instatiated when the class
+    is created, so by the time you replace them it won't matter. 
+    Reimplement it yourself if you want a different prior.
+    """
+
     oldset = np.seterr(all = 'raise')
+
     maxscore = 42
+    """
+    The maximum quality score supported by this class.
+    """
+
     possible_diffs = np.arange(maxscore+1, dtype = np.int_)
     prior_dist = np.zeros(possible_diffs.shape[0], dtype = np.longdouble)
     for i in range(possible_diffs.shape[0]):
@@ -181,6 +210,13 @@ class RescaledNormal:
     np.seterr(**oldset)
 
     def prior(self, difference):
+        """
+        Return the prior probability for a given difference in quality score.
+
+        :param int difference: The difference in quality score
+        :returns: the prior probability
+        :rtype: np.longdouble
+        """
         return prior_dist[difference]
 
 class Dinucleotide:
