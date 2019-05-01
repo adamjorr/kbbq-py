@@ -101,7 +101,7 @@ $(VARSITES): $(CONFVCFNAME) $(CONFVCFIDX) $(CONFBEDNAME)
 
 $(FIRSTREADS) $(SECONDREADS): $(CONFBAMNAME)
 	samtools sort -@ 4 -n -O bam $< | \
-	samtools fastq -t -N -F 3844 -O -0 /dev/null -s /dev/null -1 $(FIRSTREADS) -2 $(SECONDREADS)
+	samtools fastq -t -N -F 3844 -O -0 /dev/null -s /dev/null -1 $(FIRSTREADS) -2 $(SECONDREADS) -
 
 $(FULLREADS): $(FIRSTREADS) $(SECONDREADS)
 	seqtk mergepe $< $(word 2, $^) | tr ' ' _ > $@
