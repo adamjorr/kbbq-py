@@ -2,7 +2,7 @@
 import numpy as np
 import matplotlib
 matplotlib.use('Agg')
-import matlotlib.pyplot as plt
+import matplotlib.pyplot as plt
 import seaborn as sns
 import sklearn
 import kbbq.compare_reads as cr
