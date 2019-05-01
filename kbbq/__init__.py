@@ -9,4 +9,4 @@ from kbbq.compare_reads import *
 import kbbq.recaltable
 from kbbq.recaltable import *
 
-__all__ = ['compare_reads','recaltable']
+__all__ = ['compare_reads', 'recaltable', 'plot']
