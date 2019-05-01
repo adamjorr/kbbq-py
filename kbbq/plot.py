@@ -1,4 +1,8 @@
 #!/usr/bin/env python3
+"""
+Utilities for plotting calibration and other relevant info.
+"""
+
 import numpy as np
 import matplotlib
 matplotlib.use('Agg')

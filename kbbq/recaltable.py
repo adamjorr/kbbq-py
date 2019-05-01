@@ -1,4 +1,8 @@
 #!usr/bin/env python3
+"""
+Provides utilities for interfacing with GATK Recalibration tables.
+"""
+
 import numpy as np
 import pandas as pd
 
