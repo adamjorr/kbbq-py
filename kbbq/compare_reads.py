@@ -34,8 +34,8 @@ def load_positions(posfile):
             d.setdefault(chrom, list()).append(int(pos)-1)
     return d
 
-def find_rcorrected_sites(uncorrfile, corrfile):
-    print(tstamp(), "Finding Rcorrected sites . . .", file=sys.stderr)
+def find_corrected_sites(uncorrfile, corrfile):
+    print(tstamp(), "Finding corrected sites . . .", file=sys.stderr)
     uncorr_reads = list(pysam.FastxFile(uncorrfile))
     corr_reads = list(pysam.FastxFile(corrfile))
     #verify the sequences are the same and can be accessed by index
@@ -50,7 +50,7 @@ def find_rcorrected_sites(uncorrfile, corrfile):
     names = dict()
     seqlen = len(uncorr_reads[0].get_quality_array())
     rawquals = np.zeros([len(uncorr_reads), seqlen], dtype = np.int)
-    rcorrected = np.zeros([len(uncorr_reads),seqlen], dtype = np.bool)
+    corrected = np.zeros([len(uncorr_reads),seqlen], dtype = np.bool)
     seqs = np.zeros(len(uncorr_reads), dtype = 'U' + str(seqlen))
     rgs = np.zeros(len(uncorr_reads), dtype = 'U7')
     for i in range(len(uncorr_reads)):
@@ -61,13 +61,13 @@ def find_rcorrected_sites(uncorrfile, corrfile):
         seqs[i] = uncorr_reads[i].sequence
         uncorr_s = np.array(list(uncorr_reads[i].sequence), dtype = np.unicode)
         corr_s = np.array(list(corr_reads[i].sequence), dtype = np.unicode)
-        rcorrected[i] = (uncorr_s == corr_s)
-    return names, rawquals.copy(), rcorrected.copy(), seqs.copy(), rgs.copy(), seqlen
+        corrected[i] = (uncorr_s == corr_s)
+    return names, rawquals.copy(), corrected.copy(), seqs.copy(), rgs.copy(), seqlen
 
-def train_regression(rawquals, rcorrected, tol = 1e-4):
+def train_regression(rawquals, corrected, tol = 1e-4):
     print(tstamp(), "Doing Logit Regression", file=sys.stderr)
     lr = LR(tol = tol)
-    lr = lr.fit(rawquals.flatten().reshape(-1,1), rcorrected.flatten())
+    lr = lr.fit(rawquals.flatten().reshape(-1,1), corrected.flatten())
     return lr
 
 def recalibrate(lr, q):
@@ -806,10 +806,10 @@ def main():
     corrfile = "nospace.lighter.fq"
     bamfilename = "only_confident.sorted.recal.bam"
     fastafilename = "../chr1.renamed.fa"
-    names, rawquals, rcorrected, seqs, rgs, seqlen = find_rcorrected_sites(uncorrfile, corrfile)
+    names, rawquals, corrected, seqs, rgs, seqlen = find_corrected_sites(uncorrfile, corrfile)
 
-    #rcorrected is true when the bases match the original, false otherwise
-    #hence rcorrected == false is where the errors are
+    #corrected is true when the bases match the original, false otherwise
+    #hence corrected == false is where the errors are
 
     bad_positions = load_positions("variable_sites.txt")
     cachefile = 'cached_recal_errs.npz'
@@ -824,7 +824,7 @@ def main():
         gatkcalibratedquals, erroneous, skips = find_errors(bamfilename, fastafilename, bad_positions, names, seqlen)
         np.savez_compressed(cachefile, gatkcalibratedquals = gatkcalibratedquals, erroneous = erroneous, skips = skips)
 
-    #important arrays: names, rawquals, rcorrected, calibquals, gatkcalibratedquals, erroneous, hmmquals
+    #important arrays: names, rawquals, corrected, calibquals, gatkcalibratedquals, erroneous, hmmquals
 
     dinucleotide = get_dinucleotide(seqs, rawquals)
     unique_rgs = np.unique(rgs)
@@ -840,7 +840,7 @@ def main():
     reversecycle = np.zeros(len(names), dtype = np.bool)
     reversecycle[np.array(list(names.values()), dtype = np.int)] = np.char.endswith(np.array(list(names.keys()), dtype = np.unicode),'/2')
 
-    dq_calibrated = delta_q_recalibrate(rawquals, rgs, dinucleotide, np.logical_not(rcorrected), reversecycle)
+    dq_calibrated = delta_q_recalibrate(rawquals, rgs, dinucleotide, np.logical_not(corrected), reversecycle)
     #custom_gatk_calibrated = delta_q_recalibrate(rawquals, rgs, dinucleotide, erroneous, reversecycle)
     #from_table = table_recalibrate(rawquals, tablefile, unique_pus, dinuc_order, seqlen, reversecycle, rgs, dinucleotide)
     #assert np.array_equal(from_table, gatkcalibratedquals)
