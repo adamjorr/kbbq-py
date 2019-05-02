@@ -26,6 +26,12 @@ def test_bam_to_report(report, recalibratedbam, variable_sites):
         #assert s.data.equals(o.data) #this is a known issue with floats
         assert_frame_equal(s.data, o.data)
 
+def test_fastq_calibration():
+    #TODO: I think the best way to do this is to take the uncalibrated bam reads,
+    #instantiate a fastqread object from it, and make sure the resulting calibrated
+    #read matches the calibrated bam read.
+    pass
+
 # def test_report_creation(report, recalibratedbam, variable_sites):
 #     """
 #     Test our method to make the recalibrationreport from a bam matches GATK
