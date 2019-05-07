@@ -51,7 +51,7 @@ def get_error_dict(bamfile, refdict, fullskips):
     """
     edict = dict()
     for read in bamfile:
-        name = get_read_name(read)
+        name = get_bam_readname(read)
         edict[name] = compare_reads.find_read_errors(read, refdict, fullskips)
     return edict
 
