@@ -52,7 +52,7 @@ def get_error_dict(bamfile, refdict, fullskips):
     edict = dict()
     for read in bamfile:
         name = get_read_name(read)
-        edict[name] = find_read_errors(read, refdict, fullskips)
+        edict[name] = compare_reads.find_read_errors(read, refdict, fullskips)
     return edict
 
 def find_errors_in_fastq(fqreads, edict):
@@ -71,7 +71,7 @@ def calculate_q(errors, quals):
     the value represents the actual quality score or the number of bases.
     """
     numtotal = np.bincount(quals.reshape(-1))
-    numerrs = np.bincount(quals.reshape(-1), minlength = len(numtotal))
+    numerrs = np.bincount(quals[errors].reshape(-1), minlength = len(numtotal))
     nonzero = (numtotal != 0)
     p = np.true_divide(numerrs[nonzero], numtotal[nonzero])
     q = compare_reads.p_to_q(p)
@@ -79,9 +79,7 @@ def calculate_q(errors, quals):
     actual_q[nonzero] = q
     return actual_q, numtotal
 
-def benchmark_fastq(fqfile, bamfile, ref, varfile):
-    var_sites = compare_reads.load_positions(varfile)
-    ref = get_ref_dict(fafile)
+def benchmark_fastq(fqfile, bamfile, ref, var_sites):
     fullskips = get_full_skips(ref, var_sites)
     edict = get_error_dict(bamfile, ref, fullskips)
     reads = list(pysam.FastxFile(fqfile))
@@ -93,14 +91,23 @@ def benchmark_fastq(fqfile, bamfile, ref, varfile):
     quals = np.array(quals)
     #get rid of skipped sites (we can't tell if these are errors or not)
     e = errors[~skips]
-    quals = quals[~skips]
-    return calculate_q(e, quals) #actual_q, ntotal
+    q = quals[~skips]
+    return calculate_q(e, q) #actual_q, ntotal
 
-def benchmark_bam(bamfile, fafile, varfile):
+def benchmark_bam(bamfile, ref, var_sites):
     """
     TODO
     """
-    pass
+    fullskips = get_full_skips(ref, var_sites)
+    errors, skips, quals = zip(*(compare_reads.find_read_errors(read, ref, fullskips) + (np.array(read.query_qualities, dtype = np.int),) for read in bamfile)) #generator
+    #turn list of 1d arrays into 2d arrays
+    errors = np.array(errors)
+    skips = np.array(skips)
+    quals = np.array(quals)
+    #get rid of skipped sites
+    e = errors[~skips]
+    q = quals[~skips]
+    return calculate_q(e, q)
 
 def print_benchmark(actual_q, label, nbases):
     """
@@ -111,8 +118,10 @@ def print_benchmark(actual_q, label, nbases):
     the benchmark command can be called many times and each
     table can be concatenated together.
     """
-    nonzero = (actual_q != 0)
+    nonzero = (nbases != 0)
+    nbases = nbases[nonzero]
     predicted_q = np.arange(len(actual_q))[nonzero]
+    actual_q = actual_q[nonzero]
     for pq, aq, nb in zip(predicted_q, actual_q, nbases):
         print(pq, aq, label, nb, sep = "\t")
 
@@ -135,4 +144,7 @@ def benchmark(bamfile, fafile, vcffile, fastqfile = None, label = None):
     else:
         actual_q, nbases = benchmark_bam(bam, ref, var_sites)
         label = (bamfile if label is None else label)
+    print("actual_q:",actual_q)
+    print("label:",label)
+    print("nbases:",nbases)
     print_benchmark(actual_q, label, nbases)
