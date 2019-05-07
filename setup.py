@@ -29,7 +29,7 @@ setuptools.setup(
     install_requires=[], #TODO
     entry_points={
         'console_scripts': [
-            'kbbq=kbbq:main'
+            'kbbq=main:main'
         ]
     }
 )
