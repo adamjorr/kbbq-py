@@ -6,6 +6,7 @@ Utilities for benchmarking calibration methods.
 
 from kbbq import compare_reads
 import pysam
+import numpy as np
 
 def get_ref_dict(reffilename):
     fasta = pysam.FastaFile(reffilename)
@@ -115,7 +116,7 @@ def print_benchmark(actual_q, label, nbases):
     for pq, aq, nb in zip(predicted_q, actual_q, nbases):
         print(pq, aq, label, nb, sep = "\t")
 
-def benchmark(bamfile, fafile, vcffile, fastq = None, label = None):
+def benchmark(bamfile, fafile, vcffile, fastqfile = None, label = None):
     """
     Perform the benchmark and print the results to stdout.
 

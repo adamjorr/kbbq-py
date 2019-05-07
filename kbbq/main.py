@@ -13,7 +13,7 @@ def recalibrate(args):
 
 def benchmark(args):
     bm.benchmark(bamfile = args.bam, fafile = args.reference,
-        vcffile = args.vcf, fastq = args.fastq, label = args.label)
+        vcffile = args.vcf, fastqfile = args.fastq, label = args.label)
 
 def plot(args):
     pass
