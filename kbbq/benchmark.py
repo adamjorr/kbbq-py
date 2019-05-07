@@ -12,6 +12,13 @@ def get_ref_dict(reffilename):
     ref = {chrom : np.array(list(fasta.fetch(reference = chrom)), dtype = np.unicode) for chrom in fasta.references}
     return ref
 
+def get_var_sites(vcf):
+    vcf = pysam.VariantFile(vcf)
+    d = dict()
+    for record in vcf:
+        d.setdefault(record.chrom, list()).append(int(record.pos)-1)
+    return d
+
 def get_full_skips(refdict, var_sites):
     skips = {chrom: np.zeros(len(refdict[chrom]), dtype = np.bool) for chrom in refdict.keys()}
     for chrom in skips.keys():
@@ -71,7 +78,7 @@ def calculate_q(errors, quals):
     actual_q[nonzero] = q
     return actual_q, numtotal
 
-def benchmark_fastq(fqfile, bamfile, fafile, varfile):
+def benchmark_fastq(fqfile, bamfile, ref, varfile):
     var_sites = compare_reads.load_positions(varfile)
     ref = get_ref_dict(fafile)
     fullskips = get_full_skips(ref, var_sites)
@@ -108,7 +115,7 @@ def print_benchmark(actual_q, label, nbases):
     for pq, aq, nb in zip(predicted_q, actual_q, nbases):
         print(pq, aq, label, nb, sep = "\t")
 
-def benchmark(bamfile, fafile, varfile, fastqfile = None, label = None):
+def benchmark(bamfile, fafile, vcffile, fastq = None, label = None):
     """
     Perform the benchmark and print the results to stdout.
 
@@ -119,10 +126,12 @@ def benchmark(bamfile, fafile, varfile, fastqfile = None, label = None):
     reads.
     """
     bam = pysam.AlignmentFile(bamfile, 'r')
+    ref = get_ref_dict(fafile)
+    var_sites = get_var_sites(vcffile)
     if fastqfile is not None:
-        actual_q, nbases = benchmark_fastq(fastqfile, bamfile, fafile, varfile)
+        actual_q, nbases = benchmark_fastq(fastqfile, bam, ref, var_sites)
         label = (fastqfile if label is None else label)
     else:
-        actual_q, nbases = benchmark_bam(bamfile, fafile, varfile)
+        actual_q, nbases = benchmark_bam(bam, ref, var_sites)
         label = (bamfile if label is None else label)
     print_benchmark(actual_q, label, nbases)
