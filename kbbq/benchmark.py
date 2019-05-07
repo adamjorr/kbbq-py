@@ -13,7 +13,7 @@ def get_ref_dict(reffilename):
     return ref
 
 def get_full_skips(refdict, var_sites):
-    skips = {chrom: np.zeros(len(refdict[chrom]), dtype = np.bool) for chrom in refdict.keys())
+    skips = {chrom: np.zeros(len(refdict[chrom]), dtype = np.bool) for chrom in refdict.keys()}
     for chrom in skips.keys():
         variable_positions = var_sites[chrom]
         skips[chrom][variable_positions] = True
@@ -47,7 +47,7 @@ def get_error_dict(bamfile, refdict, fullskips):
         edict[name] = find_read_errors(read, refdict, fullskips)
     return edict
 
-def find_errors_in_fastq(fqreads, edict)
+def find_errors_in_fastq(fqreads, edict):
     """
     Finds errors given a readname -> (errors, skips) dict.
     """
