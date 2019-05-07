@@ -11,3 +11,4 @@ import kbbq.recaltable
 from kbbq.recaltable import *
 
 __all__ = ['compare_reads', 'recaltable', 'plot', 'benchmark']
+__version__ = '0.0.0'

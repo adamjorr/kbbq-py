@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 
-import kbbq.compare_reads as cr
-import kbbq.benchmark as bm
+import kbbq
+import compare_reads as cr
+import benchmark as bm
 import argparse
 import sys
 
@@ -19,17 +20,20 @@ def plot(args):
 
 def main():
     parser = argparse.ArgumentParser(description = 'K-mer Based Base Quality score recalibration')
-    subparsers = parser.add_subparsers(title='command', help="valid commands"), #choices=['recalibrate','benchmark','plot'])
+    parser.add_argument('-v', '--version', action = 'version', version = kbbq.__version__)
+    parser.set_defaults(command = lambda args: parser.print_help())
+    subparsers = parser.add_subparsers(title='command', description="valid commands")
     
     #recalibrate command TODO
     recalibrate_parser = subparsers.add_parser('recalibrate', description = 'Recalibrate a BAM or FASTQ file')
     
     #benchmark command
     benchmark_parser = subparsers.add_parser('benchmark', description = 'Benchmark a BAM or FASTQ file using a truth set')
-    benchmark_parser.add_argument('-b', '--bam', required = True,
+    benchmark_reqd = benchmark_parser.add_argument_group(title = 'required arguments')
+    benchmark_reqd.add_argument('-b', '--bam', required = True,
         help = 'Truth set BAM file. Differences from the reference at nonvariable sites will be interpreted as errors.')
-    benchmark_parser.add_argument('-r', '--reference', required = True, help = 'FASTA file containing the reference genome')
-    benchmark_parser.add_argument('-v', '--vcf', required = True, help = 'VCF file containing variable sites')
+    benchmark_reqd.add_argument('-r', '--reference', required = True, help = 'FASTA file containing the reference genome')
+    benchmark_reqd.add_argument('-v', '--vcf', required = True, help = 'VCF file containing variable sites')
     benchmark_parser.add_argument('-f', '--fastq', default = None, required = False, help = 'fastq file to benchmark')
     benchmark_parser.add_argument('-l', '--label', default = None, required = False, help = 'label to use for label column')
     benchmark_parser.set_defaults(command=benchmark)
