@@ -29,3 +29,9 @@ kbbq.plot
 	:members:
 	:undoc-members:
 
+kbbq.benchmark
+--------------
+
+.. automodule:: kbbq.benchmark
+	:members:
+	:undoc-members:
