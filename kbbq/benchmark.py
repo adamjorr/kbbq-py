@@ -52,15 +52,22 @@ def get_error_dict(bamfile, refdict, fullskips):
     edict = dict()
     for read in bamfile:
         name = get_bam_readname(read)
-        edict[name] = compare_reads.find_read_errors(read, refdict, fullskips)
+        e, s = compare_reads.find_read_errors(read, refdict, fullskips)
+        #we have to reverse e and s because the samtools fastq command will
+        #automatically reverse them, causing the values from the fastq to 
+        #not match up.
+        if read.is_reverse:
+            e = np.flip(e)
+            s = np.flip(s)
+        edict[name] = (e,s)
     return edict
 
-def find_errors_in_fastq(fqreads, edict):
-    """
-    Finds errors given a readname -> (errors, skips) dict.
-    """
-    errskips = [edict.get(get_fastq_readname(read)) for read in fqreads]
-    return zip(*errskips) #this will return a list of errors and a list of skips
+# def find_errors_in_fastq(fqreads, edict):
+#     """
+#     Finds errors given a readname -> (errors, skips) dict.
+#     """
+#     errskips = [edict[get_fastq_readname(read)] for read in fqreads]
+#     return zip(*errskips) #this will return a list of errors and a list of skips
 
 def calculate_q(errors, quals):
     """
@@ -82,31 +89,53 @@ def calculate_q(errors, quals):
 def benchmark_fastq(fqfile, bamfile, ref, var_sites):
     fullskips = get_full_skips(ref, var_sites)
     edict = get_error_dict(bamfile, ref, fullskips)
-    reads = list(pysam.FastxFile(fqfile))
-    errors, skips = find_errors_in_fastq(reads, edict)
-    quals = [np.array(r.get_quality_array()) for r in reads]
+    #reads = list(pysam.FastxFile(fqfile))
+    #errors, skips = find_errors_in_fastq(reads, edict)
+    errors, skips, quals = zip(*(edict[get_fastq_readname(r)] + (np.array(r.get_quality_array()),) for r in pysam.FastxFile(fqfile)))
+    #quals = [np.array(r.get_quality_array()) for r in reads]
     #turn list of small arrays into 2d arrays
     errors = np.array(errors)
     skips = np.array(skips)
     quals = np.array(quals)
     #get rid of skipped sites (we can't tell if these are errors or not)
+    
+    # print("s",skips)
+    # print('q',quals)
     e = errors[~skips]
     q = quals[~skips]
+    print("sum(e)",np.sum(e))
+    print("q[e]",q[e])
     return calculate_q(e, q) #actual_q, ntotal
 
-def benchmark_bam(bamfile, ref, var_sites):
+def get_bamread_quals(read, use_oq = False):
+    """
+    Return the qualities of the read as an np.array.
+
+    Use the OQ tag for read quals if use_oq = True.
+    """
+    if use_oq:
+        return compare_reads.bamread_get_oq(read)
+    else:
+        return np.array(read.query_qualities, dtype = np.int)
+
+def benchmark_bam(bamfile, ref, var_sites, use_oq = False):
     """
     TODO
     """
     fullskips = get_full_skips(ref, var_sites)
-    errors, skips, quals = zip(*(compare_reads.find_read_errors(read, ref, fullskips) + (np.array(read.query_qualities, dtype = np.int),) for read in bamfile)) #generator
+    errors, skips, quals = zip(*(compare_reads.find_read_errors(read, ref, fullskips) + (get_bamread_quals(read, use_oq),) for read in bamfile)) #generator
     #turn list of 1d arrays into 2d arrays
     errors = np.array(errors)
     skips = np.array(skips)
     quals = np.array(quals)
     #get rid of skipped sites
+    # print("e",errors)
+    # print("s",skips)
+    # print('q',quals)
     e = errors[~skips]
     q = quals[~skips]
+    print("sum(e)",np.sum(e))
+    print("q[e]",q[e])
     return calculate_q(e, q)
 
 def print_benchmark(actual_q, label, nbases):
@@ -125,7 +154,7 @@ def print_benchmark(actual_q, label, nbases):
     for pq, aq, nb in zip(predicted_q, actual_q, nbases):
         print(pq, aq, label, nb, sep = "\t")
 
-def benchmark(bamfile, fafile, vcffile, fastqfile = None, label = None):
+def benchmark(bamfile, fafile, vcffile, fastqfile = None, label = None, use_oq = False):
     """
     Perform the benchmark and print the results to stdout.
 
@@ -142,7 +171,7 @@ def benchmark(bamfile, fafile, vcffile, fastqfile = None, label = None):
         actual_q, nbases = benchmark_fastq(fastqfile, bam, ref, var_sites)
         label = (fastqfile if label is None else label)
     else:
-        actual_q, nbases = benchmark_bam(bam, ref, var_sites)
+        actual_q, nbases = benchmark_bam(bam, ref, var_sites, use_oq)
         label = (bamfile if label is None else label)
     print("actual_q:",actual_q)
     print("label:",label)

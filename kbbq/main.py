@@ -13,7 +13,8 @@ def recalibrate(args):
 
 def benchmark(args):
     bm.benchmark(bamfile = args.bam, fafile = args.reference,
-        vcffile = args.vcf, fastqfile = args.fastq, label = args.label)
+        vcffile = args.vcf, fastqfile = args.fastq,
+        label = args.label, use_oq = args.use_oq)
 
 def plot(args):
     pass
@@ -36,6 +37,7 @@ def main():
     benchmark_reqd.add_argument('-v', '--vcf', required = True, help = 'VCF file containing variable sites')
     benchmark_parser.add_argument('-f', '--fastq', default = None, required = False, help = 'fastq file to benchmark')
     benchmark_parser.add_argument('-l', '--label', default = None, required = False, help = 'label to use for label column')
+    benchmark_parser.add_argument('-u', '--use-oq', action = 'store_true', help = 'Use the OQ tag when benchmarking a BAM file. Does nothing if a fastq file is provided.')
     benchmark_parser.set_defaults(command=benchmark)
 
     #plot command
