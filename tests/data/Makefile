@@ -49,7 +49,7 @@ BEDTOREGIONS='BEGIN{OFS=""}{print $$1,":",($$2+1),"-",$$3}'
 .PHONY: data clean
 
 
-data: $(RECALTABLE) $(RECALBAM) $(VARSITES)
+data: $(RECALTABLE) $(RECALBAM) $(VARSITES) $(FULLREADS)
 
 clean:
 	rm -f $(RECALTABLE) $(RECALBAM) $(VARSITES) $(FULLBAMNAME).bai \
