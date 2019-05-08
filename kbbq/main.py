@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 
 import kbbq
-import compare_reads as cr
-import benchmark as bm
+import kbbq.compare_reads as cr
+import kbbq.benchmark as bm
 import argparse
 import sys
 

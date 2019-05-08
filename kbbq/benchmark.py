@@ -103,8 +103,8 @@ def benchmark_fastq(fqfile, bamfile, ref, var_sites):
     # print('q',quals)
     e = errors[~skips]
     q = quals[~skips]
-    print("sum(e)",np.sum(e))
-    print("q[e]",q[e])
+    # print("sum(e)",np.sum(e))
+    # print("q[e]",q[e])
     return calculate_q(e, q) #actual_q, ntotal
 
 def get_bamread_quals(read, use_oq = False):
@@ -134,8 +134,8 @@ def benchmark_bam(bamfile, ref, var_sites, use_oq = False):
     # print('q',quals)
     e = errors[~skips]
     q = quals[~skips]
-    print("sum(e)",np.sum(e))
-    print("q[e]",q[e])
+    # print("sum(e)",np.sum(e))
+    # print("q[e]",q[e])
     return calculate_q(e, q)
 
 def print_benchmark(actual_q, label, nbases):
@@ -173,7 +173,7 @@ def benchmark(bamfile, fafile, vcffile, fastqfile = None, label = None, use_oq =
     else:
         actual_q, nbases = benchmark_bam(bam, ref, var_sites, use_oq)
         label = (bamfile if label is None else label)
-    print("actual_q:",actual_q)
-    print("label:",label)
-    print("nbases:",nbases)
+    # print("actual_q:",actual_q)
+    # print("label:",label)
+    # print("nbases:",nbases)
     print_benchmark(actual_q, label, nbases)
