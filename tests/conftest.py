@@ -23,3 +23,16 @@ def variable_sites(request):
 def uncalibratedbam(request):
     import pysam
     return pysam.AlignmentFile(request.param,"r")
+
+@pytest.fixture(params = [
+    ["tests/data/conf_regions.bam", "tests/data/ref.fa", "tests/data/conf_regions.vcf.gz"]
+    ])
+def benchmarkfile(request, monkeypatch, tmp_path, capfd):
+    import sys
+    import kbbq
+    with monkeypatch.context() as m:
+        m.setattr(sys, 'argv', [sys.argv[0]] + f"benchmark -b {request.param[0]} -r {request.param[1]} -v {request.param[2]} --label=label --use-oq".split())
+        kbbq.main.main()
+    p = tmp_path / 'benchmark.txt'
+    p.write_text(capfd.readouterr().out)
+    return str(p)

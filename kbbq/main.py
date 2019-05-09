@@ -3,6 +3,7 @@
 import kbbq
 import kbbq.compare_reads as cr
 import kbbq.benchmark as bm
+import kbbq.plot
 import argparse
 import sys
 
@@ -17,7 +18,7 @@ def benchmark(args):
         label = args.label, use_oq = args.use_oq)
 
 def plot(args):
-    pass
+    kbbq.plot.plot_benchmark(fhin = args.file, outfile = args.outfile, plottype = args.type)
 
 def main():
     parser = argparse.ArgumentParser(description = 'K-mer Based Base Quality score recalibration')
@@ -42,6 +43,11 @@ def main():
 
     #plot command
     plot_parser = subparsers.add_parser('plot', description = 'Plot data output from the benchmark command')
+    plot_reqd = plot_parser.add_argument_group(title = 'required arguments')
+    plot_parser.add_argument('-t', '--type', default = 'calibration', choices = ['calibration', 'sample-size'], help = 'Type of plot to produce')
+    plot_parser.add_argument('file', nargs = '?', type = argparse.FileType('r'), default = sys.stdin, help = 'Input file')
+    plot_reqd.add_argument('-o', '--outfile', required = True, help = 'file name to save plot as')
+    plot_parser.set_defaults(command=plot)
 
     #parse args
     args = parser.parse_args()
