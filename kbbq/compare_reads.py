@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """
 A mish-mash of functions for recalibration. Should probably be renamed in the near future.
 """
