@@ -743,7 +743,7 @@ def recalibrate_fastq(read, meanq, globaldeltaq, qscoredeltaq, positiondeltaq, d
     qcov = np.array(read.get_quality_array(), dtype = np.int)
     recalibrated_quals = np.array(qcov, copy = True, dtype = np.int)
     valid_positions = (qcov >= minscore)
-    cycle = fastq_cycle_covariates(read)[valid_positions]
+    cycle = fastq_cycle_covariates(read, secondinpair)[valid_positions]
     dinuccov = fastq_dinuc_covariates(read, dinuc_to_int, minscore)[valid_positions]
     recalibrated_quals[valid_positions] = (meanq[rg] + globaldeltaq[rg] + qscoredeltaq[rg, qcov] + dinucdeltaq[rg, qcov, dinuccov] + positiondeltaq[rg, qcov, cycle]).astype(np.int)
     return recalibrated_quals
