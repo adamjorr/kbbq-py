@@ -38,7 +38,7 @@ def main():
     #In the future, we should allow as many inputs as desired, and if
     #there are no inputs provided read from STDIN and try to infer the filetype.
     #They should be positional arguments too, probably.
-    recalibrate_input = recalibrate_parser.add_mutually_exclusive_group(title = 'input options', required = True)
+    recalibrate_input = recalibrate_parser.add_mutually_exclusive_group(required = True)
     recalibrate_input.add_argument('-b','--bam', help = 'BAM to recalibrate')
     recalibrate_input.add_argument('-f', '--fastq', nargs=2, help = 'FASTQ file to recalibrate and a corrected version from your favorite error corrector.')
 
