@@ -47,9 +47,6 @@ def bamread_to_fakeread(read):
     return FakeRead(name = name, quality = read.get_tag('OQ'), sequence = seq)
 
 def test_fastq_calibration(report, recalibratedbam):
-    #TODO: I think the best way to do this is to take the uncalibrated bam reads,
-    #instantiate a fastqread object from it, and make sure the resulting calibrated
-    #read matches the calibrated bam read.
     rg_to_pu = compare_reads.get_rg_to_pu(recalibratedbam)
     rg_to_int = {r:i for i,r in enumerate(rg_to_pu)}
     meanq, *vectors = compare_reads.table_to_vectors(report, list(rg_to_pu.values()))
@@ -57,7 +54,9 @@ def test_fastq_calibration(report, recalibratedbam):
     for read in recalibratedbam:
         fastqread = bamread_to_fakeread(read)
         gatk_calibrated_quals = np.array(read.query_qualities, dtype = np.int)
-        recalibrated_quals = compare_reads.recalibrate_fastq(fastqread, meanq, *dqs, rg = ?, dinuc_to_int = compare_reads.Dinucleotide.dinuc_to_int, secondinpair = read.is_read2)
+        rg = rg_to_int[compare_reads.fastq_infer_rg(fastqread)]
+        recalibrated_quals = compare_reads.recalibrate_fastq(fastqread, meanq, *dqs, rg = rg, dinuc_to_int = compare_reads.Dinucleotide.dinuc_to_int, secondinpair = compare_reads.fastq_infer_secondinpair(fastqread))
+        assert np.array_equal(recalibrated_quals, gatk_calibrated_quals)
 
 # def test_report_creation(report, recalibratedbam, variable_sites):
 #     """

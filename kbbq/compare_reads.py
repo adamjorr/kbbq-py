@@ -725,7 +725,11 @@ def fastq_cycle_covariates(read, secondinpair = False):
 
 def fastq_dinuc_covariates(read, dinuc_to_int, minscore = 6):
     quals = np.array(read.get_quality_array(), dtype = np.int)
-    return generic_dinuc_covariate(read.sequence, quals, dinuc_to_int, minscore)
+    return generic_dinuc_covariate(np.array(list(read.sequence)), quals, dinuc_to_int, minscore)
+
+def fastq_infer_secondinpair(read):
+    namestr = read.name.split(sep='_')[0]
+    return namestr[-2:] == '/2'
 
 def fastq_infer_rg(read):
     """
@@ -743,6 +747,7 @@ def recalibrate_fastq(read, meanq, globaldeltaq, qscoredeltaq, positiondeltaq, d
     qcov = np.array(read.get_quality_array(), dtype = np.int)
     recalibrated_quals = np.array(qcov, copy = True, dtype = np.int)
     valid_positions = (qcov >= minscore)
+    qcov = qcov[valid_positions]
     cycle = fastq_cycle_covariates(read, secondinpair)[valid_positions]
     dinuccov = fastq_dinuc_covariates(read, dinuc_to_int, minscore)[valid_positions]
     recalibrated_quals[valid_positions] = (meanq[rg] + globaldeltaq[rg] + qscoredeltaq[rg, qcov] + dinucdeltaq[rg, qcov, dinuccov] + positiondeltaq[rg, qcov, cycle]).astype(np.int)
