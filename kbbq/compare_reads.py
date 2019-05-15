@@ -727,6 +727,10 @@ def fastq_dinuc_covariates(read, dinuc_to_int, minscore = 6):
     quals = np.array(read.get_quality_array(), dtype = np.int)
     return generic_dinuc_covariate(read.sequence, quals, dinuc_to_int, minscore)
 
+def fastq_infer_secondinpair(read):
+    namestr = read.name.split(sep='_')[0]
+    return namestr[-2:] == '/2'
+
 def fastq_infer_rg(read):
     """
     Infer the read group from appended read information, such as produced by the

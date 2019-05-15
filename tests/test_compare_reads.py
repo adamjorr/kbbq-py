@@ -57,7 +57,8 @@ def test_fastq_calibration(report, recalibratedbam):
     for read in recalibratedbam:
         fastqread = bamread_to_fakeread(read)
         gatk_calibrated_quals = np.array(read.query_qualities, dtype = np.int)
-        recalibrated_quals = compare_reads.recalibrate_fastq(fastqread, meanq, *dqs, rg = ?, dinuc_to_int = compare_reads.Dinucleotide.dinuc_to_int, secondinpair = read.is_read2)
+        rg = rg_to_int[compare_reads.infer_rg(fastqread)]
+        recalibrated_quals = compare_reads.recalibrate_fastq(fastqread, meanq, *dqs, rg = rg, dinuc_to_int = compare_reads.Dinucleotide.dinuc_to_int, secondinpair = compare_reads.fastq_infer_secondinpair(fastqread))
 
 # def test_report_creation(report, recalibratedbam, variable_sites):
 #     """
