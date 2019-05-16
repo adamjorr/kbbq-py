@@ -54,6 +54,8 @@ def test_fastq_to_covariate_arrays(recalibratedbam, variable_sites, monkeypatch)
         #print('Calculating Arrays . . .')
         fqvectors = recalibrate.fastq_to_covariate_arrays(('foo','bar'), infer_rg = True)
 
+        print(bamvectors[5].shape)
+        print(fqvectors[5].shape)
         for b, f in zip(bamvectors, fqvectors):
             print(b[rg_order,...],f)
             assert np.array_equal(b[rg_order,...],f)

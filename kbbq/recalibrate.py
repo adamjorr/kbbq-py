@@ -90,8 +90,8 @@ def fastq_to_covariate_arrays(fastq, infer_rg = False, minscore = 6, maxscore = 
             readlen = len(list(uncorr_read.sequence))
             if readlen > seqlen:
                 seqlen = readlen
-                padding = seqlen - posshape[2]
-                posshape[2] = seqlen
+                padding = 2 * seqlen - posshape[2]
+                posshape[2] = 2 * seqlen
                 #pos_errs.resize(posshape)
                 pos_errs = np.append(pos_errs, np.zeros(posshape[0:-1] + [padding], dtype = np.int), axis = 2)
                 #pos_total.resize(posshape)
