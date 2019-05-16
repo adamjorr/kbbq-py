@@ -75,26 +75,18 @@ def fastq_to_covariate_arrays(fastq, infer_rg = False, minscore = 6, maxscore = 
                 rg_errs = np.append(rg_errs, 0)
                 rg_total = np.append(rg_total, 0)
 
-                #q_errs.resize(qshape)
                 q_errs = np.append(q_errs, [np.zeros(qshape[1:], dtype = np.int)], axis = 0)
-                #q_total.resize(qshape)
                 q_total = np.append(q_total, [np.zeros(qshape[1:], dtype = np.int)], axis = 0)
-                #pos_errs.resize(posshape)
                 pos_errs = np.append(pos_errs, [np.zeros(posshape[1:], dtype = np.int)], axis = 0)
-                #pos_total.resize(posshape)
                 pos_total = np.append(pos_total, [np.zeros(posshape[1:], dtype = np.int)], axis = 0)
-                #dinuc_errs.resize(dinucshape)
                 dinuc_errs = np.append(dinuc_errs, [np.zeros(dinucshape[1:], dtype = np.int)], axis = 0)
-                #dinuc_total.resize(dinucshape)
                 dinuc_total = np.append(dinuc_total, [np.zeros(dinucshape[1:], dtype = np.int)], axis = 0)
             readlen = len(list(uncorr_read.sequence))
             if readlen > seqlen:
                 seqlen = readlen
                 padding = 2 * seqlen - posshape[2]
                 posshape[2] = 2 * seqlen
-                #pos_errs.resize(posshape)
                 pos_errs = np.append(pos_errs, np.zeros(posshape[0:-1] + [padding], dtype = np.int), axis = 2)
-                #pos_total.resize(posshape)
                 pos_total = np.append(pos_total, np.zeros(posshape[0:-1] + [padding], dtype = np.int), axis = 2)
             # get covariate values
             rgs = np.zeros(seqlen, dtype = np.int)
@@ -128,7 +120,6 @@ def fastq_to_covariate_arrays(fastq, infer_rg = False, minscore = 6, maxscore = 
             np.add.at(pos_total, (rgv, qv, pos[valid]), 1)
             np.add.at(dinuc_errs, (rgs[e_and_dvalid], q[e_and_dvalid], dinucleotide[e_and_dvalid]), 1)
             np.add.at(dinuc_total, (rgs[dinuc_valid], q[dinuc_valid], dinucleotide[dinuc_valid]), 1)
-            # print(rg_errs)
     meanq = compare_reads.p_to_q(expected_errs / rg_total)
     return meanq, rg_errs, rg_total, q_errs, q_total, pos_errs, pos_total, dinuc_errs, dinuc_total
 

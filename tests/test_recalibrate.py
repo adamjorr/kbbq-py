@@ -17,7 +17,6 @@ def test_fastq_to_covariate_arrays(recalibratedbam, variable_sites, monkeypatch)
     rg_to_pu = compare_reads.get_rg_to_pu(recalibratedbam)
     rg_to_int = {r:i for i,r in enumerate(rg_to_pu)}
 
-    # recalibratedbam = list(recalibratedbam)[0]
     bamvectors = compare_reads.bam_to_covariate_arrays(recalibratedbam, reffile, variable_sites)
     recalibratedbam.reset()
     refdict = benchmark.get_ref_dict(reffile)
@@ -28,14 +27,6 @@ def test_fastq_to_covariate_arrays(recalibratedbam, variable_sites, monkeypatch)
     bamreads = list(recalibratedbam)
     rgs = {r.get_tag('RG') : None for r in bamreads}
     rg_order = [rg_to_int[r] for r in rgs.keys()]
-
-    # def skips_and_qual_array(self, offset = 33):
-    #     q = np.array(list(self.quality), dtype = np.unicode)
-    #     quals = np.array(q.view(np.uint32) - offset, dtype = np.uint32)
-    #     n = benchmark.get_fastq_readname(self)
-    #     errors, skips = edict.get(n)
-    #     quals[skips] = 0
-    #     return list(quals)
 
     @contextlib.contextmanager
     def fakeread_generator(x):
@@ -48,10 +39,8 @@ def test_fastq_to_covariate_arrays(recalibratedbam, variable_sites, monkeypatch)
 
     with monkeypatch.context() as m:
         m.setattr(pysam, 'FastxFile', fakeread_generator)
-        m.setattr(recalibrate, 'find_corrected_sites', fake_corrected_sites) #should be a fn that looks at the read name and gets the errors from a dict
-        # m.setattr(FakeRead, 'get_quality_array', skips_and_qual_array) # need to replace get_quality_array with a fn that returns the quality array but reduces the quality to below the minimum threshold for variable sites
+        m.setattr(recalibrate, 'find_corrected_sites', fake_corrected_sites) #looks at the read name and gets the errors from a dict
         m.setattr(recalibrate, 'get_fq_skips', lambda x: edict.get(benchmark.get_fastq_readname(x))[1])
-        #print('Calculating Arrays . . .')
         fqvectors = recalibrate.fastq_to_covariate_arrays(('foo','bar'), infer_rg = True)
 
         print(bamvectors[5].shape)
