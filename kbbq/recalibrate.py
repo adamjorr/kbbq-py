@@ -152,10 +152,10 @@ def recalibrate_fastq(fastq, infer_rg = False):
             recalibrated_quals = compare_reads.recalibrate_fastq(read, meanq, *dqs,
                 rg = rgint, dinuc_to_int = compare_reads.Dinucleotide.dinuc_to_int,
                 secondinpair = compare_reads.fastq_infer_secondinpair(read))
-            strquals = ''.join(recalibrated_quals.astype(np.uint32).view('U1'))
+            strquals = ''.join((recalibrated_quals + 33).astype(np.uint32).view('U1'))
             print(read.name)
             print(read.sequence)
-            print(read.comment)
+            print('+')
             print(strquals)
 
 def recalibrate_bam(bam, use_oq = False, set_oq = False):
@@ -172,4 +172,4 @@ def recalibrate(bam, fastq, infer_rg = False, use_oq = False, set_oq = False, ga
     elif bam is not None:
         recalibrate_bam(bam, use_oq, set_oq)
     elif fastq is not None:
-        recalibrate_fastq(fastq, infer_rg = True)
+        recalibrate_fastq(fastq, infer_rg = infer_rg)
