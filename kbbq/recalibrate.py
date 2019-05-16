@@ -111,7 +111,7 @@ def fastq_to_covariate_arrays(fastq, infer_rg = False, minscore = 6, maxscore = 
             e_and_valid = np.logical_and(errors, valid)
             e_and_dvalid = np.logical_and(errors, dinuc_valid)
 
-            print(uncorr_read.name, np.sum(errors), np.sum(valid), np.sum(e_and_valid))
+            #print(uncorr_read.name, q) # errors.shape, valid.shape, e_and_valid.shape, np.sum(errors), np.sum(valid), np.sum(e_and_valid))
 
             rge = rgs[e_and_valid]
             rgv = rgs[valid]

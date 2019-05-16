@@ -40,11 +40,13 @@ class FakeRead:
 def bamread_to_fakeread(read):
     complement = {'A' : 'T', 'T' : 'A', 'G' : 'C', 'C' : 'G'}
     seq = read.query_sequence
+    q = read.get_tag('OQ')
     if read.is_reverse:
         seq = ''.join([complement.get(x,'N') for x in reversed(seq)])
+        q = q[::-1]
     suffix = ("/2" if read.is_read2 else "/1")
     name = read.query_name + suffix + '_RG:Z:' + read.get_tag('RG')
-    return FakeRead(name = name, quality = read.get_tag('OQ'), sequence = seq)
+    return FakeRead(name = name, quality = q, sequence = seq)
 
 def test_fastq_calibration(report, recalibratedbam):
     rg_to_pu = compare_reads.get_rg_to_pu(recalibratedbam)

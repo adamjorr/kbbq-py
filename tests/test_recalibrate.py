@@ -51,10 +51,9 @@ def test_fastq_to_covariate_arrays(recalibratedbam, variable_sites, monkeypatch)
         m.setattr(recalibrate, 'find_corrected_sites', fake_corrected_sites) #should be a fn that looks at the read name and gets the errors from a dict
         # m.setattr(FakeRead, 'get_quality_array', skips_and_qual_array) # need to replace get_quality_array with a fn that returns the quality array but reduces the quality to below the minimum threshold for variable sites
         m.setattr(recalibrate, 'get_fq_skips', lambda x: edict.get(benchmark.get_fastq_readname(x))[1])
-        print('Calculating Arrays . . .')
+        #print('Calculating Arrays . . .')
         fqvectors = recalibrate.fastq_to_covariate_arrays(('foo','bar'), infer_rg = True)
 
         for b, f in zip(bamvectors, fqvectors):
             print(b[rg_order,...],f)
-        assert False
-        assert np.array_equal(b[rg_order,...],f)
+            assert np.array_equal(b[rg_order,...],f)
