@@ -21,6 +21,7 @@ import kbbq.recaltable as recaltable
 import kbbq.plot
 import pandas as pd
 import datetime
+import kbbq.benchmark
 
 def tstamp():
     return '[ ' + datetime.datetime.today().isoformat(' ', 'seconds') + ' ]'
@@ -543,6 +544,9 @@ def bam_to_covariate_arrays(bamfileobj, fastafilename, var_pos, minscore = 6, ma
             dinuc_valid = np.logical_and(dinucleotide != -1, valid)
             e_and_valid = np.logical_and(errors, valid)
             e_and_dvalid = np.logical_and(errors, dinuc_valid)
+
+            print(kbbq.benchmark.get_bam_readname(read), np.sum(e_and_valid))
+
             rge = rgs[e_and_valid]
             rgv = rgs[valid]
             qe = q[e_and_valid]

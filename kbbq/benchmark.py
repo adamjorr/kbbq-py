@@ -21,7 +21,7 @@ def get_var_sites(vcf):
 def get_full_skips(refdict, var_sites):
     skips = {chrom: np.zeros(len(refdict[chrom]), dtype = np.bool) for chrom in refdict.keys()}
     for chrom in skips.keys():
-        variable_positions = var_sites[chrom]
+        variable_positions = np.array(var_sites[chrom], dtype = np.int)
         skips[chrom][variable_positions] = True
     return skips
 

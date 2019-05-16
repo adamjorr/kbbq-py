@@ -11,8 +11,8 @@ import sys
 #helper commands that pass arguments to the proper functions
 
 def recalibrate(args):
-    re.recalibrate(bam = args.bam, fastq = args.fastq, use_oq = args.use_oq,
-        set_oq = args.set_oq, gatkreport = args.gatkreport)
+    re.recalibrate(bam = args.bam, fastq = args.fastq, infer_rg = args.infer_rg,
+    use_oq = args.use_oq, set_oq = args.set_oq, gatkreport = args.gatkreport)
 
 def benchmark(args):
     bm.benchmark(bamfile = args.bam, fafile = args.reference,
@@ -48,6 +48,9 @@ def main():
         help = 'If the given path points to an existing GATK report, \
         load the model from the report instead of calculating it. \
         If the file doesn\'t exist, save the calculated model to the given path.')
+    recalibrate_parser.add_argument('--infer-rg', action = 'store_true',
+        help = 'Attempt to infer the read group from a FASTQ read. Only works with FASTQ input. \
+        The default behavior is to treat each input FASTQ file as its own read group.')
     #TODO: method, model, lighter options, prefix, output, gatkreport
     recalibrate_parser.set_defaults(command=recalibrate)
 
