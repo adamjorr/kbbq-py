@@ -74,18 +74,28 @@ def fastq_to_covariate_arrays(fastq, infer_rg = False, minscore = 6, maxscore = 
                 expected_errs = np.append(expected_errs, 0)
                 rg_errs = np.append(rg_errs, 0)
                 rg_total = np.append(rg_total, 0)
-                q_errs.resize(qshape)
-                q_total.resize(qshape)
-                pos_errs.resize(posshape)
-                pos_total.resize(posshape)
-                dinuc_errs.resize(dinucshape)
-                dinuc_total.resize(dinucshape)
+
+                #q_errs.resize(qshape)
+                q_errs = np.append(q_errs, [np.zeros(qshape[1:], dtype = np.int)], axis = 0)
+                #q_total.resize(qshape)
+                q_total = np.append(q_total, [np.zeros(qshape[1:], dtype = np.int)], axis = 0)
+                #pos_errs.resize(posshape)
+                pos_errs = np.append(pos_errs, [np.zeros(posshape[1:], dtype = np.int)], axis = 0)
+                #pos_total.resize(posshape)
+                pos_total = np.append(pos_total, [np.zeros(posshape[1:], dtype = np.int)], axis = 0)
+                #dinuc_errs.resize(dinucshape)
+                dinuc_errs = np.append(dinuc_errs, [np.zeros(dinucshape[1:], dtype = np.int)], axis = 0)
+                #dinuc_total.resize(dinucshape)
+                dinuc_total = np.append(dinuc_total, [np.zeros(dinucshape[1:], dtype = np.int)], axis = 0)
             readlen = len(list(uncorr_read.sequence))
             if readlen > seqlen:
                 seqlen = readlen
+                padding = seqlen - posshape[2]
                 posshape[2] = seqlen
-                pos_errs.resize(posshape)
-                pos_total.resize(posshape)
+                #pos_errs.resize(posshape)
+                pos_errs = np.append(pos_errs, np.zeros(posshape[0:-1] + [padding], dtype = np.int), axis = 2)
+                #pos_total.resize(posshape)
+                pos_total = np.append(pos_total, np.zeros(posshape[0:-1] + [padding], dtype = np.int), axis = 2)
             # get covariate values
             rgs = np.zeros(seqlen, dtype = np.int)
             rgs[:] = rgint
@@ -101,7 +111,7 @@ def fastq_to_covariate_arrays(fastq, infer_rg = False, minscore = 6, maxscore = 
             e_and_valid = np.logical_and(errors, valid)
             e_and_dvalid = np.logical_and(errors, dinuc_valid)
 
-            print(uncorr_read.name, np.sum(e_and_valid))
+            print(uncorr_read.name, np.sum(errors), np.sum(valid), np.sum(e_and_valid))
 
             rge = rgs[e_and_valid]
             rgv = rgs[valid]

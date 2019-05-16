@@ -545,7 +545,7 @@ def bam_to_covariate_arrays(bamfileobj, fastafilename, var_pos, minscore = 6, ma
             e_and_valid = np.logical_and(errors, valid)
             e_and_dvalid = np.logical_and(errors, dinuc_valid)
 
-            print(kbbq.benchmark.get_bam_readname(read), np.sum(e_and_valid))
+            print(kbbq.benchmark.get_bam_readname(read), np.sum(errors), np.sum(valid), np.sum(e_and_valid))
 
             rge = rgs[e_and_valid]
             rgv = rgs[valid]
