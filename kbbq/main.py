@@ -29,7 +29,7 @@ def main():
     subparsers = parser.add_subparsers(title='command', description="valid commands")
     
     #reused strings
-    oq_help = 'Use the OQ tag when benchmarking a BAM file. Does nothing if a fastq file is provided.'
+    oq_help = 'Use the OQ tag to get quality scores when working with a BAM file. Does nothing if a fastq file is provided.'
 
     #recalibrate command
     recalibrate_parser = subparsers.add_parser('recalibrate', description = 'Recalibrate a BAM or FASTQ file')
