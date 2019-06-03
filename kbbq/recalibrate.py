@@ -156,7 +156,7 @@ def recalibrate_fastq(fastq, infer_rg = False):
                 rg = rgint, dinuc_to_int = compare_reads.Dinucleotide.dinuc_to_int,
                 secondinpair = compare_reads.fastq_infer_secondinpair(read))
             strquals = ''.join((recalibrated_quals + 33).astype(np.uint32).view('U1'))
-            print(read.name)
+            print('@' + read.name)
             print(read.sequence)
             print('+')
             print(strquals)
