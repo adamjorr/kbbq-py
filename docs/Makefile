@@ -21,6 +21,10 @@ help:
 
 $(CLIHELP):
 	kbbq -h > $(CLIHELP) &&\
+	echo -e '\n\n' >> $(CLIHELP) &&\
 	kbbq recalibrate -h >> $(CLIHELP) &&\
+	echo -e '\n\n' >> $(CLIHELP) &&\
 	kbbq benchmark -h >> $(CLIHELP) &&\
-	kbbq plot -h >> $(CLIHELP) && 
+	echo -e '\n\n' >> $(CLIHELP) &&\
+	kbbq plot -h >> $(CLIHELP) &&\
+	echo -e '\n\n' >> $(CLIHELP)
