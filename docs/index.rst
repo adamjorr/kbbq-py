@@ -9,6 +9,7 @@ Welcome to kbbq's documentation!
 .. toctree::
    :caption: Contents:
 
+   cli/kbbq
    modules/kbbq
 
 Indices and tables

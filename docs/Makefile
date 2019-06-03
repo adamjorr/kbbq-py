@@ -6,6 +6,7 @@ SPHINXOPTS    =
 SPHINXBUILD   = sphinx-build
 SOURCEDIR     = .
 BUILDDIR      = _build
+CLIHELP       = $(SOURCEDIR)/cli/help.rst
 
 # Put it first so that "make" without argument is like "make help".
 help:
@@ -15,5 +16,11 @@ help:
 
 # Catch-all target: route all unknown targets to Sphinx using the new
 # "make mode" option.  $(O) is meant as a shortcut for $(SPHINXOPTS).
-%: Makefile
+%: Makefile $(CLIHELP)
 	@$(SPHINXBUILD) -M $@ "$(SOURCEDIR)" "$(BUILDDIR)" $(SPHINXOPTS) $(O)
+
+$(CLIHELP):
+	kbbq -h > $(CLIHELP) &&\
+	kbbq recalibrate -h >> $(CLIHELP) &&\
+	kbbq benchmark -h >> $(CLIHELP) &&\
+	kbbq plot -h >> $(CLIHELP) && 

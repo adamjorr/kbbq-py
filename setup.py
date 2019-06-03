@@ -6,6 +6,9 @@ import setuptools
 with open("README.md", 'r') as fh:
     long_description = fh.read()
 
+with open("requirements.txt", 'r') as fh:
+    install_requires = fh.read().split() 
+
 setuptools.setup(
     name="kbbq",
     version="0.0.0",
@@ -26,10 +29,10 @@ setuptools.setup(
         "Topic :: Scientific/Engineering :: Bio-Informatics"
     ],
     python_requires='>=3',
-    install_requires=[], #TODO
+    install_requires=install_requires,
     entry_points={
         'console_scripts': [
-            'kbbq=main:main'
+            'kbbq=kbbq.main:main'
         ]
     }
 )
