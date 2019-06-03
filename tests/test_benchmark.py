@@ -5,6 +5,10 @@ def test_benchmarks_match(monkeypatch, capfd):
     """
     This is pretty much a sanity check, so we should
     do a nocover and add more thorough tests later.
+
+    It does a FASTQ benchmark and a BAM benchmark and
+    checks that they produce the same output, which
+    they should since they're the same file.
     """
     import sys
     with monkeypatch.context() as m:

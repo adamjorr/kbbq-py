@@ -17,7 +17,8 @@ def recalibrate(args):
 def benchmark(args):
     bm.benchmark(bamfile = args.bam, fafile = args.reference,
         vcffile = args.vcf, fastqfile = args.fastq,
-        label = args.label, use_oq = args.use_oq)
+        label = args.label, use_oq = args.use_oq,
+        bedfh = args.bedfile)
 
 def plot(args):
     kbbq.plot.plot_benchmark(fhin = args.file, outfile = args.outfile, plottype = args.type)
@@ -64,6 +65,8 @@ def main():
     benchmark_parser.add_argument('-f', '--fastq', default = None, required = False, help = 'fastq file to benchmark')
     benchmark_parser.add_argument('-l', '--label', default = None, required = False, help = 'label to use for label column')
     benchmark_parser.add_argument('-u', '--use-oq', action = 'store_true', help = oq_help)
+    benchmark_parser.add_argument('-d', '--bedfile', type = argparse.FileType('r'),
+        help = 'BED file of confident regions. Sites outside the given regions will be skipped.')
     benchmark_parser.set_defaults(command=benchmark)
 
     #plot command

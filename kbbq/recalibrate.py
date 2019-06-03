@@ -19,6 +19,9 @@ def find_corrected_sites(uncorr_read, corr_read):
     return (uncorr_seq != corr_seq)
 
 def get_fq_skips(read):
+    """
+    This function exists just to override it in testing
+    """
     seqlen = len(list(read.sequence))
     return np.zeros(seqlen, dtype = np.bool)
 
