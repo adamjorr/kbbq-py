@@ -72,13 +72,6 @@ def get_error_dict(bamfile, refdict, fullskips):
         edict[name] = (e,s)
     return edict
 
-# def find_errors_in_fastq(fqreads, edict):
-#     """
-#     Finds errors given a readname -> (errors, skips) dict.
-#     """
-#     errskips = [edict[get_fastq_readname(read)] for read in fqreads]
-#     return zip(*errskips) #this will return a list of errors and a list of skips
-
 def calculate_q(errors, quals):
     """
     Calculate Actual Q and Predicted Q given a flat
