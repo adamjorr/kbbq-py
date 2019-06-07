@@ -15,8 +15,9 @@ class ReadData():
 
     Class Attributes
 
-        * attr:`rgs` - List of observed read groups
-        * attr:`pus` - List of platform unit tags associated with the read groups
+        * attr:`rg_to_pu` - Dict of read group id's -> platform unit
+        * attr:`rg_to_int` - Dict of read group id's -> int
+        * attr:`numrgs` - int number of read groups
 
     Instance Attributes
 
@@ -32,18 +33,25 @@ class ReadData():
 
         * meth:`from_bamread` - instantiate a ReadData object from a BAM read 
         * meth:`from_fastq` -  instantiate a ReadData object from a fastq read
-        * meth:`get_rg_to_int` - get a dict mapping read group ID to an int
+        * meth:`load_rgs_from_bamfile` - load read groups into the class from a bam file object
 
     Instance Methods
 
         * meth:`str_qual` - Get the quality score as a list of chars
-        * meth:`str_fastq_name` - Format the name to be suitable for a fastq file
-        * meth:`str_bam_name` - Format the name to be suitable for a BAM read
+        * meth:`fastq_name` - Format the name to be suitable for a fastq file
+        * meth:`bam_name` - Format the name to be suitable for a BAM read
+        * meth:`get_rg_int` - Get the read group index using the rg_to_int dictionary
         * meth:`get_pu` - Get the PU from the read group and rg_to_pu dictionary.
 
+    Note that from https://docs.python.org/3/library/stdtypes.html#dict , iteration
+    order is guaranteed to be in insertion order. Thus we are OK saving the rg as an
+    int on the fly so long as we don't remove any read groups from the rg_to_pu dictionary.
+    So don't do that! In fact, we should probably remove __del__() and pop() from the dicts...
     """
 
     rg_to_pu = dict()
+    rg_to_int = dict()
+    numrgs = 0
 
     def __init__(self, seq, qual, skips, name, rg, second, errors):
         self.seq = seq
@@ -56,6 +64,8 @@ class ReadData():
             #we create a new PU identical to the rg
             #and load it
             rg_to_pu[rg] = rg
+            rg_to_int[rg] = numrgs
+            numrgs = numrgs + 1
         self.second = second
         self.errors = errors
 
@@ -74,9 +84,8 @@ class ReadData():
             qual = bamread_get_quals(bamread, use_oq),
             skips = np.zeros(seqlen, dtype = np.bool),
             name = bamread.query_name,
-            rg = ,
-            pu = ,
-            second = read.is_read2,
+            rg = bamread.get_tag('RG'),
+            second = bamread.is_read2,
             errors = np.zeros(seqlen, dtype = np.bool),
             )
 
@@ -88,21 +97,11 @@ class ReadData():
         pass
 
     @classmethod
-    def get_rg_to_int(cls):
-        """
-        To ensure the order of keys in the rg_to_pu dict is not changed,
-        this should only be called once all the readgroups have been loaded.
-        """
-        return {r:i for i,r in enumerate(rgs)}
-
-    @classmethod
-    def get_rg_to_pu(cls):
-        return dict(zip(rgs, pus))
-
-    @classmethod
     def load_rgs_from_bamfile(cls, bamfileobj):
         for rg in bamfileobj.header.as_dict()['RG']:
             rg_to_pu[rg['ID']] = rg['PU']
+            rg_to_int[rg['ID']] = numrgs
+            numrgs = numrgs + 1
 
     def str_qual(self, offset = 33):
         """
@@ -115,6 +114,22 @@ class ReadData():
 
     def bam_name(self):
         pass
+
+    def get_rg_int(self):
+        """
+        Return the RG as an int suitable for indexing rather
+        than as the actual string RG. Since this uses the
+        rg_to_int class attribute, to be safe you should
+        only call this after all read groups have been loaded
+        so the ordering doesn't change.
+        """
+        return rg_to_int[self.rg]
+
+    def get_pu(self):
+        """
+        Return the PU from the rg_to_int dict.
+        """
+        return rg_to_int[self.rg]
 
     def __len__(self):
         """
