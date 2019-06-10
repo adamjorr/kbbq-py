@@ -38,8 +38,7 @@ class ReadData():
     Instance Methods
 
         * meth:`str_qual` - Get the quality score as a list of chars
-        * meth:`fastq_name` - Format the name to be suitable for a fastq file
-        * meth:`bam_name` - Format the name to be suitable for a BAM read
+        * meth:`canonical_name` - Return the name with a '/1' or '/2' suffix
         * meth:`get_rg_int` - Get the read group index using the rg_to_int dictionary
         * meth:`get_pu` - Get the PU from the read group and rg_to_pu dictionary.
 
@@ -90,11 +89,43 @@ class ReadData():
             )
 
     @classmethod
-    def from_fastq(cls, fastqread, infer_rg = False):
+    def from_fastq(cls, fastqread, rg = None, second = None, namedelimiter = '_'):
         """
-        TODO
+        ReadData factory that instantiates a ReadData object from a pysam FastxProxy.
+
+        Skips and errors are initialized to be empty bool arrays. If you need to use them,
+        make sure you set them the way you need to for your use case. The read name will
+        be set to the first field of the delimited read name, minus any trailing '/1' or '/2'
+        if they exist.
+
+        If rg is None (the default), we will attempt to infer the read group id from the
+        read name. If second is None (the default) we will attempt to infer if the read
+        is second in pair based on the name. To infer rg, the read group must be
+        in its own field with the field beginning with 'RG:', such as 'RG:example',
+        with fields delimited by namedelimiter. When multiple fields are found that
+        begin with 'RG:', the last is chosen to be the true ID.
+        To infer second, the first field of the read name must end with '/2'.
+        If the last 2 characters of the first field are not '/2', second will be inferred to be false.
         """
-        pass
+        seq = np.array(list(read.sequence), dtype = np.unicode)
+        seqlen = len(seq)
+        splitname = read.name.split(sep = namedelimiter)
+        if rg is None:
+            rg = [f[3:] for f in splitname if f[0:3] == 'RG:'][-1]
+        if second is None:
+            second = (splitname[0][-2:] == '/2')
+        if splitname[0].endswith(('/1','/2')):
+            splitname[0] = splitname[0][:-2]
+
+        return cls(
+            seq = seq,
+            qual = np.array(read.get_quality_array(), dtype = np.int),
+            skips = np.zeros(seqlen, dtype = np.bool),
+            name = splitname[0],
+            rg = rg,
+            second = second,
+            errors = np.zeros(seqlen, dtype = np.bool),
+            )
 
     @classmethod
     def load_rgs_from_bamfile(cls, bamfileobj):
@@ -109,11 +140,16 @@ class ReadData():
         """
         return list((self.qual + offset).astype(np.uint32).view('U1'))
 
-    def fastq_name(self):
-        pass
+    def canonical_name(self):
+        """
+        The name with an added suffix based on whether the read
+        is firstinpair or not.
 
-    def bam_name(self):
-        pass
+        If the read has its second flag set to True, '/2' is added
+        to the end. Otherwise, '/1' is added.
+        """
+        suffix = ("/2" if self.second else "/1")
+        return self.name + suffix
 
     def get_rg_int(self):
         """
