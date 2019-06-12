@@ -35,3 +35,10 @@ kbbq.benchmark
 .. automodule:: kbbq.benchmark
 	:members:
 	:undoc-members:
+
+kbbq.read
+---------
+
+.. automodule:: kbbq.read
+	:members:
+	:undoc-members:
