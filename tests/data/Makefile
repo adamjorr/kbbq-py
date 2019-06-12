@@ -34,15 +34,6 @@ RECALTABLE = conf_regions.recal.txt
 RECALBAM = conf_regions.recal.bam
 VARSITES = variable_sites.txt
 
-#note this TAR cmd will fail unless the BED is made first.
-define TARTOCMD =
-'bash -c "if [ $${TAR_FILENAME} == \"$(FULLBEDNAME)\" ]; then \
-	zcat - | head -n $(NUMREGIONS) >$(CONFBEDNAME) ; \
-elif [ $${TAR_FILENAME} == \"$(FULLVCFNAME)\" ]; then \
-	bcftools view -T $(CONFBEDNAME) -Oz -o $(CONFVCFNAME) - ; \
-fi"'
-endef
-
 BEDTOREGIONS='BEGIN{OFS=""}{print $$1,":",($$2+1),"-",$$3}'
 
 
@@ -56,16 +47,16 @@ clean:
 	$(CONFBEDNAME) $(REFNAME) $(REFDICT) $(REFIDX) \
 	$(CONFVCFNAME) $(CONFVCFIDX) $(CONFBAMNAME) $(RGSFILE) \
 	$(FIRSTREADS) $(SECONDREADS) $(FULLREADS) $(LIGHTERREADS) \
-	$(basename $(RECALBAM)).bai
+	$(basename $(RECALBAM)).bai $(notdir $(FULLREFIDXURL))
 
 # Generic Indexing Rules
 ########################
 
 %.vcf.gz.csi: %.vcf.gz
-	bcftools index -c $<
+	bcftools index -cf $<
 
 %.vcf.gz.tbi: %.vcf.gz
-	bcftools index -t $<
+	bcftools index -tf $<
 
 %.fa.fai: %.fa
 	samtools faidx $<
@@ -75,9 +66,15 @@ clean:
 
 #
 
-$(CONFBEDNAME) $(CONFVCFNAME):
+$(CONFBEDNAME):
 	wget -qO- $(TARURL) | \
-	tar -xnf- --occurrence=1 --to-command=$(TARTOCMD) $(FULLBEDNAME) $(FULLVCFNAME)
+	tar -xnf- --occurrence=1 --to-stdout $(FULLBEDNAME) | \
+	zcat - | head -n $(NUMREGIONS) > $(CONFBEDNAME)
+
+$(CONFVCFNAME): $(CONFBEDNAME)
+	wget -qO- $(TARURL) | \
+	tar -xnf- --occurrence=1 --to-stdout $(FULLVCFNAME) | \
+	bcftools view -T $(CONFBEDNAME) -Oz -o $(CONFVCFNAME) -
 
 $(notdir $(FULLREFIDXURL)):
 	wget -q $(FULLREFIDXURL) -O $@
