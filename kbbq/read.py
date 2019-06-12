@@ -1,5 +1,18 @@
 """
 Class and functions for read data.
+
+This module includes the :class:`ReadData` class and a few utility functions for 
+working with BAM reads of type :class:`pysam.AlignedSegment`.
+
+Classes
+
+    * :class:`ReadData`
+
+Functions
+
+    * :func:`bamread_get_oq`
+    * :func:`bamread_get_quals`
+
 """
 
 class ReadData():
@@ -15,32 +28,32 @@ class ReadData():
 
     Class Attributes
 
-        * attr:`rg_to_pu` - Dict of read group id's -> platform unit
-        * attr:`rg_to_int` - Dict of read group id's -> int
-        * attr:`numrgs` - int number of read groups
+        * :attr:`rg_to_pu` - Dict of read group id's -> platform unit
+        * :attr:`rg_to_int` - Dict of read group id's -> int
+        * :attr:`numrgs` - int number of read groups
 
     Instance Attributes
 
-        * attr:`seq` - Numpy array of characters representing the sequence
-        * attr:`qual` - Numpy array of int representing the quality score
-        * attr:`skips` - Numpy array of bools representing sites to skip
-        * attr:`name` - string representing the name of the read
-        * attr:`rg` - int representing the read group the read belongs to
-        * attr:`second` - bool representing whether the read is 2nd in pair
-        * attr:`errors` - Numpy array of bools representing whether the base is an error
+        * :attr:`seq` - Numpy array of characters representing the sequence
+        * :attr:`qual` - Numpy array of int representing the quality score
+        * :attr:`skips` - Numpy array of bools representing sites to skip
+        * :attr:`name` - string representing the name of the read
+        * :attr:`rg` - int representing the read group the read belongs to
+        * :attr:`second` - bool representing whether the read is 2nd in pair
+        * :attr:`errors` - Numpy array of bools representing whether the base is an error
 
     Class Methods
 
-        * meth:`from_bamread` - instantiate a ReadData object from a BAM read 
-        * meth:`from_fastq` -  instantiate a ReadData object from a fastq read
-        * meth:`load_rgs_from_bamfile` - load read groups into the class from a bam file object
+        * :meth:`from_bamread` - instantiate a ReadData object from a BAM read 
+        * :meth:`from_fastq` -  instantiate a ReadData object from a fastq read
+        * :meth:`load_rgs_from_bamfile` - load read groups into the class from a bam file object
 
     Instance Methods
 
-        * meth:`str_qual` - Get the quality score as a list of chars
-        * meth:`canonical_name` - Return the name with a '/1' or '/2' suffix
-        * meth:`get_rg_int` - Get the read group index using the rg_to_int dictionary
-        * meth:`get_pu` - Get the PU from the read group and rg_to_pu dictionary.
+        * :meth:`str_qual` - Get the quality score as a list of chars
+        * :meth:`canonical_name` - Return the name with a '/1' or '/2' suffix
+        * :meth:`get_rg_int` - Get the read group index using the rg_to_int dictionary
+        * :meth:`get_pu` - Get the PU from the read group and rg_to_pu dictionary.
 
     Note that from https://docs.python.org/3/library/stdtypes.html#dict , iteration
     order is guaranteed to be in insertion order. Thus we are OK saving the rg as an
