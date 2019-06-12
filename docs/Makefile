@@ -20,11 +20,12 @@ help:
 	@$(SPHINXBUILD) -M $@ "$(SOURCEDIR)" "$(BUILDDIR)" $(SPHINXOPTS) $(O)
 
 $(CLIHELP):
-	kbbq -h > $(CLIHELP) &&\
-	echo -e '\n\n' >> $(CLIHELP) &&\
-	kbbq recalibrate -h >> $(CLIHELP) &&\
-	echo -e '\n\n' >> $(CLIHELP) &&\
-	kbbq benchmark -h >> $(CLIHELP) &&\
-	echo -e '\n\n' >> $(CLIHELP) &&\
-	kbbq plot -h >> $(CLIHELP) &&\
+	echo -e 'Command Line Help\n-----------------\n\n::\n\n' > $(CLIHELP) &&\
+	kbbq -h | sed 's/^/\t/g' >> $(CLIHELP) &&\
+	echo -e '\n\nRecalibrate\n-----------\n\n::\n\n' >> $(CLIHELP) &&\
+	kbbq recalibrate -h | sed 's/^/\t/g' >> $(CLIHELP) &&\
+	echo -e '\n\nBenchmark\n---------\n\n::\n\n' >> $(CLIHELP) &&\
+	kbbq benchmark -h | sed 's/^/\t/g' >> $(CLIHELP) &&\
+	echo -e '\n\nPlot\n----\n\n::\n\n' >> $(CLIHELP) &&\
+	kbbq plot -h | sed 's/^/\t/g' >> $(CLIHELP) &&\
 	echo -e '\n\n' >> $(CLIHELP)
