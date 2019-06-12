@@ -42,6 +42,7 @@ extensions = [
     'sphinx.ext.autodoc',
     'sphinx.ext.autosummary',
     'sphinx.ext.viewcode',
+    'sphinx.ext.intersphinx',
 ]
 
 # Add any paths that contain templates here, relative to this directory.
@@ -183,3 +184,9 @@ autodoc_default_options = {
     'member-order' : 'bysource',
     'special-members' : '__init__,__str__'
     }
+
+intersphinx_mapping = {
+    'pysam' : ('https://pysam.readthedocs.io/en/latest/', None),
+    'numpy' : ('https://docs.scipy.org/doc/numpy/', None),
+    'pandas' : ('https://pandas.pydata.org/pandas-docs/stable/', None)
+}
