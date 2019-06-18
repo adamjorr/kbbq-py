@@ -54,6 +54,7 @@ class ReadData():
         * :meth:`canonical_name` - Return the name with a '/1' or '/2' suffix
         * :meth:`get_rg_int` - Get the read group index using the rg_to_int dictionary
         * :meth:`get_pu` - Get the PU from the read group and rg_to_pu dictionary.
+        * :meth:`not_skipped_errors` - Return a logical and of ~:attr:`skips` and :attr:`errors`
 
     Note that from https://docs.python.org/3/library/stdtypes.html#dict , iteration
     order is guaranteed to be in insertion order. Thus we are OK saving the rg as an
@@ -233,6 +234,15 @@ class ReadData():
         :rtype: str
         """
         return rg_to_int[self.rg]
+
+    def not_skipped_errors(self):
+        """
+        Return a logical and of ~:attr:`skips` and :attr:`errors`
+
+        :return: array of valid errors
+        :rtype: :class:`np.ndarray`(bool)
+        """
+        return np.logical_and(self.errors, ~self.skips)
 
     def __len__(self):
         """

@@ -42,3 +42,10 @@ kbbq.read
 .. automodule:: kbbq.read
 	:members:
 	:undoc-members:
+
+kbbq.covariate
+--------------
+
+.. automodule:: kbbq.covariate
+	:members:
+	:undoc-members:
