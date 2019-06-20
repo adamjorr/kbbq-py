@@ -255,6 +255,12 @@ class Dinucleotide:
     Dictionary mapping dinuc -> int
     """
 
+    vectorized_get = np.vectorize(dinuc_to_int.get, otypes = [np.int])
+
+    @classmethod
+    def vecget(cls, *args, **kwargs):
+        return vectorized_get(*args, **kwargs)
+
 def gatk_delta_q(prior_q, numerrs, numtotal, maxscore = 42):
     assert prior_q.shape == numerrs.shape == numtotal.shape
     possible_q = np.arange(maxscore+1, dtype = np.int)

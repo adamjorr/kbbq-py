@@ -240,9 +240,61 @@ class ReadData():
         Return a logical and of ~:attr:`skips` and :attr:`errors`
 
         :return: array of valid errors
-        :rtype: :class:`np.ndarray`(bool)
+        :rtype: np.ndarray(bool)
         """
         return np.logical_and(self.errors, ~self.skips)
+
+    def get_rg_errors(self):
+        """
+        Return an array of errors and valid sites.
+
+        The errors are always a subset of the valid sites.
+
+        For example, a read with 4 non skipped sites and 1 error
+        will return :code:`([rg], [rg, rg, rg, rg])`
+
+        :return: errors and valid rg values
+        :rtype: tuple(np.ndarray(int))
+        """
+        rg = self.get_rg_int()
+        rg = np.broadcast_to(rg, len(self))
+        return rg[self.not_skipped_errors()], rg[~self.skips]
+
+    def get_q_errors(self):
+        qe = self.qual[self.not_skipped_errors()]
+        qv = self.qual[~self.skips]
+        return qe, qv
+
+    def get_cycle_array(self):
+        cycle = np.arange(len(self))
+        if self.second:
+            cycle = np.negative(cycle + 1)
+        return cycle
+
+    def get_cycle_errors(self):
+        cycle = self.get_cycle_array()
+        ce = cycle[self.not_skipped_errors()]
+        cv = cycle[~self.skips]
+        return ce, cv
+
+    def get_dinucleotide_array(self, minscore = 6):
+        dinuc = np.char.add(self.seq[:-1], self.seq[1:])
+        dinuccov = np.zeros(len(self), dtype = np.int)
+        dinuccov[0] = -1
+        is_n = (self.seq[1:] == 'N')
+        follows_n = (self.seq[:-1] == 'N')
+        invalid = np.logical_or(self.qual < minscore, np.logical_or(is_n, follows_n))
+        dinuccov[1:][invalid] = -1
+        dinuccov[1:][~invalid] = compare_reads.Dinucleotide.vecget(dinuc[~invalid])
+        return dinuccov
+
+    def get_dinuc_errors(self, minscore = 6):
+        dinuc = self.get_dinucleotide_array(minscore)
+        dvalid = np.logical_and(dinuc != -1, ~skips)
+        dvalid_and_error = np.logical_and(dvalid, self.errors)
+        de = dinuc[dvalid_and_error]
+        dv = dinuc[dvalid]
+        return de, dv
 
     def __len__(self):
         """

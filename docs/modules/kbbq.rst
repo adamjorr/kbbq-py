@@ -49,3 +49,4 @@ kbbq.covariate
 .. automodule:: kbbq.covariate
 	:members:
 	:undoc-members:
+	:special-members: __getitem__, __setitem__
