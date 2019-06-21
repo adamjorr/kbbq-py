@@ -24,7 +24,8 @@ class ReadData():
     then update the original read with the new information; otherwise
     you'll lose annotations. This class also manages read group information.
     You should instantiate the object from one of the class methods instead
-    of directly instantiating it if possible.
+    of directly instantiating it if possible. You should never assign
+    directly to any of the class attributes; treat them as read-only.
 
     Class Attributes
 
@@ -63,15 +64,23 @@ class ReadData():
     """
 
     rg_to_pu = dict()
+    """Dict mapping RG ids to the PU tag for the read group."""
     rg_to_int = dict()
+    """Dict mapping RG ids to integer indices."""
     numrgs = 0
+    """Number of readgroups encountered so far."""
 
     def __init__(self, seq, qual, skips, name, rg, second, errors):
         self.seq = seq
+        """:class:`numpy.ndarray` of characters representing the sequence"""
         self.qual = qual
+        """:class:`numpy.ndarray` of int representing the quality score"""
         self.skips = skips
+        """:class:`numpy.ndarray` of bools representing sites to skip"""
         self.name = name
+        """string representing the name of the read"""
         self.rg = rg
+        """int representing the read group the read belongs to"""
         if rg not in rg_to_pu:
             #if it hasn't been preloaded,
             #we create a new PU identical to the rg
@@ -80,7 +89,9 @@ class ReadData():
             rg_to_int[rg] = numrgs
             numrgs = numrgs + 1
         self.second = second
+        """bool representing whether the read is 2nd in pair"""
         self.errors = errors
+        """:class:`numpy.ndarray` of bools representing whether the base is an error"""
 
     @classmethod
     def from_bamread(cls, bamread, use_oq = False):
@@ -237,16 +248,16 @@ class ReadData():
 
     def not_skipped_errors(self):
         """
-        Return a logical and of ~:attr:`skips` and :attr:`errors`
+        Return a logical and of not :attr:`skips` and :attr:`errors`
 
         :return: array of valid errors
-        :rtype: np.ndarray(bool)
+        :rtype: :class:`numpy.ndarray` (bool)
         """
         return np.logical_and(self.errors, ~self.skips)
 
     def get_rg_errors(self):
         """
-        Return an array of errors and valid sites.
+        Return an array of rg values that were errors and all valid rg values.
 
         The errors are always a subset of the valid sites.
 
@@ -254,30 +265,66 @@ class ReadData():
         will return :code:`([rg], [rg, rg, rg, rg])`
 
         :return: errors and valid rg values
-        :rtype: tuple(np.ndarray(int))
+        :rtype: tuple(:class:`numpy.ndarray` (int) , :class:`numpy.ndarray` (int))
         """
         rg = self.get_rg_int()
         rg = np.broadcast_to(rg, len(self))
         return rg[self.not_skipped_errors()], rg[~self.skips]
 
     def get_q_errors(self):
+        """
+        Return an array of q values that were errors and of all valid q values.
+
+        The errors are always a subset of the valid values.
+
+        :return: erroneous and valid q values
+        :rtype: tuple(:class:`numpy.ndarray` (int) , :class:`numpy.ndarray` (int))
+        """
         qe = self.qual[self.not_skipped_errors()]
         qv = self.qual[~self.skips]
         return qe, qv
 
     def get_cycle_array(self):
+        """
+        Return an array of cycle values.
+
+        This is :code:`range(len(seq))` if second is false,
+        otherwise it is :code:`-1..-len(seq)` inclusive.
+        This way we can hold cycle values as an array of
+        size 2 * seqlen and store negative values at the end
+        of the array.
+
+        :return: cycle values
+        :rtype: :class:`numpy.ndarray` (int)
+        """
         cycle = np.arange(len(self))
         if self.second:
             cycle = np.negative(cycle + 1)
         return cycle
 
     def get_cycle_errors(self):
+        """
+        Return an array of cycle values that were errors and of all valid cycle values.
+
+        The errors are always a subset of the valid values.
+
+        :return: erroneous and valid cycle values
+        :rtype: tuple(:class:`numpy.ndarray` (int) , :class:`numpy.ndarray` (int))
+        """
         cycle = self.get_cycle_array()
         ce = cycle[self.not_skipped_errors()]
         cv = cycle[~self.skips]
         return ce, cv
 
     def get_dinucleotide_array(self, minscore = 6):
+        """
+        Return an array of dinucleotide values.
+
+        The character to int map is stored in :class:`kbbq.compare_reads.Dinucleotide`.
+
+        :return: dinucleotide values
+        :rtype: :class:`numpy.ndarray` (int)
+        """
         dinuc = np.char.add(self.seq[:-1], self.seq[1:])
         dinuccov = np.zeros(len(self), dtype = np.int)
         dinuccov[0] = -1
@@ -289,6 +336,14 @@ class ReadData():
         return dinuccov
 
     def get_dinuc_errors(self, minscore = 6):
+        """
+        Return an array of dinucleotide values that were errors and of all valid dinucleotide values.
+
+        The errors are always a subset of the valid values.
+
+        :return: erroneous and valid dinucleotide values
+        :rtype: tuple(:class:`numpy.ndarray` (int) , :class:`numpy.ndarray` (int))
+        """
         dinuc = self.get_dinucleotide_array(minscore)
         dvalid = np.logical_and(dinuc != -1, ~skips)
         dvalid_and_error = np.logical_and(dvalid, self.errors)
