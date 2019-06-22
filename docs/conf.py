@@ -181,8 +181,8 @@ epub_exclude_files = ['search.html']
 autodoc_default_options = {
     'members' : None,
     'undoc-members' : None,
-    'member-order' : 'bysource',
-    'special-members' : '__init__,__str__'
+    'member-order' : 'groupwise',
+    'special-members' : '__init__,__str__,__len__,__getitem__,__setitem__'
     }
 
 intersphinx_mapping = {

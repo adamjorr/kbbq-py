@@ -46,7 +46,8 @@ kbbq.read
 kbbq.covariate
 --------------
 
+.. highlight:: python
+
 .. automodule:: kbbq.covariate
 	:members:
 	:undoc-members:
-	:special-members: __getitem__, __setitem__
