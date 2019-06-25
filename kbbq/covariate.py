@@ -333,6 +333,19 @@ class CycleCovariate(Covariate):
             self.errors = newerrors
             self.total = newtotal
 
+    def num_cycles(self):
+        """
+        Return number of cycles in the cycle covariate
+
+        This is the half the length of the cycle vector;
+        there are twice as many cycles since positive and negative
+        cycles are treated differently.
+
+        :return: half the length of cycle vector
+        :rtype: int
+        """
+        return self.shape()[-1] / 2
+
 class DinucCovariate(Covariate):
     """
     A 3d covariate array in the read group, Q, and dinucleotide dimensions.
@@ -342,6 +355,15 @@ class DinucCovariate(Covariate):
         Initialize empty arrays.
         """
         super().__init__(shape = (0,0,len(compare_reads.Dinucleotide.dinucs)))
+
+    def num_dinucs(self):
+        """
+        Return length of dinucleotide array.
+
+        :return: number of dinucleotides
+        :rtype: int
+        """
+        return self.shape()[-1]
 
 class CovariateData():
     """
@@ -376,12 +398,18 @@ class CovariateData():
         """Dinucleotide covariates"""
 
     def consume_read(self, read):
+        """
+        Add covariates from the read to the proper data arrays.
+
+        :param read: the read to take data from
+        :type read: :class:`kbbq.read.ReadData`
+        """
         (rge, rgv), (qe, qv) = self.qcov.consume_read(read)
         ce, cv = read.get_cycle_errors()
         de, dv = read.get_dinuc_errors()
 
-        num_rgs = self.qcov.rgcov.num_rgs()
-        num_qs = self.qcov.num_qs()
+        num_rgs = self.get_num_rgs()
+        num_qs = self.get_num_qs()
         for cov in self.cyclecov, self.dinuccov:
             cov.pad_axis_to_fit(axis = 0, idx = num_rgs - 1)
             cov.pad_axis_to_fit(axis = 1, idx = num_qs - 1)
@@ -389,3 +417,44 @@ class CovariateData():
         self.cyclecov.pad_axis_to_fit(axis = 2, idx = 2 * len(read) - 1)
         self.cyclecov.increment(idx = ((rge,qe,ce),(rgv,qv,cv)))
         self.dinuccov.increment(idx = ((rge,qe,de),(rgv,qv,dv)))
+
+    def get_num_rgs(self):
+        """
+        Return number of rgs in the rg covariate
+
+        :return: length of rg vector
+        :rtype: int
+        """
+        return self.qcov.rgcov.num_rgs()
+
+    def get_num_qs(self):
+        """
+        Return number of qs in the q covariate
+
+        :return: length of q vector
+        :rtype: int
+        """
+        return self.qcov.num_qs()
+
+    def get_num_cycles(self):
+        """
+        Return number of cycles in the cycle covariate
+
+        This is the half the length of the cycle vector;
+        there are twice as many cycles since positive and negative
+        cycles are treated differently.
+
+        :return: half the length of cycle vector
+        :rtype: int
+        """
+        return self.cyclecov.num_cycles()
+
+    def get_num_dinucs(self):
+        """
+        Return number of dinucs in the dinuc covariate.
+
+        :return: length of the dinuc vector
+        :rtype: int
+        """
+        return self.dinuccov.num_dinucs()
+

@@ -182,7 +182,8 @@ autodoc_default_options = {
     'members' : None,
     'undoc-members' : None,
     'member-order' : 'groupwise',
-    'special-members' : '__init__,__str__,__len__,__getitem__,__setitem__'
+    'special-members' : '__init__,__str__,__len__,__getitem__,__setitem__',
+    'show-inheritance' : True
     }
 
 intersphinx_mapping = {
