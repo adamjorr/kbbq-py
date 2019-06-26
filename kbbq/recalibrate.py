@@ -7,6 +7,8 @@ from kbbq import recaltable
 from kbbq.gatk import applybqsr
 import pysam
 import numpy as np
+import pathlib
+import subprocess
 
 #TODO: probably add 2 classes: a ReadData class and a CovariateData class
 
@@ -155,20 +157,76 @@ def recalibrate_fastq(fastq, infer_rg = False):
             print('+')
             print(strquals)
 
-def recalibrate_bam(bam, use_oq = False, set_oq = False):
+def recalibrate_bam(read, output, original):
     """
-    Not yet implemented.
+    Recalibrate ReadData read and output to filehandle output.
     """
-    raise NotImplementedError('Recalibrating a bam is not yet implemented. \
-        Try converting your BAM to a FASTQ file with the samtools fastq command. \
-        We welcome pull requests if you\'d like to work on this feature.')
 
-def recalibrate(bam, fastq, infer_rg = False, use_oq = False, set_oq = False, gatkreport = None):
+
+def find_covariates(read_sources):
+    """
+    Consume reads from the given list of iterables and load
+    them into a :class:`kbbq.covariate.CovariateData` object.
+    """
+    data = covariate.CovariateData()
+    for i in read_sources:
+        for r in i:
+            data.consume_read(r)
+    return data
+
+def opens_as_bam(path):
+    try:
+        fin = pysam.AlignmentFile(str(path))
+        fin.close()
+        return True
+    except ValueError:
+        return False
+
+def load_headers_from_bams(inputs):
+    for i in inputs:
+        if opens_as_bam(i):
+            with pysam.AlignmentFile(str(i)) as fin:
+                read.load_rgs_from_bamfile(fin)
+
+def generate_reads(input, output, cmd, infer_rg, use_oq, set_oq):
+    load_headers_from_bams(input)
+    #1st pass: find errors
+
+    #2nd pass: build model
+    opened_files = [pysam.AlignmentFile(i) if opens_as_bam(i) else pysam.FastxFile(i) for i in input]
+    data = find_covariates(opened_files)
+    for i in opened_files:
+        i.close()
+    
+    #3rd pass: recalibrate
+    for i, o in zip(input, output):
+        path = pathlib.Path(i)
+        if not path.is_file():
+            raise ValueError('Given path {} does not exist or is not a regular file'.format(path))
+        else:
+            try:
+                with pysam.AlignmentFile(str(path)) as fin:
+                    header = fin.header
+                    headerid = max([i['ID'] for i in header['PG']]) + 1
+                    header['PG'] = header['PG'] + [{'ID' : headerid, 'PN' : 'kbbq', 'CL' : cmd}]
+                    with pysam.AlignmentFile(str(o), mode = 'wb', header = header) as fout:
+                        for r in fin:
+                            if set_oq is True:
+                                r.set_tag(tag = 'OQ', value = ''.join([chr(q + 33) for q in r.query_qualities]), value_type = 'Z')
+                            yield read.ReadData.from_bamread(read, use_oq), fout, r
+            except ValueError:
+                with pysam.FastxFile(str(path)) as fin, pysam.FastxFile(str(o), 'w') as fout:
+                    #fastq/a file (maybe)
+                    for r in fin:
+                        yield read.ReadData.from_fastq(r), fout, r
+
+def recalibrate(input, output, cmd, infer_rg = False, use_oq = False, set_oq = False, gatkreport = None):
     if gatkreport is not None:
         raise NotImplementedError('GATKreport reading / creation is not yet supported.')
-    elif bam is not None:
-        recalibrate_bam(bam, use_oq, set_oq)
-    elif fastq is not None:
-        recalibrate_fastq(fastq, infer_rg = infer_rg)
-    else: #this should never happen
-        raise ValueError("A BAM or FASTQ file should be provided for recalibration.")
+    if output == []:
+        output = [ str(i.with_name(i.stem + '.kbbq' + i.suffix)) for pathlib.Path(i) in input ]
+    if len(input) != len(output):
+        raise ValueError('One output should be specified for each input.')
+    for r, output, original in generate_reads(input, output, cmd infer_rg, use_oq, set_oq):
+        #ReadData, output, and original read (AlignedSegment or FastxProxy)
+

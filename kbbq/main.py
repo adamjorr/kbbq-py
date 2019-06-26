@@ -11,7 +11,7 @@ import sys
 #helper commands that pass arguments to the proper functions
 
 def recalibrate(args):
-    re.recalibrate(bam = args.bam, fastq = args.fastq, infer_rg = args.infer_rg,
+    re.recalibrate(input = args.input, output = args.output, infer_rg = args.infer_rg,
     use_oq = args.use_oq, set_oq = args.set_oq, gatkreport = args.gatkreport)
 
 def benchmark(args):
@@ -46,9 +46,9 @@ def main():
     #In the future, we should allow as many inputs as desired, and if
     #there are no inputs provided read from STDIN and try to infer the filetype.
     #They should be positional arguments too, probably.
-    recalibrate_input = recalibrate_parser.add_mutually_exclusive_group(required = True)
-    recalibrate_input.add_argument('-b','--bam', help = 'BAM to recalibrate')
-    recalibrate_input.add_argument('-f', '--fastq', nargs=2, help = 'FASTQ file to recalibrate and a corrected version from your favorite error corrector.')
+    # recalibrate_input = recalibrate_parser.add_mutually_exclusive_group(required = True)
+    # recalibrate_input.add_argument('-b','--bam', help = 'BAM to recalibrate')
+    # recalibrate_input.add_argument('-f', '--fastq', nargs=2, help = 'FASTQ file to recalibrate and a corrected version from your favorite error corrector.')
 
     recalibrate_parser.add_argument('-u','--use-oq', action = 'store_true', help = oq_help)
     recalibrate_parser.add_argument('-s','--set-oq', action = 'store_true', help = 'Set the \'OQ\' flag prior to recalibration. Only works when producing BAM output.')
@@ -59,6 +59,10 @@ def main():
     recalibrate_parser.add_argument('--infer-rg', action = 'store_true',
         help = 'Attempt to infer the read group from a FASTQ read. Only works with FASTQ input. \
         The default behavior is to treat each input FASTQ file as its own read group.')
+    recalibrate_parser.add_argument('-o', '--output', action = 'append', required = False,
+        help = 'Output files. Should be specified as many times as input.')
+    recalibrate_parser.add_argument('input', nargs = '+',
+        help = 'Input files. Should be SAM, BAM, FASTQ or FASTA format. Must not be a pipe.')
     #TODO: method, model, lighter options, prefix, output, gatkreport
     recalibrate_parser.set_defaults(command=recalibrate)
 
@@ -74,7 +78,7 @@ def main():
     benchmark_parser.add_argument('-u', '--use-oq', action = 'store_true', help = oq_help)
     benchmark_parser.add_argument('-d', '--bedfile', type = argparse.FileType('r'),
         help = 'BED file of confident regions. Sites outside the given regions will be skipped.')
-    benchmark_parser.set_defaults(command=benchmark)
+    benchmark_parser.set_defaults(command=benchmark, cmd = ' '.join(sys.argv))
 
     #plot command
     plot_parser = subparsers.add_parser('plot', description = 'Plot data output from the benchmark command')
