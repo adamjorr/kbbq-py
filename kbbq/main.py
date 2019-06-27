@@ -78,7 +78,7 @@ def main():
     benchmark_parser.add_argument('-u', '--use-oq', action = 'store_true', help = oq_help)
     benchmark_parser.add_argument('-d', '--bedfile', type = argparse.FileType('r'),
         help = 'BED file of confident regions. Sites outside the given regions will be skipped.')
-    benchmark_parser.set_defaults(command=benchmark, cmd = ' '.join(sys.argv))
+    benchmark_parser.set_defaults(command=benchmark)
 
     #plot command
     plot_parser = subparsers.add_parser('plot', description = 'Plot data output from the benchmark command')
