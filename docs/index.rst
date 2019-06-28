@@ -10,6 +10,7 @@ Welcome to kbbq's documentation!
    :caption: Contents:
 
    cli/kbbq
+   cli/fastq_input
    modules/kbbq
 
 Indices and tables
