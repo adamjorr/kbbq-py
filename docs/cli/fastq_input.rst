@@ -15,6 +15,8 @@ TODO
 Converting from BAM to FASTQ
 ----------------------------
 
+.. highlight:: console
+
 Recalibrating reads from a BAM file is not yet supported.
 Use the :code:`samtools fastq` command to convert your reads
 to fastq format. This should go something like::
@@ -34,5 +36,3 @@ Reads must then be interleaved for input.
 This can be done with a tool like seqtk::
 
   seqtk mergepe reads.1.fq reads.2.fq > reads.merged.fq
-
-See :doc:`fastq_input` for more information.
