@@ -1,4 +1,6 @@
 Command Line Reference
 ======================
 
-.. include:: help.rst
+.. toctree::
+	help
+	fastq_input

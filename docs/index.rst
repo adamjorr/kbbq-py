@@ -9,9 +9,10 @@ Welcome to kbbq's documentation!
 .. toctree::
    :caption: Contents:
 
-   cli/kbbq
-   cli/fastq_input
-   modules/kbbq
+   tutorials/quickstart
+   tutorials/tutorials
+   cli/cli
+   modules/modules
 
 Indices and tables
 ==================
