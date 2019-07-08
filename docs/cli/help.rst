@@ -17,8 +17,9 @@ Command Line Help
     
       {recalibrate,benchmark,plot}
 
+.. _recalibrate:
 
-Recalibrate
+recalibrate
 -----------
 
 .. highlight:: console
@@ -66,8 +67,9 @@ Recalibrate
                             Only works with FASTQ input. The default behavior is
                             to treat each input FASTQ file as its own read group.
 
+.. _benchmark:
 
-Benchmark
+benchmark
 ---------
 
 ::
@@ -97,8 +99,9 @@ Benchmark
                             FASTA file containing the reference genome
       -v VCF, --vcf VCF     VCF file containing variable sites
 
+.. _plot:
 
-Plot
+plot
 ----
 
 ::

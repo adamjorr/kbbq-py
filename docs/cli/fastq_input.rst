@@ -28,15 +28,15 @@ FASTQ Input Requirements
 Only one FASTQ file of reads is currently supported. You must supply the
 file and a corrected version of the file on the command line. For example,
 if your reads are in ``reads.fq`` and a corrected version is in ``reads.cor.fq``,
-you would use the :doc:`recalibrate` command like::
+you would use the :ref:`recalibrate` command like::
 
 	kbbq recalibrate -f reads.fq reads.cor.fq
 
-Currently the only other command line option to :doc:`recalibrate` that applies
+Currently the only other command line option to :ref:`recalibrate` that applies
 to FASTQ files is ``--infer-rg``, which will attempt to parse the read name for
 the read group the read belongs to. If you don't want to mess with renaming your
 reads or already have them in sets of 1 read group per file, you can safely use
-:doc:`recalibrate` on each file separately; the default behavior without the
+:ref:`recalibrate` on each file separately; the default behavior without the
 ``--infer-rg`` flag is to treat all reads in the file as belonging to the same
 read group.
 
@@ -54,7 +54,7 @@ the RG is a string type, and in that case the full read name would be::
 	@HJCMTCCXX160113:5:1101:7760:55965/1_RG:Z:HJCMT.5
 
 To ensure the reads in the uncorrected file and corrected file are properly
-aligned, :doc:`recalibrate` will check that the corrected version of each read
+aligned, :ref:`recalibrate` will check that the corrected version of each read
 has a name that begins with the name of the uncorrected read. This requirement
 is satisfied when ``lighter`` is used as the error corrector, but should be
 satisfied by other error correctors as well.
@@ -82,7 +82,21 @@ All the reads below will be interpreted as **not** 2nd in pair:
 If your reads **are** paired, but the second-in-pair reads are not properly marked,
 recalibration *may* be less effective, though I haven't seen data to indicate that.
 
-TODO: benchmark requirements + examples
+For :ref:`benchmark` to properly match the read in a FASTQ with the read
+in the BAM file, the first ``_`` delimited field must match the read name,
+minus any ``/1`` or ``/2`` parts of the read name. For example, to match
+the 2nd in pair read ``HK2WYCCXX160124:1:1219:24545:4315``, the FASTQ represented
+by FASTQ lines,
+
+	- ``@HJCMTCCXX160113:5:1101:7760:55965/2_RG:Z:HJCMT.5``
+	- ``@HJCMTCCXX160113:5:1101:7760:55965/2``
+	- ``@HJCMTCCXX160113:5:1101:7760:55965/2_foo``
+
+will all work. However, to match a READ2-flagged read, :ref:`benchmark`
+must be able to determine that the read is 2nd in pair. Read the discussion
+above for how the program determines this. Reads flagged as READ1 or without
+either READ1 or READ2 flags set in the bam can both be matched with FASTQ
+reads that aren't interpreted as 2nd in pair.
 
 Converting from BAM to FASTQ
 ----------------------------
