@@ -6,10 +6,11 @@
 Welcome to kbbq's documentation!
 ================================
 
+For a quick introduction, check out the :doc:`tutorials/quickstart` tutorial.
+
 .. toctree::
    :caption: Contents:
 
-   tutorials/quickstart
    tutorials/tutorials
    cli/cli
    modules/modules

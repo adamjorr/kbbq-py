@@ -1,7 +1,7 @@
 FASTQ Input Help
 ================
 
-Currently we only support FASTQ input reads for the ``recalibrate`` command.
+Currently we only support FASTQ input reads for the :ref:`recalibrate` command.
 We also support only one FASTQ file (and its corrected variant) at a time.
 Because of this, there are some onerous requirements for reads names and length.
 
