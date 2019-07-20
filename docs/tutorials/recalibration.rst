@@ -27,6 +27,14 @@ Samtools and bcftools follow the download, ``./configure``,
 ``make``, ``make install`` paradigm. seqtk does not require ``./configure``,
 and lighter will require manual installation to a directory on your PATH.
 
+.. note::
+
+	These installation instructions will install the programs to the
+	``~/.local`` directory, which is where ``pip`` installs programs
+	with the ``--user`` flag. If you want to install somewhere else,
+	modify the appropriate ``--prefix``, ``BINDIR`` or ``install``
+	argument.
+
 To download and install samtools::
 
 	wget https://github.com/samtools/samtools/releases/download/1.9/samtools-1.9.tar.bz2
@@ -35,8 +43,13 @@ To download and install samtools::
 	make
 	make install
 
-To install bcftools, follow the same instructions but replace all occurrences
-of ``samtools`` with ``bcftools``
+To install bcftools::
+
+	wget https://github.com/samtools/bcftools/releases/download/1.9/bcftools-1.9.tar.bz2
+	bunzip bcftools-1.9.tar.bz2
+	./configure --prefix=~/.local
+	make
+	make install
 
 To download and install seqtk::
 
@@ -52,19 +65,24 @@ To download and install lighter::
 	make
 	install lighter ~/.local/bin #install is like cp
 
-Finally, you'll need to have ``kbbq`` installed. Follow the instructions in :doc:`installation` for more information.
+Finally, you'll need to have ``kbbq`` installed.
+The fast way to do this is::
+
+	pip install --user git+https://github.com/adamjorr/kbbq.git
+
+Follow the instructions in :doc:`installation` for more information.
 
 .. note::
 
 	These instructions install to the ``.local/bin`` directory in your home directory.
 	This follows the convention ``pip install --user`` uses, and is probably already on your PATH.
-	If it isn't, edit ``~/.bash_profile`` and add the following line::
+	If it isn't, edit ``~/.profile`` and add the following line::
 
 		export PATH=${PATH}:~/.local/bin
 
 	Then run::
 
-		. ~/.bash_profile
+		. ~/.profile
 
 	to reload the variable.
 
@@ -76,7 +94,8 @@ Recalibrating a BAM file
 
 .. warning::
 
-	Recalibrating a BAM file is not yet supported. We hope to support this feature soon in an upcoming release.
+	Recalibrating a BAM file is not yet supported.
+	We hope to support this feature soon in an upcoming release.
 	Once this feature is enabled, instructions to do so will be here.
 
 Correcting Reads
@@ -90,7 +109,7 @@ Benchmarking Calibration
 
 In this case, the dataset has been validated and can serve as a truth set.
 In a research environment, especially with nonmodel organisms, you won't
-likely have a truth set you can use to check your calibration. The :ref:`benchmark`
+likely have a truth set you can use to check your calibration. :ref:`benchmark`
 requires a set of variable sites in a VCF file and a set of confident regions
 in a BED file. It assumes any site in the confident regions that are not variable
 but don't match the reference are errors.
