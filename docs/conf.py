@@ -190,5 +190,6 @@ intersphinx_mapping = {
     'pysam' : ('https://pysam.readthedocs.io/en/latest/', None),
     'numpy' : ('https://docs.scipy.org/doc/numpy/', None),
     'pandas' : ('https://pandas.pydata.org/pandas-docs/stable/', None),
-    'python': ('https://docs.python.org/3', None)
+    'python': ('https://docs.python.org/3', None),
+    'matplotlib' : ('https://matplotlib.org', None)
 }
