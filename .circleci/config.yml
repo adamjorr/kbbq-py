@@ -123,7 +123,7 @@ commands:
           command: |
             function picard { java -jar ~/picard/picard.jar $@; }
             export -f picard
-            export PATH=${PATH}:~/gatk-4.1.1.0
+            export PATH=${PATH}:~/gatk-4.1.2.0
             make -j2 -C tests/data SHELL=/bin/bash data
       - save_cache:
           key: data-cache-v1-{{ .Branch }}-{{ checksum "tests/data/Makefile" }}
