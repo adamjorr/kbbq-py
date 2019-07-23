@@ -39,8 +39,7 @@ commands:
       - run:
           command: |
             sudo apt-get update
-            sudo apt-cache search ^default-jre
-            sudo apt-get install -y zlib1g-dev libbz2-dev liblzma-dev lftp seqtk default-jre=1.8\*
+            sudo apt-get install -y zlib1g-dev libbz2-dev liblzma-dev lftp seqtk default-jre
 
   install-external-dependencies:
     description: "install external programs from their project urls"
@@ -59,19 +58,19 @@ commands:
     steps:
       - restore_cache:
           keys:
-            - gatk-package-4.1.1.0
+            - gatk-package-4.1.2.0
       - run:
           command: |
-            if [ ! -e ~/gatk-4.1.1.0 ]; then
+            if [ ! -e ~/gatk-4.1.2.0 ]; then
               cd
-              wget https://github.com/broadinstitute/gatk/releases/download/4.1.1.0/gatk-4.1.1.0.zip
-              unzip gatk-4.1.1.0.zip
+              wget https://github.com/broadinstitute/gatk/releases/download/4.1.2.0/gatk-4.1.2.0.zip
+              unzip gatk-4.1.2.0.zip
               cd -
             fi
       - save_cache:
-          key: gatk-package-4.1.1.0
+          key: gatk-package-4.1.2.0
           paths:
-            - "~/gatk-4.1.1.0"
+            - "~/gatk-4.1.2.0"
 
   install-picard:
     description: "install picard and add to PATH"
