@@ -112,12 +112,12 @@ This is a variant benchmarking dataset that includes:
 We'll start by downloading the CHM1/13 evaluation kit and subsetting it
 to a more reasonable size for a tutorial. The following lines download
 the tar archive, extract the BED file, uncompress it, and take the first
-10 lines::
+25 lines::
 
 	wget https://github.com/lh3/CHM-eval/releases/download/v0.5/CHM-evalkit-20180222.tar
-	tar -xnf --to-stdout CHM-evalkit-20180222.tar CHM-eval.kit/full.37m.bed.gz | \
+	tar -xnf CHM-evalkit-20180222.tar --to-stdout CHM-eval.kit/full.37m.bed.gz | \
 	zcat | \
-	head -n 10 > confident.bed
+	head -n 25 > confident.bed
 
 This will extract the first 10 confident regions to a file called confident.bed.
 We will limit our analyses to these 10 regions.
@@ -125,7 +125,7 @@ We will limit our analyses to these 10 regions.
 The evaluation kit also includes a VCF of variable sites. We will use ``bcftools view``
 to subset the whole file to just the confident regions we picked earlier::
 
-	tar -xnf --to-stdout CHM-evalkit-20180222.tar CHM-eval.kit/full.37m.vcf.gz | \
+	tar -xnf CHM-evalkit-20180222.tar --to-stdout CHM-eval.kit/full.37m.vcf.gz | \
 	bcftools view -T confident.bed -Oz -o confident.vcf.gz
 
 .. note::
@@ -157,12 +157,12 @@ to the proper format for samtools and ``xargs`` to add the regions
 to the end of the command line::
 
 	cat confident.bed | \
-	awk 'BEGIN{OFS=""}{print $$1,":",($$2+1),"-",$$3}' > confident.regions
+	awk 'BEGIN{OFS=""}{print $1,":",($2+1),"-",$3}' > confident.regions
 
 Since this is a huge amount of data,
 it's better to download the index first and use samtools to just grab the
 reads that intersect the confident regions we want. 
-Even though we do this, the download will still take 5 minutes or more::
+Even though we do this, the download will still take a minute or so::
 
 	wget ftp://ftp.sra.ebi.ac.uk/vol1/run/ERR134/ERR1341796/CHM1_CHM13_2.bam.bai
 	cat confident.regions | \
@@ -175,7 +175,9 @@ Once this download finishes you should have 4 important files:
 #. confident.bam
 #. ref.fa
 
-You may not have ``ref.fa`` if you plan to skip the benchmarking example.
+.. note::
+
+	You only need ``confident.bam`` if you plan to skip the benchmarking example.
 
 Recalibrating a BAM file
 -------------------------
@@ -237,17 +239,17 @@ You can also use ``samtools depth`` and a short ``awk`` script
 to calculate these parameters::
 
 	samtools depth -b confident.bed -m0 confident.bam | \
-	awk '{x+=$3}END{print "bases:", NR, "\ndepth:", x/NR, "alpha:", 7/(x/NR)}'
+	awk '{x+=$3}END{print "bases:", NR, "\ndepth:", x/NR, "\nalpha:", 7/(x/NR)}'
 
 Which should output something like::
 
-	bases: 2875116
-	depth: 46.6213 
-	alpha: 0.150146
+	bases: 73465 
+	depth: 49.1876 
+	alpha: 0.142312
 
 Now we can use lighter::
 
-	lighter -r reads.fq -k 32 3000000 .15 -od lighter
+	lighter -r reads.fq -k 32 70000 .14 -od lighter
 
 The output file we're interested in is ``lighter/reads.cor.fq``,
 which we'll copy to our tutorial directory while removing the space
@@ -301,11 +303,11 @@ First, to benchmark the BAM reads::
 
 To benchmark the original qualities from the BAM::
 
-	kbbq benchmark -l Original -b confident.bam -r ref.fa -v confident.vcf.gz > oq.benchmark.txt
+	kbbq benchmark -l Original --use-oq -b confident.bam -r ref.fa -v confident.vcf.gz > oq.benchmark.txt
 
 And to benchmark the qualities KBBQ assigned from the new fastq files::
 
-	kbbq benchmark -l KBBQ -b confident.bam -r ref.fa -v confident.vcf -f reads.recalibrated.fq > kbbq.benchmark.txt
+	kbbq benchmark -l KBBQ -b confident.bam -r ref.fa -v confident.vcf.gz -f reads.recalibrated.fq > kbbq.benchmark.txt
 
 Plotting the Benchmark
 ----------------------

@@ -1,9 +1,8 @@
 #Makefile to download and subset test data
 
 #Variables
-NUMREGIONS = 3 #Number of confident regions to use before sampling
-NUMRGS = 2 #Only take sequences from the first NUMRGS rgs in the file
-READSUBSAMPLING = -s 666.1 #The argument for samtools view -s. See the samtools manual.
+NUMREGIONS = 25 #Number of confident regions to use before sampling
+READSUBSAMPLING = #The argument for samtools view -s. See the samtools manual.
 BAMURL = ftp://ftp.sra.ebi.ac.uk/vol1/run/ERR134/ERR1341796/CHM1_CHM13_2.bam
 #BAMACCESSION = ERR1341796
 TARURL = https://github.com/lh3/CHM-eval/releases/download/v0.5/CHM-evalkit-20180222.tar
@@ -82,16 +81,11 @@ $(notdir $(FULLREFIDXURL)):
 $(REFNAME): $(CONFBEDNAME) $(notdir $(FULLREFIDXURL))
 	samtools faidx $(REFURL) $(shell cut -f1 $< | sort | uniq) > $@
 
-$(RGSFILE): | $(FULLBAMNAME).bai
-	samtools view -H $(BAMURL) | \
-	grep ^@RG | cut -f 2 | cut -d: -f2 | \
-	head -n $(NUMRGS) > $@
-
 $(FULLBAMNAME).bai:
 	lftp -c "pget -n 10 $(BAMURL).bai -o $@"
 
-$(CONFBAMNAME): $(CONFBEDNAME) $(RGSFILE) | $(FULLBAMNAME).bai
-	samtools view -h -b -M -q 1 -F 3844 -R $(word 2, $^) $(READSUBSAMPLING) -o $@ $(BAMURL) $(shell cat $< | awk $(BEDTOREGIONS))
+$(CONFBAMNAME): $(CONFBEDNAME) | $(FULLBAMNAME).bai
+	samtools view -h -b -M -q 1 -F 3844 $(READSUBSAMPLING) -o $@ $(BAMURL) $(shell cat $< | awk $(BEDTOREGIONS))
 
 $(VARSITES): $(CONFVCFNAME) $(CONFVCFIDX) $(CONFBEDNAME)
 	bcftools query -R $(word 3, $^) -f '%CHROM\t%POS\n' $< >$@
