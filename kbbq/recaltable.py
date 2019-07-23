@@ -313,13 +313,13 @@ class GATKTable:
         headwidths = np.array([len(x) for x in header])
         colwidths = np.maximum(datawidths, headwidths)
 
-        datastr = '  '.join([h.ljust(colwidths[i]) for i,h in enumerate(header)]) + '\n'
+        datastr = '  '.join([h.ljust(colwidths[i]) for i,h in enumerate(header)])
         for row in unindexed.itertuples(index = False):
-            formatted = [getattr(row,header[i]).ljust(colwidths[i]) if \
+            line = [getattr(row,header[i]).ljust(colwidths[i]) if \
                 f == '%s' else \
-                str(getattr(row,header[i])).rjust(colwidths[i]) \
+                (f % float(getattr(row,header[i]))).rjust(colwidths[i]) \
                 for i,f in enumerate(fmtstrings)]
-            datastr = datastr + '  '.join(formatted) + '\n'
+            datastr = datastr + '\n' + '  '.join(line)
         return datastr
 
     def get_nrows(self):
