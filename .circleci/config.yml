@@ -3,7 +3,7 @@ version: 2.1
 executors:
   default-executor:
     docker:
-      - image: circleci/python:3.7
+      - image: circleci/python:3.7-stretch
         environment:
           PIPENV_VENV_IN_PROJECT: true
     working_directory: ~/kbbq
@@ -39,7 +39,7 @@ commands:
       - run:
           command: |
             sudo apt-get update
-            sudo apt-get install -y zlib1g-dev libbz2-dev liblzma-dev lftp seqtk nvidia-openjdk-8-jre
+            sudo apt-get install -y zlib1g-dev libbz2-dev liblzma-dev lftp seqtk default-jre
 
   install-external-dependencies:
     description: "install external programs from their project urls"
