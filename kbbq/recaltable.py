@@ -300,19 +300,26 @@ class GATKTable:
         :return: the data table as a formatted string
         :rtype: str
         """
-        unindexed = self.data.reset_index()
-        datawidths = unindexed.apply(lambda x: x.astype('str').str.len().max()).to_numpy()
-        headwidths = unindexed.columns.str.len().to_numpy()
-        header = unindexed.columns.to_list()
-        colwidths = np.maximum(datawidths, headwidths)
         fmtstrings = self.get_colfmts()
-        datastr = '  '.join([h.ljust(colwidths[i]) for i,h in enumerate(header)])
+        unindexed = self.data.reset_index()
+        header = unindexed.columns.to_list()
+        fmtfuncs = { h : lambda x: f % x for h,f in zip(header, fmtstrings)}
+
+        formatted = unindexed.copy()
+        for i, (h, items) in enumerate(unindexed.items()):
+            if fmtstrings[i] != '%s':
+                formatted[h] = items.apply(fmtfuncs[h])
+        datawidths = formatted.apply(lambda x: x.str.len().max()).to_numpy()
+        headwidths = np.array([len(x) for x in header])
+        colwidths = np.maximum(datawidths, headwidths)
+
+        datastr = '  '.join([h.ljust(colwidths[i]) for i,h in enumerate(header)]) + '\n'
         for row in unindexed.itertuples(index = False):
             formatted = [getattr(row,header[i]).ljust(colwidths[i]) if \
                 f == '%s' else \
-                (f % float(getattr(row,header[i]))).rjust(colwidths[i]) \
+                str(getattr(row,header[i])).rjust(colwidths[i]) \
                 for i,f in enumerate(fmtstrings)]
-            datastr = datastr + '\n' + '  '.join(formatted)
+            datastr = datastr + '  '.join(formatted) + '\n'
         return datastr
 
     def get_nrows(self):
