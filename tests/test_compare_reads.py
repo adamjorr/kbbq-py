@@ -17,14 +17,21 @@ def test_bam_calibration(report, recalibratedbam):
         recalibrated_quals = compare_reads.recalibrate_bamread(read, meanq, *dqs, rg_to_int, compare_reads.Dinucleotide.dinuc_to_int)
         assert np.array_equal(recalibrated_quals, gatk_calibrated_quals)
 
-def test_bam_to_report(report, recalibratedbam, variable_sites):
-    bamreport = compare_reads.bam_to_report(recalibratedbam, 'tests/data/ref.fa', variable_sites)
+def test_bam_to_report(report, uncalibratedbam, variable_sites):
+    bamreport = compare_reads.bam_to_report(uncalibratedbam, 'tests/data/ref.fa', variable_sites)
     assert report.version == bamreport.version
     for s, o in zip(report.tables, bamreport.tables):
         assert s.title == o.title
         assert s.description == o.description
+        if s.title == 'Quantized':
+            continue
         #assert s.data.equals(o.data) #this is a known issue with floats
-        assert_frame_equal(s.data, o.data)
+        try:
+            assert_frame_equal(s.data, o.data)
+        except AssertionError:
+            print('gatk report', s)
+            print('bam_to_report', o)
+            raise
 
 class FakeRead:
     def __init__(self, name, quality, sequence):

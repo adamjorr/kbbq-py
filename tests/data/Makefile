@@ -39,7 +39,7 @@ BEDTOREGIONS='BEGIN{OFS=""}{print $$1,":",($$2+1),"-",$$3}'
 .PHONY: data clean
 
 
-data: $(RECALTABLE) $(RECALBAM) $(VARSITES) $(FULLREADS)
+data: $(RECALTABLE) $(RECALBAM) $(VARSITES) $(FULLREADS) $(RECALBAM).bai $(CONFBAMNAME).bai
 
 clean:
 	rm -f $(RECALTABLE) $(RECALBAM) $(VARSITES) $(FULLBAMNAME).bai \
@@ -62,6 +62,9 @@ clean:
 
 %.dict: %.fa
 	rm -rf $@ && picard CreateSequenceDictionary R=$<
+
+%.bam.bai: %.bam
+	samtools index $<
 
 #
 
