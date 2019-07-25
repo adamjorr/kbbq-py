@@ -34,6 +34,16 @@ def load_positions(posfile):
             d.setdefault(chrom, list()).append(int(pos)-1)
     return d
 
+def get_var_sites(vcf):
+    vcf = pysam.VariantFile(vcf)
+    d = dict()
+    for record in vcf:
+        for i in range(record.start, record.stop, 1):
+            #record.start is 0-based inclusive
+            #record.stop is 0-based exclusive
+            d.setdefault(record.chrom, list()).append(i)
+    return d
+
 def find_corrected_sites(uncorrfile, corrfile):
     print(tstamp(), "Finding corrected sites . . .", file=sys.stderr)
     uncorr_reads = list(pysam.FastxFile(uncorrfile))
@@ -108,7 +118,7 @@ def find_read_errors(read, ref, variable):
             refidx = refidx + l
         elif op == 1:
             #insertion in read
-            # skips[readidx : readidx + l] = True
+            skips[readidx : readidx + l] = True
             readidx = readidx + l
         elif op == 2 or op == 3:
             #deletion in read or N op

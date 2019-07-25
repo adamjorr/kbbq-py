@@ -14,10 +14,10 @@ def recalibratedbam(request):
     import pysam
     return pysam.AlignmentFile(request.param,"r")
 
-@pytest.fixture(params = ['tests/data/variable_sites.txt'])
+@pytest.fixture(params = ['tests/data/conf_regions.vcf.gz'])
 def variable_sites(request):
     from kbbq import compare_reads
-    return compare_reads.load_positions(request.param)
+    return compare_reads.get_var_sites(request.param)
 
 @pytest.fixture(params = ['tests/data/conf_regions.bam'])
 def uncalibratedbam(request):
