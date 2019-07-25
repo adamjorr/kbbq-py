@@ -26,14 +26,6 @@ import kbbq.benchmark
 def tstamp():
     return '[ ' + datetime.datetime.today().isoformat(' ', 'seconds') + ' ]'
 
-def load_positions(posfile):
-    d = dict()
-    with open(posfile, 'r') as infh:
-        for line in infh:
-            chrom, pos = line.rstrip().split()
-            d.setdefault(chrom, list()).append(int(pos)-1)
-    return d
-
 def get_var_sites(vcf):
     vcf = pysam.VariantFile(vcf)
     d = dict()
@@ -118,7 +110,7 @@ def find_read_errors(read, ref, variable):
             refidx = refidx + l
         elif op == 1:
             #insertion in read
-            skips[readidx : readidx + l] = True
+            # skips[readidx : readidx + l] = True
             readidx = readidx + l
         elif op == 2 or op == 3:
             #deletion in read or N op
@@ -575,18 +567,18 @@ def bam_to_covariate_arrays(bamfileobj, fastafilename, var_pos, minscore = 6, ma
             e_and_valid = np.logical_and(errors, valid)
             e_and_dvalid = np.logical_and(errors, dinuc_valid)
 
-            rge = rgs[e_and_dvalid]
-            rgv = rgs[dinuc_valid]
-            qe = q[e_and_dvalid]
-            qv = q[dinuc_valid]
+            rge = rgs[e_and_valid]
+            rgv = rgs[valid]
+            qe = q[e_and_valid]
+            qv = q[valid]
 
             np.add.at(expected_errs, rgv, q_to_p(qv))
             np.add.at(rg_errs, rge, 1)
             np.add.at(rg_total, rgv, 1)
             np.add.at(q_errs, (rge, qe), 1)
             np.add.at(q_total, (rgv, qv), 1)
-            np.add.at(pos_errs, (rge, qe, pos[e_and_dvalid]), 1)
-            np.add.at(pos_total, (rgv, qv, pos[dinuc_valid]), 1)
+            np.add.at(pos_errs, (rge, qe, pos[e_and_valid]), 1)
+            np.add.at(pos_total, (rgv, qv, pos[valid]), 1)
             np.add.at(dinuc_errs, (rgs[e_and_dvalid], q[e_and_dvalid], dinucleotide[e_and_dvalid]), 1)
             np.add.at(dinuc_total, (rgs[dinuc_valid], q[dinuc_valid], dinucleotide[dinuc_valid]), 1)
             read = next(bamfileobj)
@@ -629,12 +621,14 @@ def trim_bamread(read):
         return skips
     else:
         if read.is_reverse:
-            if adaptor_boundary > read.reference_start:
+            if adaptor_boundary >= read.reference_start:
                 skips[:adaptor_boundary - read.reference_start + 1] = True #skip first x bases
             return skips
         else:
             if read.reference_end > adaptor_boundary:
-                skips[(-(read.reference_end - adaptor_boundary) - 1):] = True #skip last x bases
+                #reference_end is 1 past the end
+                #reference_end - 1 - adaptor_boundary + 1
+                skips[-(read.reference_end - adaptor_boundary):] = True #skip last x bases
             return skips
 
 def table_recalibrate(q, table, rg_order, seqlen, reversecycle, rgs, dinucleotide, minscore = 6, maxscore = 42):
