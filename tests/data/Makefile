@@ -26,7 +26,9 @@ RGSFILE = rgs.txt
 
 FIRSTREADS = reads.1.fq
 SECONDREADS = reads.2.fq
+SINGLETONREADS = reads.singletons.fq
 FULLREADS = reads.fq
+ALLREADSINBAM = allreads.fq
 LIGHTERREADS = lighter.fq
 
 RECALTABLE = conf_regions.recal.txt
@@ -39,7 +41,8 @@ BEDTOREGIONS='BEGIN{OFS=""}{print $$1,":",($$2+1),"-",$$3}'
 .PHONY: data clean
 
 
-data: $(RECALTABLE) $(RECALBAM) $(VARSITES) $(FULLREADS) $(RECALBAM).bai $(CONFBAMNAME).bai
+data: $(RECALTABLE) $(RECALBAM) $(VARSITES) $(FULLREADS) $(RECALBAM).bai $(CONFBAMNAME).bai \
+	$(ALLREADSINBAM)
 
 clean:
 	rm -f $(RECALTABLE) $(RECALBAM) $(VARSITES) $(FULLBAMNAME).bai \
@@ -93,12 +96,16 @@ $(CONFBAMNAME): $(CONFBEDNAME) | $(FULLBAMNAME).bai
 $(VARSITES): $(CONFVCFNAME) $(CONFVCFIDX) $(CONFBEDNAME)
 	bcftools query -R $(word 3, $^) -f '%CHROM\t%POS\n' $< >$@
 
-$(FIRSTREADS) $(SECONDREADS): $(CONFBAMNAME)
+$(FIRSTREADS) $(SECONDREADS) $(SINGLETONREADS): $(CONFBAMNAME)
 	samtools sort -@ 4 -n -O bam $< | \
-	samtools fastq -t -N -F 3844 -O -0 /dev/null -s /dev/null -1 $(FIRSTREADS) -2 $(SECONDREADS) -
+	samtools fastq -t -N -F 3844 -O -0 /dev/null -s $(SINGLETONREADS) -1 $(FIRSTREADS) -2 $(SECONDREADS) -
 
 $(FULLREADS): $(FIRSTREADS) $(SECONDREADS)
 	seqtk mergepe $< $(word 2, $^) | tr ' ' _ > $@
+
+$(ALLREADSINBAM): $(FULLREADS) $(SINGLETONREADS)
+	cat $(word 2, $^) | tr ' ' _ | cat $< - > $@
+
 
 $(LIGHTERREADS): $(FULLREADS)
 	LIGHTERTMP=`mktemp -d lighter.XXXXXX.d` &&\
