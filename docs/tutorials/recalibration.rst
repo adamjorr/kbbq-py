@@ -214,6 +214,13 @@ files for those reads to ``/dev/null``::
 	samtools sort -@ 4 -n -o confident.nsorted.bam -O bam confident.bam
 	samtools fastq -t -N -F 3844 -O -0 /dev/null -s /dev/null -1 reads.1.fq -2 reads.2.fq confident.nsorted.bam
 
+Here, the ``-n`` flag specifies that we should sort the reads by name.
+The ``-t`` flag to ``fastq`` tells samtools to add the RG, BC and QT flags
+to the read name. This will allow ``kbbq`` to place the reads in the proper
+read group. The ``-N`` flag adds ``/1`` or ``/2`` to the read name to
+specify pair information, and the ``-O`` flag says to use the original
+quality scores assigned to the read rather than any updated quality scores.
+
 We will then merge the fastq files to interleaved format.
 We will also convert the whitespace to '_' characters using
 the ``tr`` command::
@@ -241,7 +248,11 @@ to calculate these parameters::
 	samtools depth -b confident.bed -m0 confident.bam | \
 	awk '{x+=$3}END{print "bases:", NR, "\ndepth:", x/NR, "\nalpha:", 7/(x/NR)}'
 
-Which should output something like::
+The ``-m0`` option set here ensures ``depth`` doesn't limit the maximum depth
+of any site. The ``awk`` script adds up the 3rd column (specifying the number
+of bases) then prints the relevant information after all records are processed,
+dividing by the number of records (= the number of sites) to calculate the depth.
+This should output something like::
 
 	bases: 73465 
 	depth: 49.1876 
