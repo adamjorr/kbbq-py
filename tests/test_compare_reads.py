@@ -18,6 +18,9 @@ def test_bam_calibration(report, recalibratedbam):
         assert np.array_equal(recalibrated_quals, gatk_calibrated_quals)
 
 def test_bam_to_report(report, uncalibratedbam, variable_sites):
+    #I suspect this is failing because we use a shitty proxy for the variable sites
+    #and there are multiple variants in here that have a length > 1 base. Some day
+    #it might pass
     bamreport = compare_reads.bam_to_report(uncalibratedbam, 'tests/data/ref.fa', variable_sites)
     assert report.version == bamreport.version
     for s, o in zip(report.tables, bamreport.tables):

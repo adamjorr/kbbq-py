@@ -108,7 +108,7 @@ def find_read_errors(read, ref, variable):
             refidx = refidx + l
         elif op == 1:
             #insertion in read
-            skips[readidx : readidx + l] = True
+            # skips[readidx : readidx + l] = True
             readidx = readidx + l
         elif op == 2 or op == 3:
             #deletion in read or N op
@@ -537,39 +537,95 @@ def bam_to_covariate_arrays(bamfileobj, fastafilename, var_pos, minscore = 6, ma
     dinuc_errs = np.zeros((nrgs, maxscore + 1, 16), dtype = np.int_)
     dinuc_total = np.zeros((nrgs, maxscore + 1, 16), dtype = np.int_)
     
+    trimcounter = 0
     try:
         while True:
+            seq = read.query_sequence
             rgs[:] = rg_to_int[read.get_tag('RG')]
             errors, skips = find_read_errors(read, ref, fullskips)
             q = bamread_get_oq(read)
             pos = bamread_cycle_covariates(read)
             dinucleotide = bamread_dinuc_covariates(read, Dinucleotide.dinuc_to_int, Dinucleotide.complement)
+            # if read.is_reverse:
+                # errors = np.flip(errors)
+                # skips = np.flip(skips)
+                # q = np.flip(q)
+                # seq = ''.join([Dinucleotide.complement.get(x,'N') for x in reversed(seq)])
+            seq = np.array(list(seq), dtype = 'U1')
+
 
             skips[q < minscore] = True
+            trimmed = trim_bamread(read)
+            counter = counter + 1
+            trimcounter = trimcounter + np.sum(trimmed)
+            skips[trimmed] = True
+            skips[seq == 'N'] = True
             valid = ~skips
             dinuc_valid = np.logical_and(dinucleotide != -1, valid)
             e_and_valid = np.logical_and(errors, valid)
             e_and_dvalid = np.logical_and(errors, dinuc_valid)
 
-            rge = rgs[e_and_valid]
-            rgv = rgs[valid]
-            qe = q[e_and_valid]
-            qv = q[valid]
+            rge = rgs[e_and_dvalid]
+            rgv = rgs[dinuc_valid]
+            qe = q[e_and_dvalid]
+            qv = q[dinuc_valid]
 
             np.add.at(expected_errs, rgv, q_to_p(qv))
             np.add.at(rg_errs, rge, 1)
             np.add.at(rg_total, rgv, 1)
             np.add.at(q_errs, (rge, qe), 1)
             np.add.at(q_total, (rgv, qv), 1)
-            np.add.at(pos_errs, (rge, qe, pos[e_and_valid]), 1)
-            np.add.at(pos_total, (rgv, qv, pos[valid]), 1)
+            np.add.at(pos_errs, (rge, qe, pos[e_and_dvalid]), 1)
+            np.add.at(pos_total, (rgv, qv, pos[dinuc_valid]), 1)
             np.add.at(dinuc_errs, (rgs[e_and_dvalid], q[e_and_dvalid], dinucleotide[e_and_dvalid]), 1)
             np.add.at(dinuc_total, (rgs[dinuc_valid], q[dinuc_valid], dinucleotide[dinuc_valid]), 1)
             read = next(bamfileobj)
     except StopIteration:
         pass
+    print("Reads:", counter)
+    print("Trimmed bases:", trimcounter)
     meanq = p_to_q(expected_errs / rg_total)
     return meanq, rg_errs, rg_total, q_errs, q_total, pos_errs, pos_total, dinuc_errs, dinuc_total
+
+def bamread_adaptor_boundary(read):
+    #https://github.com/broadinstitute/gatk/blob/43b2b3bd4e723552414b32b8b2a7341b81f1f688/src/main/java/org/broadinstitute/hellbender/utils/read/ReadUtils.java#L534
+    #0-based in ref coordinates
+    if ( read.tlen == 0 or
+        not read.is_paired or
+        read.is_unmapped or
+        read.mate_is_unmapped or
+        read.is_reverse == read.mate_is_reverse):
+            return None
+    if read.is_reverse:
+        if (read.reference_end - 1) > read.next_reference_start:
+            #good
+            return read.next_reference_start - 1 
+        else:
+            return None
+    else:
+        if read.reference_start <= read.next_reference_start + read.tlen:
+            #good
+            return read.reference_start + abs(read.tlen)
+        else:
+            return None
+
+
+def trim_bamread(read):
+    #https://github.com/broadinstitute/gatk/blob/b11abd12b7305767ed505a8ff644a63659abf2cd/src/main/java/org/broadinstitute/hellbender/utils/clipping/ReadClipper.java#L388
+    #return an array of seqlen which includes bases to skip
+    adaptor_boundary = bamread_adaptor_boundary(read)
+    skips = np.zeros(len(read.query_qualities), dtype = np.bool)
+    if adaptor_boundary is None:
+        return skips
+    else:
+        if read.is_reverse:
+            if adaptor_boundary > read.reference_start:
+                skips[:adaptor_boundary - read.reference_start + 1] = True #skip first x bases
+            return skips
+        else:
+            if read.reference_end > adaptor_boundary:
+                skips[(-(read.reference_end - adaptor_boundary) - 1):] = True #skip last x bases
+            return skips
 
 def table_recalibrate(q, table, rg_order, seqlen, reversecycle, rgs, dinucleotide, minscore = 6, maxscore = 42):
     meanq, global_errs, global_total, q_errs, q_total, pos_errs, pos_total, dinuc_errs, dinuc_total = table_to_vectors(table, rg_order, seqlen, maxscore)
