@@ -33,7 +33,7 @@ LIGHTERREADS = lighter.fq
 
 RECALTABLE = conf_regions.recal.txt
 RECALBAM = conf_regions.recal.bam
-VARSITES = variable_sites.txt
+VARSITES = variable_sites.bed
 
 BEDTOREGIONS='BEGIN{OFS=""}{print $$1,":",($$2+1),"-",$$3}'
 
@@ -94,7 +94,7 @@ $(CONFBAMNAME): $(CONFBEDNAME) | $(FULLBAMNAME).bai
 	samtools view -h -b -M -q 1 -F 3844 $(READSUBSAMPLING) -o $@ $(BAMURL) $(shell cat $< | awk $(BEDTOREGIONS))
 
 $(VARSITES): $(CONFVCFNAME) $(CONFVCFIDX) $(CONFBEDNAME)
-	bcftools query -R $(word 3, $^) -f '%CHROM\t%POS\n' $< >$@
+	bcftools query -R $(word 3, $^) -f '%CHROM\t%POS0\t%END\n' $< >$@
 
 $(FIRSTREADS) $(SECONDREADS) $(SINGLETONREADS): $(CONFBAMNAME)
 	samtools sort -@ 4 -n -O bam $< | \

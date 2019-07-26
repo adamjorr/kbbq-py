@@ -26,6 +26,16 @@ import kbbq.benchmark
 def tstamp():
     return '[ ' + datetime.datetime.today().isoformat(' ', 'seconds') + ' ]'
 
+def load_positions(posfile):
+    d = dict()
+    with open(posfile, 'r') as infh:
+        for line in infh:
+            #bed format, so pos is 0 based and end is 1 based
+            chrom, pos, end = line.rstrip().split()
+            for i in range(int(pos), int(end)):
+                d.setdefault(chrom, list()).append(i)
+    return d
+
 def get_var_sites(vcf):
     vcf = pysam.VariantFile(vcf)
     d = dict()
@@ -110,11 +120,18 @@ def find_read_errors(read, ref, variable):
             refidx = refidx + l
         elif op == 1:
             #insertion in read
-            # skips[readidx : readidx + l] = True
+            # if this is the first base and it overlaps a variable site,
+            #the variable site should count as for the first matching
+            #portion.
+            if readidx == 0:
+                skips[readidx + l] = subset_variable[refidx:refidx + l]
             readidx = readidx + l
         elif op == 2 or op == 3:
             #deletion in read or N op
             # N is for introns in mRNA
+            skips[readidx - 1] = np.logical_or(skips[readidx-1],np.any(subset_variable[refidx: refidx + l]))
+            #
+
             refidx = refidx + l
         elif op == 4:
             #soft clip, consumes query not ref
