@@ -99,8 +99,8 @@ def find_read_errors(read, ref, variable):
     skips = np.zeros(seq.shape, dtype = np.bool)
     cigartuples = read.cigartuples #list of tuples [(operation, length)]
     cigarops, cigarlen = zip(*cigartuples)
-    cigarops = np.array(cigarops, dtype = np.int)
-    cigarlen = np.array(cigarlen, dtype = np.int)
+    # cigarops = np.array(cigarops, dtype = np.int)
+    # cigarlen = np.array(cigarlen, dtype = np.int)
 
     #reference length from CIGAR: https://github.com/samtools/htsjdk/blob/942e3d6b4c28a8e97c457dfc89625bb403bdf83c/src/main/java/htsjdk/samtools/Cigar.java#L76
     #sum lengths of MDN=X
@@ -120,11 +120,6 @@ def find_read_errors(read, ref, variable):
             refidx = refidx + l
         elif op == 1:
             #insertion in read
-            # if this is the first base and it overlaps a variable site,
-            #the variable site should count as for the first matching
-            #portion.
-            if readidx == 0:
-                skips[readidx + l] = subset_variable[refidx:refidx + l]
             readidx = readidx + l
         elif op == 2 or op == 3:
             #deletion in read or N op
@@ -557,8 +552,11 @@ def bam_to_covariate_arrays(bamfileobj, fastafilename, var_pos, minscore = 6, ma
     dinuc_total = np.zeros((nrgs, maxscore + 1, 16), dtype = np.int_)
     
     trimcounter = 0
+    ncounter = 0
+    minscorecounter = 0
     try:
         while True:
+            counter = counter + 1
             seq = read.query_sequence
             rgs[:] = rg_to_int[read.get_tag('RG')]
             errors, skips = find_read_errors(read, ref, fullskips)
@@ -571,15 +569,21 @@ def bam_to_covariate_arrays(bamfileobj, fastafilename, var_pos, minscore = 6, ma
                 # q = np.flip(q)
                 # seq = ''.join([Dinucleotide.complement.get(x,'N') for x in reversed(seq)])
             seq = np.array(list(seq), dtype = 'U1')
-
-
-            skips[q < minscore] = True
+            assert len(seq) == len(rgs)
+            # print(seq)
+            # if counter > 5:
+            #     quit()
             trimmed = trim_bamread(read)
-            counter = counter + 1
+
+            minscorecounter = minscorecounter + np.sum(q < minscore)
+            ncounter = ncounter + np.sum(seq == 'N')
             trimcounter = trimcounter + np.sum(trimmed)
+            
+            skips[q < minscore] = True
             skips[trimmed] = True
             skips[seq == 'N'] = True
-            valid = ~skips
+
+            valid = np.logical_not(skips)
             dinuc_valid = np.logical_and(dinucleotide != -1, valid)
             e_and_valid = np.logical_and(errors, valid)
             e_and_dvalid = np.logical_and(errors, dinuc_valid)
@@ -603,6 +607,8 @@ def bam_to_covariate_arrays(bamfileobj, fastafilename, var_pos, minscore = 6, ma
         pass
     print("Reads:", counter)
     print("Trimmed bases:", trimcounter)
+    print("N's masked:", ncounter)
+    print("Minscore masked:", minscorecounter)
     meanq = p_to_q(expected_errs / rg_total)
     return meanq, rg_errs, rg_total, q_errs, q_total, pos_errs, pos_total, dinuc_errs, dinuc_total
 
@@ -616,13 +622,17 @@ def bamread_adaptor_boundary(read):
         read.is_reverse == read.mate_is_reverse):
             return None
     if read.is_reverse:
-        if (read.reference_end - 1) > read.next_reference_start:
+        #next_reference_start is 1-based
+        #reference_start is 0-based
+        #reference_end is 0-based but points to 1 past the last base
+        #   (so essentially it's 1-based)
+        if (read.reference_end - 1) > (read.next_reference_start - 1):
             #good
-            return read.next_reference_start - 1 
+            return read.next_reference_start - 2 # -1 -1
         else:
             return None
     else:
-        if read.reference_start <= read.next_reference_start + read.tlen:
+        if read.reference_start <= (read.next_reference_start - 1) + read.tlen:
             #good
             return read.reference_start + abs(read.tlen)
         else:
@@ -632,6 +642,10 @@ def bamread_adaptor_boundary(read):
 def trim_bamread(read):
     #https://github.com/broadinstitute/gatk/blob/b11abd12b7305767ed505a8ff644a63659abf2cd/src/main/java/org/broadinstitute/hellbender/utils/clipping/ReadClipper.java#L388
     #return an array of seqlen which includes bases to skip
+    #next_reference_start is 1-based
+    #reference_start is 0-based
+    #reference_end is 0-based but points to 1 past the last base
+    #   (so essentially it's 1-based)
     adaptor_boundary = bamread_adaptor_boundary(read)
     skips = np.zeros(len(read.query_qualities), dtype = np.bool)
     if adaptor_boundary is None:
@@ -639,14 +653,42 @@ def trim_bamread(read):
     else:
         if read.is_reverse:
             if adaptor_boundary >= read.reference_start:
-                skips[:adaptor_boundary - read.reference_start + 1] = True #skip first x bases
+                #clip from start (left)
+                #we need to get the boundary in read coordinates rather than ref
+                boundary_reached = False
+                for readidx, refidx in reversed(read.get_aligned_pairs()):
+                    if refidx is not None and refidx <= adaptor_boundary:
+                        boundary_reached = True
+                    if boundary_reached and readidx is not None:
+                        adaptoridx = readidx + 1 #slice syntax
+                        break
+                else:
+                    #couldn't find boundary
+                    print("Can't find boundary.")
+                    adaptoridx = 0
+                skips[:adaptoridx] = True #skip first x bases
             return skips
         else:
-            if read.reference_end > adaptor_boundary:
+            if adaptor_boundary <= (read.reference_end - 1):
+                #clip from end (right)
                 #reference_end is 1 past the end
                 #reference_end - 1 - adaptor_boundary + 1
-                skips[-(read.reference_end - adaptor_boundary):] = True #skip last x bases
+                # readidxs, refidxs = zip(*read.get_aligned_pairs())
+                boundary_reached = False
+                for readidx, refidx in read.get_aligned_pairs():
+                    if refidx is not None and refidx >= adaptor_boundary:
+                        boundary_reached = True
+                    if boundary_reached and readidx is not None:
+                        adaptoridx = readidx
+                        break
+                else:
+                    #couldn't find boundary
+                    print("Can't find boundary.")
+                    adaptoridx = len(skips)
+                skips[adaptoridx:] = True #skip last x bases
             return skips
+
+
 
 def table_recalibrate(q, table, rg_order, seqlen, reversecycle, rgs, dinucleotide, minscore = 6, maxscore = 42):
     meanq, global_errs, global_total, q_errs, q_total, pos_errs, pos_total, dinuc_errs, dinuc_total = table_to_vectors(table, rg_order, seqlen, maxscore)

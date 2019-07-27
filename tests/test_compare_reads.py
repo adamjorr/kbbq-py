@@ -18,10 +18,74 @@ def test_bam_calibration(report, recalibratedbam):
         assert np.array_equal(recalibrated_quals, gatk_calibrated_quals)
 
 def test_bam_to_report(report, uncalibratedbam, variable_sites):
-    #I suspect this is failing because we use a shitty proxy for the variable sites
-    #and there are multiple variants in here that have a length > 1 base. Some day
-    #it might pass
+    # Some day it might pass
     bamreport = compare_reads.bam_to_report(uncalibratedbam, 'tests/data/ref.fa', variable_sites)
+    assert report.version == bamreport.version
+    for s, o in zip(report.tables, bamreport.tables):
+        assert s.title == o.title
+        assert s.description == o.description
+        if s.title == 'Quantized':
+            continue
+        #assert s.data.equals(o.data) #this is a known issue with floats
+        try:
+            assert_frame_equal(s.data, o.data)
+        except AssertionError:
+            print('gatk report', s)
+            print('bam_to_report', o)
+            raise
+
+def test_bam_to_report_fwd(uncalibratedbam, variable_sites):
+    # Some day it might pass
+    import subprocess
+    import pysam
+    from kbbq import recaltable
+
+    newbam = 'tests/data/fwdonly.bam'
+    newtable = 'tests/data/fwdonly.recal.txt'
+    with pysam.AlignmentFile(newbam,'wb', template = uncalibratedbam) as fout:
+        for r in uncalibratedbam:
+            if not r.is_reverse:
+                fout.write(r)
+    pysam.index(newbam)
+    subprocess.run( ["gatk", 'BaseRecalibrator', '-I'] + \
+        [ newbam ] + \
+        "-R tests/data/ref.fa --known-sites tests/data/conf_regions.vcf.gz --use-original-qualities".split(' ') + \
+        ["-O",newtable])
+    report = recaltable.RecalibrationReport.fromfile(newtable)
+    bamreport = compare_reads.bam_to_report(pysam.AlignmentFile(newbam), 'tests/data/ref.fa', variable_sites)
+    assert report.version == bamreport.version
+    for s, o in zip(report.tables, bamreport.tables):
+        assert s.title == o.title
+        assert s.description == o.description
+        if s.title == 'Quantized':
+            continue
+        #assert s.data.equals(o.data) #this is a known issue with floats
+        try:
+            assert_frame_equal(s.data, o.data)
+        except AssertionError:
+            print('gatk report', s)
+            print('bam_to_report', o)
+            raise
+
+def test_bam_to_report_rev(uncalibratedbam, variable_sites):
+    # Some day it might pass
+    import subprocess
+    import pysam
+    from kbbq import recaltable
+
+    newbam = 'tests/data/revonly.bam'
+    newtable = 'tests/data/revonly.recal.txt'
+    with pysam.AlignmentFile(newbam,'wb', template = uncalibratedbam) as fout:
+        for r in uncalibratedbam:
+            if r.is_reverse:
+                fout.write(r)
+    pysam.index(newbam)
+    subprocess.run( ["gatk", 'BaseRecalibrator', '-I'] + \
+        [ newbam ] + \
+        "-R tests/data/ref.fa --known-sites tests/data/conf_regions.vcf.gz --use-original-qualities".split(' ') + \
+        ["-O", newtable])
+    report = recaltable.RecalibrationReport.fromfile(newtable)
+    bamreport = compare_reads.bam_to_report(pysam.AlignmentFile(newbam), 'tests/data/ref.fa', variable_sites)
     assert report.version == bamreport.version
     for s, o in zip(report.tables, bamreport.tables):
         assert s.title == o.title
