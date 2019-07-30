@@ -207,7 +207,10 @@ class GATKTable:
         header = rows[2].split()
         typedict = cls.parse_fmtstring(header, rows[0])
         strdata = [s.split() for s in rows[3:]]
-        d = dict(zip(header, zip(*strdata))) #dictionary {colname : coldata}
+        if strdata != []:
+            d = dict(zip(header, zip(*strdata))) #dictionary {colname : coldata}
+        else:
+            d = dict(zip(header),[[]] * len(header))
         data = pd.DataFrame(d).astype(typedict)
         return cls(title, description, data)
 
