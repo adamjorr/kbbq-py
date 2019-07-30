@@ -120,6 +120,9 @@ def find_read_errors(read, ref, variable):
             refidx = refidx + l
         elif op == 1:
             #insertion in read
+            #gatk counts all insertions as aligning to the ref base to the right (maybe?)
+            #i think for now we skip if it's skipped on both sides
+            skips[readidx:readidx+l] = np.logical_and(subset_variable[refidx-1], subset_variable[refidx])
             readidx = readidx + l
         elif op == 2 or op == 3:
             #deletion in read or N op
@@ -278,7 +281,7 @@ class Dinucleotide:
 def gatk_delta_q(prior_q, numerrs, numtotal, maxscore = 42):
     assert prior_q.shape == numerrs.shape == numtotal.shape
     possible_q = np.arange(maxscore+1, dtype = np.int)
-    diff = np.absolute(np.subtract.outer(possible_q, prior_q).astype(np.int64))
+    diff = np.absolute(np.subtract.outer(possible_q, prior_q).astype(np.int))
     #1st dim is possible qs
     prior = RescaledNormal.prior_dist[diff]
     broadcast_errs = np.broadcast_to(numerrs, possible_q.shape + numerrs.shape).copy()
@@ -428,14 +431,17 @@ def vectors_to_report(meanq, global_errs, global_total, q_errs, q_total,
     }
     argtable = pd.DataFrame(data = argdata)
 
+    rg_est_q = -10.0 * np.log10(np.sum(q_to_p(np.arange(q_total.shape[1])) * q_total, axis = 1) / global_total).round(decimals = 5).astype(np.float)
+    rg_est_q[np.isnan(rg_est_q)] = 0
     rgdata = {'ReadGroup' : rg_order,
         'EventType' : 'M',
-        'EmpiricalQuality' : (gatk_delta_q(meanq, global_errs.copy(), global_total.copy()) + meanq).astype(np.float),
-        'EstimatedQReported' : -10.0 * np.log10(np.sum(q_to_p(np.arange(q_total.shape[1])) * q_total, axis = 1) / global_total).round(decimals = 5).astype(np.float),
+        'EmpiricalQuality' : (gatk_delta_q(rg_est_q, global_errs.copy(), global_total.copy()) + rg_est_q).astype(np.float),
+        'EstimatedQReported' : rg_est_q,
         'Observations' : global_total,
         'Errors' : global_errs.astype(np.float)
         }
     rgtable = pd.DataFrame(data = rgdata)
+    rgtable = rgtable[rgtable.Observations != 0]
 
     qualscore = np.broadcast_to(np.arange(q_total.shape[1]), (q_total.shape)).copy()
     qualdata = {'ReadGroup' : np.repeat(rg_order, q_total.shape[1]),
@@ -473,6 +479,7 @@ def vectors_to_report(meanq, global_errs, global_total, q_errs, q_total,
         'Errors' : dinuc_errs.flatten().astype(np.float)
         }
     dinuctable = pd.DataFrame(data = dinucdata)
+    dinuctable = dinuctable[dinuctable.Observations != 0]
 
     cycle_q = np.repeat(np.broadcast_to(np.arange(pos_total.shape[1]), (pos_total.shape[0:2])), pos_total.shape[2])
     ncycles = pos_total.shape[2] / 2
@@ -605,10 +612,10 @@ def bam_to_covariate_arrays(bamfileobj, fastafilename, var_pos, minscore = 6, ma
             read = next(bamfileobj)
     except StopIteration:
         pass
-    print("Reads:", counter)
-    print("Trimmed bases:", trimcounter)
-    print("N's masked:", ncounter)
-    print("Minscore masked:", minscorecounter)
+    # print("Reads:", counter)
+    # print("Trimmed bases:", trimcounter)
+    # print("N's masked:", ncounter)
+    # print("Minscore masked:", minscorecounter)
     meanq = p_to_q(expected_errs / rg_total)
     return meanq, rg_errs, rg_total, q_errs, q_total, pos_errs, pos_total, dinuc_errs, dinuc_total
 
@@ -894,24 +901,35 @@ def bamread_get_oq(read):
     return quals
 
 def bamread_cycle_covariates(read):
-    cycle = generic_cycle_covariate(len(read.query_sequence), read.is_read2)
+    fullcycle = np.zeros(read.query_length, dtype = np.int) #full length
+    cycle = generic_cycle_covariate(read.query_alignment_length, read.is_read2) #excludes soft-clipped bases!
+    fullcycle[read.query_alignment_start:read.query_alignment_end] = cycle
+    #soft-clipped bases will be skipped in other code
+    #so it's no problem that some cycles will stay at 0
     if read.is_reverse:
-        cycle = np.flip(cycle)
-    return cycle
+        fullcycle = np.flip(fullcycle)
+    return fullcycle
 
 def bamread_dinuc_covariates(read, dinuc_to_int, complement, minscore = 6):
     #TODO: add stuff to check whether OQ is present,
     # otherwise use read.query_qualities
     seq = read.query_sequence
+    unclipped_start = read.query_alignment_start
+    unclipped_end = read.query_alignment_end
     oq = np.array(list(read.get_tag('OQ')), dtype = np.unicode_)
     quals = np.array(oq.view(np.uint32) - 33, dtype = np.uint32)
     if read.is_reverse:
         seq = ''.join([complement.get(x,'N') for x in reversed(seq)])
         quals = np.flip(quals)
-    dinuccov = generic_dinuc_covariate(np.array(list(seq), dtype = 'U1'), quals, dinuc_to_int, minscore)
+    fulldinuc = np.zeros(len(seq), dtype = np.int)
+    dinuccov = generic_dinuc_covariate(
+        np.array(list(seq)[unclipped_start:unclipped_end], dtype = 'U1'),
+        quals[unclipped_start:unclipped_end],
+        dinuc_to_int, minscore)
     if read.is_reverse:
         dinuccov = np.flip(dinuccov)
-    return dinuccov
+    fulldinuc[unclipped_start:unclipped_end] = dinuccov
+    return fulldinuc
 
 def recalibrate_bamread(read, meanq, globaldeltaq, qscoredeltaq, positiondeltaq, dinucdeltaq, rg_to_int, dinuc_to_int, minscore = 6, maxscore = 42):
     complement = {'A' : 'T', 'T' : 'A', 'G' : 'C', 'C' : 'G'}
