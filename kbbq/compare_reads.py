@@ -27,16 +27,22 @@ def tstamp():
     return '[ ' + datetime.datetime.today().isoformat(' ', 'seconds') + ' ]'
 
 def load_positions(posfile):
+    """
+    Use with a BED file
+    """
     d = dict()
     with open(posfile, 'r') as infh:
         for line in infh:
-            #bed format, so pos is 0 based and end is 1 based
+            # bed format: pos is 0 based and end is 1 based
             chrom, pos, end = line.rstrip().split()
             for i in range(int(pos), int(end)):
                 d.setdefault(chrom, list()).append(i)
     return d
 
 def get_var_sites(vcf):
+    """
+    Use with a VCF file
+    """
     vcf = pysam.VariantFile(vcf)
     d = dict()
     for record in vcf:
@@ -99,8 +105,6 @@ def find_read_errors(read, ref, variable):
     skips = np.zeros(seq.shape, dtype = np.bool)
     cigartuples = read.cigartuples #list of tuples [(operation, length)]
     cigarops, cigarlen = zip(*cigartuples)
-    # cigarops = np.array(cigarops, dtype = np.int)
-    # cigarlen = np.array(cigarlen, dtype = np.int)
 
     #reference length from CIGAR: https://github.com/samtools/htsjdk/blob/942e3d6b4c28a8e97c457dfc89625bb403bdf83c/src/main/java/htsjdk/samtools/Cigar.java#L76
     #sum lengths of MDN=X
@@ -128,8 +132,6 @@ def find_read_errors(read, ref, variable):
             #deletion in read or N op
             # N is for introns in mRNA
             skips[readidx - 1] = np.logical_or(skips[readidx-1],np.any(subset_variable[refidx: refidx + l]))
-            #
-
             refidx = refidx + l
         elif op == 4:
             #soft clip, consumes query not ref
@@ -633,13 +635,13 @@ def bamread_adaptor_boundary(read):
         #reference_start is 0-based
         #reference_end is 0-based but points to 1 past the last base
         #   (so essentially it's 1-based)
-        if (read.reference_end - 1) > (read.next_reference_start - 1):
+        if (read.reference_end - 1) > (read.next_reference_start):
             #good
-            return read.next_reference_start - 2 # -1 -1
+            return read.next_reference_start - 1 # -1
         else:
             return None
     else:
-        if read.reference_start <= (read.next_reference_start - 1) + read.tlen:
+        if read.reference_start <= (read.next_reference_start + read.tlen):
             #good
             return read.reference_start + abs(read.tlen)
         else:
@@ -649,7 +651,7 @@ def bamread_adaptor_boundary(read):
 def trim_bamread(read):
     #https://github.com/broadinstitute/gatk/blob/b11abd12b7305767ed505a8ff644a63659abf2cd/src/main/java/org/broadinstitute/hellbender/utils/clipping/ReadClipper.java#L388
     #return an array of seqlen which includes bases to skip
-    #next_reference_start is 1-based
+    #next_reference_start is 0-based
     #reference_start is 0-based
     #reference_end is 0-based but points to 1 past the last base
     #   (so essentially it's 1-based)
@@ -663,11 +665,14 @@ def trim_bamread(read):
                 #clip from start (left)
                 #we need to get the boundary in read coordinates rather than ref
                 boundary_reached = False
+                # print(list(reversed(read.get_aligned_pairs())))
                 for readidx, refidx in reversed(read.get_aligned_pairs()):
                     if refidx is not None and refidx <= adaptor_boundary:
                         boundary_reached = True
                     if boundary_reached and readidx is not None:
                         adaptoridx = readidx + 1 #slice syntax
+                        # print('adaptoridx:',adaptoridx)
+                        # print('next ref start:',read.next_reference_start)
                         break
                 else:
                     #couldn't find boundary
@@ -903,30 +908,31 @@ def bamread_get_oq(read):
 def bamread_cycle_covariates(read):
     fullcycle = np.zeros(read.query_length, dtype = np.int) #full length
     cycle = generic_cycle_covariate(read.query_alignment_length, read.is_read2) #excludes soft-clipped bases!
-    fullcycle[read.query_alignment_start:read.query_alignment_end] = cycle
     #soft-clipped bases will be skipped in other code
     #so it's no problem that some cycles will stay at 0
     if read.is_reverse:
-        fullcycle = np.flip(fullcycle)
+        cycle = np.flip(cycle)
+    fullcycle[read.query_alignment_start:read.query_alignment_end] = cycle
     return fullcycle
 
 def bamread_dinuc_covariates(read, dinuc_to_int, complement, minscore = 6):
     #TODO: add stuff to check whether OQ is present,
     # otherwise use read.query_qualities
-    seq = read.query_sequence
     unclipped_start = read.query_alignment_start
     unclipped_end = read.query_alignment_end
+    seq = read.query_sequence[unclipped_start:unclipped_end]
     oq = np.array(list(read.get_tag('OQ')), dtype = np.unicode_)
     quals = np.array(oq.view(np.uint32) - 33, dtype = np.uint32)
+    quals = quals[unclipped_start:unclipped_end]
     if read.is_reverse:
         seq = ''.join([complement.get(x,'N') for x in reversed(seq)])
         quals = np.flip(quals)
-    fulldinuc = np.zeros(len(seq), dtype = np.int)
+    fulldinuc = np.zeros(read.query_length, dtype = np.int)
     dinuccov = generic_dinuc_covariate(
-        np.array(list(seq)[unclipped_start:unclipped_end], dtype = 'U1'),
-        quals[unclipped_start:unclipped_end],
-        dinuc_to_int, minscore)
+        np.array(list(seq), dtype = 'U1'),
+        quals, dinuc_to_int, minscore).copy()
     if read.is_reverse:
+        # flip back to fwd coordinates
         dinuccov = np.flip(dinuccov)
     fulldinuc[unclipped_start:unclipped_end] = dinuccov
     return fulldinuc
