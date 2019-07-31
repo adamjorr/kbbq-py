@@ -145,53 +145,6 @@ def find_read_errors(read, ref, variable):
             raise ValueError("Unrecognized Cigar Operation " + str(op) + " In Read\n" + str(read))
     return readerrors, skips
 
-def find_errors(bamfilename, fastafilename, var_pos, names, seqlen):
-    #this function may be better optimized that using the pileup
-    #since we have to jump around a lot when using the pileup method
-    #need to return gatkcalibratedquals, erroneous, skips
-    print(tstamp(), "Finding Errors...", file = sys.stderr)
-    #rawquals = np.zeros([len(names), seqlen], dtype = np.int)
-    gatkcalibratedquals = np.zeros([len(names), seqlen], dtype = np.int)
-    erroneous = np.zeros([len(names), seqlen], dtype = np.bool)
-    #seqs = np.zeros([len(names), seqlen], dtype = np.unicode)
-    skips = np.zeros([len(names),seqlen], dtype = np.bool)
-    fasta = pysam.FastaFile(fastafilename)
-    ref = {chrom : np.array(list(fasta.fetch(reference = chrom)), dtype = np.unicode) for chrom in fasta.references}
-    varsites = {chrom : np.array(var_pos[chrom], dtype = np.int) for chrom in var_pos.keys()}
-    fullskips = {chrom : np.zeros(len(ref[chrom]), dtype = np.bool) for chrom in ref.keys()}
-    for chrom in fullskips.keys():
-        variable_positions = varsites[chrom]
-        fullskips[chrom][variable_positions] = True
-
-    bam = pysam.AlignmentFile(bamfilename, 'r')
-    readcounter = 0
-    for read in bam:
-        suffix = ("/2" if read.is_read2 else "/1")
-        readidx = names.get(read.query_name + suffix)
-        if readidx is None:
-            continue
-
-        gatkcalibratedquals[readidx,:] = np.array(read.query_qualities, dtype = np.int)
-        e, s = find_read_errors(read, ref, fullskips)
-        erroneous[readidx,:] = e
-        skips[readidx,:] = s
-
-        readcounter = readcounter + 1
-
-        if read.is_reverse:
-            gatkcalibratedquals[readidx,:] = np.flip(gatkcalibratedquals[readidx,:])
-            erroneous[readidx,:] = np.flip(erroneous[readidx,:])
-            skips[readidx,:] = np.flip(skips[readidx,:])
-
-    try:
-        assert readcounter == len(names)
-    except AssertionError:
-        print("readcounter",readcounter)
-        print("len(names)",len(names))
-        print("num reads missing:", np.sum(np.all(gatkcalibratedquals == 0, axis = 1)))
-        raise
-    return gatkcalibratedquals, erroneous, skips
-
 class RescaledNormal:
     """
     A class to cache the rescaled normal prior used in the bayesian recalibration
@@ -278,9 +231,16 @@ class Dinucleotide:
 
     @classmethod
     def vecget(cls, *args, **kwargs):
-        return vectorized_get(*args, **kwargs)
+        return cls.vectorized_get(*args, **kwargs)
 
 def gatk_delta_q(prior_q, numerrs, numtotal, maxscore = 42):
+    """
+    Calculate the shift in quality scores from the prior given
+    data.
+
+    This is achieved by finding the difference between the maximum
+    a posteriori and the prior point estimate of Q.
+    """
     assert prior_q.shape == numerrs.shape == numtotal.shape
     possible_q = np.arange(maxscore+1, dtype = np.int)
     diff = np.absolute(np.subtract.outer(possible_q, prior_q).astype(np.int))
@@ -297,530 +257,10 @@ def gatk_delta_q(prior_q, numerrs, numtotal, maxscore = 42):
     assert loglike.shape == prior.shape
     posterior = prior + loglike
     posterior_q = np.argmax(posterior, axis = 0)
-    try:
-        assert posterior_q.shape == prior_q.shape
-    except AssertionError:
-        print("Posterior",posterior)
-        print("Posterior.shape",posterior.shape)
-        print("Posterior q:",posterior_q)
-        print("Posterior q.shape",posterior_q.shape)
-        print("Prior q:",prior_q)
-        print("Prior q.shape:", prior_q.shape)
-        raise
+    assert posterior_q.shape == prior_q.shape
     return posterior_q - prior_q
 
-#this passes bam test
-def table_to_vectors(table, rg_order, maxscore = 42):
-    #the recal table uses the PU of the read group as the read group entry in the table
-    #see vectors_to_report for more info
-    # table = recaltable.RecalibrationReport.from_file(tablefile)
-    dinuc_order = Dinucleotide.dinuc_to_int.keys()
-    rgtable = table.tables[2].data.reindex(rg_order)
-    meanq = rgtable['EstimatedQReported'].values.astype(np.float64)
-    global_errs = rgtable['Errors'].values.astype(np.int64)
-    global_total = rgtable['Observations'].values
 
-    qtable = table.tables[3].data.reindex(pd.MultiIndex.from_product([rg_order, np.arange(maxscore + 1)]))
-    q_shape = (len(rg_order), maxscore + 1)
-    q_errs = qtable['Errors'].fillna(0, downcast = 'infer').values.reshape(q_shape)
-    q_total = qtable['Observations'].fillna(0, downcast = 'infer').values.reshape(q_shape)
-
-    postable = table.tables[4].data.loc[rg_order, np.arange(maxscore + 1), 'Cycle']
-    postable = postable.reset_index(level = 'CovariateValue').astype({'CovariateValue' : np.int_}).set_index('CovariateValue', append = True)
-    seqlen = postable.index.get_level_values('CovariateValue').max()
-    postable = postable.reindex(pd.MultiIndex.from_product(
-        [rg_order, np.arange(maxscore + 1), ['Cycle'],
-        np.concatenate([np.arange(seqlen)+1, np.flip(-(np.arange(seqlen)+1),axis = 0)])
-        ]))
-    pos_shape = (len(rg_order), maxscore + 1, 2 * seqlen)
-    pos_errs = postable['Errors'].fillna(0, downcast = 'infer').values.reshape(pos_shape)
-    pos_total = postable['Observations'].fillna(0, downcast = 'infer').values.reshape(pos_shape)
-
-    dinuctable = table.tables[4].data.reindex(pd.MultiIndex.from_product([rg_order, np.arange(maxscore + 1), ['Context'], dinuc_order]))
-    dinuc_shape = (len(rg_order), maxscore + 1, len(dinuc_order))
-    dinuc_errs = dinuctable['Errors'].fillna(0, downcast = 'infer').values.reshape(dinuc_shape)
-    dinuc_total = dinuctable['Observations'].fillna(0, downcast = 'infer').values.reshape(dinuc_shape)
-
-    return meanq, global_errs, global_total, q_errs, q_total, pos_errs, pos_total, dinuc_errs, dinuc_total
-
-def quantize(q_errs, q_total, nlevels = 16, minscore = 6, maxscore = 93):
-    #this function will probably not work
-    # and if it does won't match the GATK version
-    qe = np.sum(q_errs, axis = 0)
-    qt = np.sum(q_total, axis = 0)
-    unobserved = (qt == 0)
-    qt[unobserved] = 1
-    actual_q = np.zeros((maxscore + 1))
-    actual_q[0:qt.shape[0]] = p_to_q(qe / qt)
-    quantizer = np.arange(maxscore + 1)
-    quantizer[0:qt.shape[0]][unobserved] = maxscore
-    quantizer[qt.shape[0]:] = maxscore
-    while len(np.unique(quantizer)) > nlevels:
-        levels = np.unique(quantizer)
-        penalty = np.sum(np.absolute(actual_q - quantizer))
-        # newpen = penalty[:-1] + penalty[1:]
-        newpenalty = np.zeros(len(levels))
-        for i in range(len(levels) - 1):
-            newquantizer = quantizer.copy()
-            newquantizer[quantizer == levels[i]] = levels[i + 1]
-            if levels[i] < minscore:
-                newpenalty[i] = 0
-            else:
-                newpenalty[i] = np.sum(np.absolute(actual_q - newquantizer))
-        minlevelidx = np.argmin(newpenalty[:-1])
-        quantizer[quantizer == levels[minlevelidx]] = levels[minlevelidx + 1]
-    return quantizer
-
-def vectors_to_report(meanq, global_errs, global_total, q_errs, q_total,
-    pos_errs, pos_total, dinuc_errs, dinuc_total, rg_order, maxscore = 42):
-    """
-    Turn the set of recalibration vectors into a
-    :class:`kbbq.recaltable.RecalibrationReport` object.
-
-    For the recalibration vectors, each dimension corresponds to a covariate.
-    The first index is always the read group, and the second (if it exists)
-    represents the raw quality score, the final index is either the cycle or
-    dinucleotide covariate.
-
-    :param np.array[\:] meanq: Mean q for each read group
-    :param np.array[\:] global_errs: Number of errors for each read group
-    :param np.array[\:] global_total: Number of observations for each read group
-    :param np.array[\:,\:] q_errs: Number of errors for each read group and q
-        score subset.
-    :param np.array[\:,\:] q_total: Number of observations for each read group
-        and q score subset.
-    :param np.array[\:,\:,\:] pos_errs: Number of errors for each read group, q,
-        and cycle subset.
-    :param np.array[\:,\:,\:] pos_total: Number of observations for each read
-        group, q, and cycle subset.
-    :param np.array[\:,\:,\:] dinuc_errs: Number of errors for each read group, q,
-        and dinucleotide subset.
-    :param np.array[\:,\:,\:] dinuc_total: Number of observations for each read
-        group, q, and dinucleotide subset.
-    :param list(str) rg_order: The order of read groups
-    :param int maxscore: The maximum possible quality score
-    :return: the recalibration table
-    :rtype: :class:`kbbq.recaltable.RecalibrationReport`
-    """
-
-    #these will be mostly default values, except quantization
-    #which I don't attempt to implement.
-    #I'm afraid bad things will happen if I don't include at least null values
-    #for all the args so I'll just include them all.
-    #This may need to be cleaned up later.
-
-    args = {
-        'binary_tag_name' : 'null',
-        'covariate' : 'ReadGroupCovariate,QualityScoreCovariate,ContextCovariate,CycleCovariate',
-        'default_platform' : 'null',
-        'deletions_default_quality' : '45',
-        'force_platform' : 'null',
-        'indels_context_size' : '3',
-        'insertions_default_quality' : '45',
-        'low_quality_tail' : '2',
-        'maximum_cycle_value' : '500',
-        'mismatches_context_size' : '2',
-        'mismatches_default_quality' : '-1',
-        'no_standard_covs' : 'false',
-        'quantizing_levels' : '16',
-        'recalibration_report' : 'null',
-        'run_without_dbsnp' : 'false',
-        'solid_nocall_strategy' : 'THROW_EXCEPTION',
-        'solid_recal_mode' : 'SET_Q_ZERO'
-        }
-    argdata = {'Argument' : list(args.keys()),
-    'Value' : list(args.values())
-    }
-    argtable = pd.DataFrame(data = argdata)
-
-    rg_est_q = -10.0 * np.log10(np.sum(q_to_p(np.arange(q_total.shape[1])) * q_total, axis = 1) / global_total).round(decimals = 5).astype(np.float)
-    rg_est_q[np.isnan(rg_est_q)] = 0
-    rgdata = {'ReadGroup' : rg_order,
-        'EventType' : 'M',
-        'EmpiricalQuality' : (gatk_delta_q(rg_est_q, global_errs.copy(), global_total.copy()) + rg_est_q).astype(np.float),
-        'EstimatedQReported' : rg_est_q,
-        'Observations' : global_total,
-        'Errors' : global_errs.astype(np.float)
-        }
-    rgtable = pd.DataFrame(data = rgdata)
-    rgtable = rgtable[rgtable.Observations != 0]
-
-    qualscore = np.broadcast_to(np.arange(q_total.shape[1]), (q_total.shape)).copy()
-    qualdata = {'ReadGroup' : np.repeat(rg_order, q_total.shape[1]),
-        'QualityScore' : qualscore.flatten(),
-        'EventType' : np.broadcast_to('M', (q_total.shape)).flatten(),
-        'EmpiricalQuality' : (gatk_delta_q(qualscore.flatten(), q_errs.flatten(), q_total.flatten()) + qualscore.flatten()).astype(np.float),
-        'Observations' : q_total.flatten(),
-        'Errors' : q_errs.flatten().astype(np.float)
-        }
-    qualtable = pd.DataFrame(data = qualdata)
-    qualtable = qualtable[qualtable.Observations != 0]
-
-    #no quantization, but still have to make the quantization table
-    #TODO: actual quant algo
-    quantscores = np.arange(94)
-    qcount = np.zeros(quantscores.shape)
-    qcount[qualscore[0,]] = np.sum(q_total, axis = 0)
-    quantized = quantize(q_errs, q_total) #TODO: actually quantize
-    quantdata = {'QualityScore' : quantscores,
-        'Count' : qcount,
-        'QuantizedScore' : quantized
-        }
-    quanttable = pd.DataFrame(data = quantdata)
-
-    dinuc_q = np.repeat(np.broadcast_to(np.arange(dinuc_total.shape[1]), (dinuc_total.shape[0:2])), dinuc_total.shape[2])
-    dinuc_to_int = Dinucleotide.dinuc_to_int
-    covtable_colorder = ['ReadGroup','QualityScore','CovariateName','CovariateValue']
-    dinucdata = {'ReadGroup' : np.repeat(rg_order, np.prod(dinuc_total.shape[1:])),
-        'QualityScore' : dinuc_q.flatten(),
-        'CovariateValue' : np.broadcast_to(np.array(Dinucleotide.dinucs), dinuc_total.shape).flatten(),
-        'CovariateName' : np.broadcast_to('Context', dinuc_total.shape).flatten(),
-        'EventType' : np.broadcast_to('M',dinuc_total.shape).flatten(),
-        'EmpiricalQuality' : (gatk_delta_q(dinuc_q.flatten(), dinuc_errs.flatten(), dinuc_total.flatten()) + dinuc_q.flatten()).astype(np.float),
-        'Observations' : dinuc_total.flatten(),
-        'Errors' : dinuc_errs.flatten().astype(np.float)
-        }
-    dinuctable = pd.DataFrame(data = dinucdata)
-    dinuctable = dinuctable[dinuctable.Observations != 0]
-
-    cycle_q = np.repeat(np.broadcast_to(np.arange(pos_total.shape[1]), (pos_total.shape[0:2])), pos_total.shape[2])
-    ncycles = pos_total.shape[2] / 2
-    cycle_values = np.concatenate([np.arange(ncycles) + 1, np.flip(-(np.arange(ncycles)+1),axis=0)]).astype(np.int)
-    cycledata = {'ReadGroup' : np.repeat(rg_order, np.prod(pos_total.shape[1:])).flatten(),
-        'QualityScore' : cycle_q.flatten(),
-        'CovariateValue' : np.broadcast_to(cycle_values, pos_total.shape).astype(np.unicode).flatten(),
-        'CovariateName' : np.broadcast_to('Cycle',pos_total.shape).flatten(),
-        'EventType' : np.broadcast_to('M',pos_total.shape).flatten(),
-        'EmpiricalQuality' : (gatk_delta_q(cycle_q.flatten(), pos_errs.flatten(), pos_total.flatten()) + cycle_q.flatten()).astype(np.float),
-        'Observations' : pos_total.flatten(),
-        'Errors' : pos_errs.flatten().astype(np.float)
-        }
-    cycletable = pd.DataFrame(data = cycledata)
-    covariatetable = dinuctable.append(cycletable)
-    covariatetable = covariatetable.set_index(covtable_colorder)
-    covariatetable = covariatetable[covariatetable.Observations != 0]
-    covariatetable = covariatetable.swaplevel('CovariateValue','CovariateName')
-    covariatetable = covariatetable.sort_index(level = 0, sort_remaining = True)
-    covariatetable = covariatetable.reset_index()
-    #we do this to fix ordering because concatenating the tables ruins it
-
-    titles = ['Arguments','Quantized','RecalTable0','RecalTable1','RecalTable2']
-    descriptions = ['Recalibration argument collection values used in this run',
-        'Quality quantization map', '' , '' , '']
-    gatktables = [recaltable.GATKTable(title, desc, table) for title, desc, table in \
-        zip(titles, descriptions, [argtable, quanttable, rgtable, qualtable, covariatetable])]
-
-    return recaltable.RecalibrationReport(gatktables)
-
-def bam_to_report(bamfileobj, fastafilename, var_pos):
-    # gatkcalibratedquals, erroneous, skips = find_errors(bamfileobj, fastafilename, bad_positions, names, seqlen)
-    # need def get_covariate_arrays(q, rgs, dinucleotide, errors, reversecycle, maxscore = 42, minscore = 6):
-    rgs = list(get_rg_to_pu(bamfileobj).values())
-    *vectors, = bam_to_covariate_arrays(bamfileobj, fastafilename, var_pos)
-    return vectors_to_report(*vectors, rgs)
-
-def bam_to_data_arrays():
-    """
-    Given a BAM file object, FASTA reference file name and var_pos dict,
-    get generic data arrays containing q, read names, errors, etc.
-    """
-    pass
-
-def bam_to_covariate_arrays(bamfileobj, fastafilename, var_pos, minscore = 6, maxscore = 42):
-    """
-    Given a BAM file object, FASTA reference file name and var_pos dict,
-    get the standard covariate arrays.
-    """
-    rg_to_pu = get_rg_to_pu(bamfileobj)
-    nrgs = len(rg_to_pu.keys())
-    rg_to_int = dict(zip(rg_to_pu, range(len(rg_to_pu))))
-    fasta = pysam.FastaFile(fastafilename)
-    #the below can probably be spun out to a function, i think we only use fullskips
-    ref = {chrom : np.array(list(fasta.fetch(reference = chrom)), dtype = np.unicode) for chrom in fasta.references}
-    varsites = {chrom : np.array(var_pos[chrom], dtype = np.int) for chrom in var_pos.keys()}
-    fullskips = {chrom : np.zeros(len(ref[chrom]), dtype = np.bool) for chrom in ref.keys()}
-    for chrom in fullskips.keys():
-        variable_positions = varsites[chrom]
-        fullskips[chrom][variable_positions] = True
-
-    nreads = np.sum([s.total for s in bamfileobj.get_index_statistics()])
-    counter = 0
-    read = next(bamfileobj)
-    seqlen = len(read.query_qualities)
-
-    rgs = np.zeros(seqlen, dtype = np.int_)
-    meanq = np.zeros(nrgs, dtype = np.int_)
-    expected_errs = np.zeros(nrgs, dtype = np.longdouble)
-    rg_errs = np.zeros(nrgs, dtype = np.int_)
-    rg_total = np.zeros(nrgs, dtype = np.int_)
-    q_errs = np.zeros((nrgs, maxscore + 1), dtype = np.int_)
-    q_total = np.zeros((nrgs, maxscore + 1), dtype = np.int_)
-    pos_errs = np.zeros((nrgs, maxscore + 1, 2 * seqlen), dtype = np.int_)
-    pos_total = np.zeros((nrgs, maxscore + 1, 2 * seqlen), dtype = np.int_)
-    dinuc_errs = np.zeros((nrgs, maxscore + 1, 16), dtype = np.int_)
-    dinuc_total = np.zeros((nrgs, maxscore + 1, 16), dtype = np.int_)
-    
-    trimcounter = 0
-    ncounter = 0
-    minscorecounter = 0
-    try:
-        while True:
-            counter = counter + 1
-            seq = read.query_sequence
-            rgs[:] = rg_to_int[read.get_tag('RG')]
-            errors, skips = find_read_errors(read, ref, fullskips)
-            q = bamread_get_oq(read)
-            pos = bamread_cycle_covariates(read)
-            dinucleotide = bamread_dinuc_covariates(read, Dinucleotide.dinuc_to_int, Dinucleotide.complement)
-            # if read.is_reverse:
-                # errors = np.flip(errors)
-                # skips = np.flip(skips)
-                # q = np.flip(q)
-                # seq = ''.join([Dinucleotide.complement.get(x,'N') for x in reversed(seq)])
-            seq = np.array(list(seq), dtype = 'U1')
-            assert len(seq) == len(rgs)
-            # print(seq)
-            # if counter > 5:
-            #     quit()
-            trimmed = trim_bamread(read)
-
-            minscorecounter = minscorecounter + np.sum(q < minscore)
-            ncounter = ncounter + np.sum(seq == 'N')
-            trimcounter = trimcounter + np.sum(trimmed)
-            
-            skips[q < minscore] = True
-            skips[trimmed] = True
-            skips[seq == 'N'] = True
-
-            valid = np.logical_not(skips)
-            dinuc_valid = np.logical_and(dinucleotide != -1, valid)
-            e_and_valid = np.logical_and(errors, valid)
-            e_and_dvalid = np.logical_and(errors, dinuc_valid)
-
-            rge = rgs[e_and_valid]
-            rgv = rgs[valid]
-            qe = q[e_and_valid]
-            qv = q[valid]
-
-            np.add.at(expected_errs, rgv, q_to_p(qv))
-            np.add.at(rg_errs, rge, 1)
-            np.add.at(rg_total, rgv, 1)
-            np.add.at(q_errs, (rge, qe), 1)
-            np.add.at(q_total, (rgv, qv), 1)
-            np.add.at(pos_errs, (rge, qe, pos[e_and_valid]), 1)
-            np.add.at(pos_total, (rgv, qv, pos[valid]), 1)
-            np.add.at(dinuc_errs, (rgs[e_and_dvalid], q[e_and_dvalid], dinucleotide[e_and_dvalid]), 1)
-            np.add.at(dinuc_total, (rgs[dinuc_valid], q[dinuc_valid], dinucleotide[dinuc_valid]), 1)
-            read = next(bamfileobj)
-    except StopIteration:
-        pass
-    # print("Reads:", counter)
-    # print("Trimmed bases:", trimcounter)
-    # print("N's masked:", ncounter)
-    # print("Minscore masked:", minscorecounter)
-    meanq = p_to_q(expected_errs / rg_total)
-    return meanq, rg_errs, rg_total, q_errs, q_total, pos_errs, pos_total, dinuc_errs, dinuc_total
-
-def bamread_adaptor_boundary(read):
-    #https://github.com/broadinstitute/gatk/blob/43b2b3bd4e723552414b32b8b2a7341b81f1f688/src/main/java/org/broadinstitute/hellbender/utils/read/ReadUtils.java#L534
-    #0-based in ref coordinates
-    if ( read.tlen == 0 or
-        not read.is_paired or
-        read.is_unmapped or
-        read.mate_is_unmapped or
-        read.is_reverse == read.mate_is_reverse):
-            return None
-    if read.is_reverse:
-        #next_reference_start is 1-based
-        #reference_start is 0-based
-        #reference_end is 0-based but points to 1 past the last base
-        #   (so essentially it's 1-based)
-        if (read.reference_end - 1) > (read.next_reference_start):
-            #good
-            return read.next_reference_start - 1 # -1
-        else:
-            return None
-    else:
-        if read.reference_start <= (read.next_reference_start + read.tlen):
-            #good
-            return read.reference_start + abs(read.tlen)
-        else:
-            return None
-
-
-def trim_bamread(read):
-    #https://github.com/broadinstitute/gatk/blob/b11abd12b7305767ed505a8ff644a63659abf2cd/src/main/java/org/broadinstitute/hellbender/utils/clipping/ReadClipper.java#L388
-    #return an array of seqlen which includes bases to skip
-    #next_reference_start is 0-based
-    #reference_start is 0-based
-    #reference_end is 0-based but points to 1 past the last base
-    #   (so essentially it's 1-based)
-    adaptor_boundary = bamread_adaptor_boundary(read)
-    skips = np.zeros(len(read.query_qualities), dtype = np.bool)
-    if adaptor_boundary is None:
-        return skips
-    else:
-        if read.is_reverse:
-            if adaptor_boundary >= read.reference_start:
-                #clip from start (left)
-                #we need to get the boundary in read coordinates rather than ref
-                boundary_reached = False
-                # print(list(reversed(read.get_aligned_pairs())))
-                for readidx, refidx in reversed(read.get_aligned_pairs()):
-                    if refidx is not None and refidx <= adaptor_boundary:
-                        boundary_reached = True
-                    if boundary_reached and readidx is not None:
-                        adaptoridx = readidx + 1 #slice syntax
-                        # print('adaptoridx:',adaptoridx)
-                        # print('next ref start:',read.next_reference_start)
-                        break
-                else:
-                    #couldn't find boundary
-                    print("Can't find boundary.")
-                    adaptoridx = 0
-                skips[:adaptoridx] = True #skip first x bases
-            return skips
-        else:
-            if adaptor_boundary <= (read.reference_end - 1):
-                #clip from end (right)
-                #reference_end is 1 past the end
-                #reference_end - 1 - adaptor_boundary + 1
-                # readidxs, refidxs = zip(*read.get_aligned_pairs())
-                boundary_reached = False
-                for readidx, refidx in read.get_aligned_pairs():
-                    if refidx is not None and refidx >= adaptor_boundary:
-                        boundary_reached = True
-                    if boundary_reached and readidx is not None:
-                        adaptoridx = readidx
-                        break
-                else:
-                    #couldn't find boundary
-                    print("Can't find boundary.")
-                    adaptoridx = len(skips)
-                skips[adaptoridx:] = True #skip last x bases
-            return skips
-
-
-
-def table_recalibrate(q, table, rg_order, seqlen, reversecycle, rgs, dinucleotide, minscore = 6, maxscore = 42):
-    meanq, global_errs, global_total, q_errs, q_total, pos_errs, pos_total, dinuc_errs, dinuc_total = table_to_vectors(table, rg_order, seqlen, maxscore)
-    globaldeltaq, qscoredeltaq, positiondeltaq, dinucdeltaq = get_delta_qs(meanq, global_errs, global_total, q_errs, q_total, pos_errs, pos_total, dinuc_errs, dinuc_total)
-
-    recal_q = np.array(q, copy = True, dtype = np.int)
-    valid_positions = (q >= minscore)
-    pos = np.broadcast_to(np.arange(q.shape[1]), (q.shape[0], q.shape[1])).copy()
-    np.add.at(pos, reversecycle, 1)
-    np.negative.at(pos,reversecycle)
-    rgcov = rgs[valid_positions]
-    qcov = q[valid_positions]
-    poscov = pos[valid_positions]
-    dinuccov = dinucleotide[valid_positions]
-
-    recal_q[valid_positions] = (meanq[rgcov] + globaldeltaq[rgcov] + qscoredeltaq[rgcov,qcov] + dinucdeltaq[rgcov, qcov, dinuccov] + positiondeltaq[rgcov, qcov, poscov]).astype(np.int)
-    return recal_q
-
-
-def delta_q_recalibrate(q, rgs, dinucleotide, errors, reversecycle, minscore = 6, maxscore = 42):
-    print(tstamp(), "Getting Covariate Arrays . . .", file=sys.stderr)
-    meanq, global_errs, global_total, q_errs, q_total, pos_errs, pos_total, dinuc_errs, dinuc_total = get_covariate_arrays(q, rgs, dinucleotide, errors, reversecycle)
-    print(tstamp(), "Finding Delta Q's . . .", file=sys.stderr)
-    globaldeltaq, qscoredeltaq, positiondeltaq, dinucdeltaq = get_delta_qs(meanq, global_errs, global_total, q_errs, q_total, pos_errs, pos_total, dinuc_errs, dinuc_total)
-    print(tstamp(), "Recalibrating . . .", file=sys.stderr)
-    recal_q = np.array(q, copy = True, dtype = np.int)
-    
-    #vectorize cycle covariates:
-    pos = np.broadcast_to(np.arange(q.shape[1]), (q.shape[0], q.shape[1])).copy()
-    np.add.at(pos, reversecycle, 1)
-    np.negative.at(pos,reversecycle)
-
-    #validate positions with minscore
-    valid_positions = (q >= minscore)
-    rgcov = rgs[valid_positions]
-    qcov = q[valid_positions]
-    poscov = pos[valid_positions]
-    dinuccov = dinucleotide[valid_positions]
-
-    recal_q[valid_positions] = (meanq[rgcov] + globaldeltaq[rgcov] + qscoredeltaq[rgcov,qcov] + positiondeltaq[rgcov, qcov, poscov] + dinucdeltaq[rgcov, qcov, dinuccov]).astype(np.int)
-    return recal_q.copy()
-
-def get_dinucleotide(seqs, q):
-    #[A, T, G, C] -> [A, T, G, C]
-    #nucleotides at the beginning of the sequence have an empty string before them
-    #we should: ignore any context containing an N, ignore any context at beginning of sequence
-    #we also ignore the longest string at the start and end of the sequence that have scores <=2
-    print(tstamp(), "Getting dinucleotide context . . .", file=sys.stderr)
-    seqs = seqs.copy() #we may need to alter this
-    dinucleotide = generic_dinuc_covariate(seqs.view('U1').reshape((seqs.size, -1)), q, Dinucleotide.dinuc_to_int)
-    return dinucleotide.copy()
-
-def get_covariate_arrays(q, rgs, dinucleotide, errors, reversecycle, maxscore = 42, minscore = 6):
-    #input arrays are the same dimensions: (numsequences, seqlen)
-    #output arrays are dimension (nrgs), (nrgs, q), (nrgs, q, seqlen), or (nrgs, q, 16)
-    # m = np.ma.getmaskarray(q)
-    nrgs = np.unique(rgs).shape[0]
-    seqlen = q.shape[1]
-
-    meanq = np.zeros(nrgs, dtype = np.int_)
-    expected_errs = np.zeros(nrgs, dtype = np.longdouble)
-    rg_errs = np.zeros(nrgs, dtype = np.int_)
-    rg_total = np.zeros(nrgs, dtype = np.int_)
-    q_errs = np.zeros((nrgs, maxscore + 1), dtype = np.int_)
-    q_total = np.zeros((nrgs, maxscore + 1), dtype = np.int_)
-    pos_errs = np.zeros((nrgs, maxscore + 1, 2 * seqlen), dtype = np.int_)
-    pos_total = np.zeros((nrgs, maxscore + 1, 2 * seqlen), dtype = np.int_)
-    dinuc_errs = np.zeros((nrgs, maxscore + 1, 16), dtype = np.int_)
-    dinuc_total = np.zeros((nrgs, maxscore + 1, 16), dtype = np.int_)
-    pos = np.broadcast_to(np.arange(seqlen), (q.shape[0], seqlen)).copy()
-    np.add.at(pos, reversecycle, 1)
-    np.negative.at(pos,reversecycle)
-
-    #these will be reused a lot; cache them here
-    # e = np.logical_and(errors, ~m)
-    rge = rgs[errors]
-    qe = q[errors]
-    # valid = np.logical_and(dinucleotide != -1, ~m)
-    valid = (dinucleotide != -1)
-    e_and_valid = np.logical_and(errors, valid)
-
-    np.add.at(expected_errs, rgs, q_to_p(q))
-    np.add.at(rg_errs, rge, 1)
-    np.add.at(rg_total, rgs, 1)
-    np.add.at(q_errs, (rge, qe), 1)
-    np.add.at(q_total, (rgs, q), 1)
-    np.add.at(pos_errs, (rge, qe, pos[errors]), 1)
-    np.add.at(pos_total, (rgs, q, pos), 1)
-    np.add.at(dinuc_errs, (rgs[e_and_valid], q[e_and_valid], dinucleotide[e_and_valid]), 1)
-    np.add.at(dinuc_total, (rgs[valid], q[valid], dinucleotide[valid]), 1)
-
-    meanq = p_to_q(expected_errs / rg_total)
-
-    return meanq, rg_errs, rg_total, q_errs, q_total, pos_errs, pos_total, dinuc_errs, dinuc_total
-
-#this function passes bam test
-def get_delta_qs(meanq, rg_errs, rg_total, q_errs, q_total, pos_errs, pos_total, dinuc_errs, dinuc_total, maxscore = 42):
-    # shapes are:
-    #   [rg]
-    #   [rg, q]
-    #   [rg, q, covariate]
-    #seqlen = pos_total.shape[2] / 2
-    nrgs = meanq.shape[0]
-    rgdeltaq = gatk_delta_q(meanq, rg_errs, rg_total)
-    # the qscoredeltaq is 1d, with the index being the quality score
-    prior1 = np.broadcast_to((meanq + rgdeltaq)[:,np.newaxis], q_total.shape).copy()
-    qscoredeltaq = gatk_delta_q( prior1 , q_errs, q_total)
-    ## positiondeltaq is 2d, first dimension is quality score and second is position
-    ## dinucdeltaq is 2d, first dimension is quality score and second is nucleotide context
-    prior2 = np.broadcast_to((prior1 + qscoredeltaq)[...,np.newaxis], pos_total.shape).copy()
-    positiondeltaq = gatk_delta_q(prior2, pos_errs, pos_total)
-    prior3 = np.broadcast_to((prior1 + qscoredeltaq)[...,np.newaxis], dinuc_total.shape).copy()
-    dinucdeltaq = gatk_delta_q(prior3, dinuc_errs, dinuc_total)
-
-    #need to add another value of dinuc, for invalid dinuc
-    pad = np.zeros((len(dinucdeltaq.shape),2), dtype = np.int_)
-    pad[-1,1] = 1 #add a 0 to the last axis
-    dinucdq = np.pad(dinucdeltaq, pad_width = pad, mode = 'constant', constant_values = 0)
-
-    return rgdeltaq.copy(), qscoredeltaq.copy(), positiondeltaq.copy(), dinucdq.copy()
 
 def p_to_q(p, maxscore = 42):
     q = np.zeros(p.shape, dtype = np.int)
@@ -841,7 +281,7 @@ def generic_cycle_covariate(sequencelen, secondinpair = False):
         cycle = np.negative(cycle + 1)
     return cycle
 
-def generic_dinuc_covariate(sequences, quals, dinuc_to_int, minscore = 6):
+def generic_dinuc_covariate(sequences, quals, minscore = 6):
     #this should be refactored to compensate for multiple seqs, multiple quals. it takes too long as is
     #sequences should be a numpy unicode character array, quals should be a numpy array of integer quality scores
     assert sequences.shape == quals.shape
@@ -853,14 +293,7 @@ def generic_dinuc_covariate(sequences, quals, dinuc_to_int, minscore = 6):
     follows_n = (sequences[...,:-1] == 'N')
     invalid = np.logical_or(quals[...,1:] < minscore, np.logical_or(is_n, follows_n))
     dinuccov[...,1:][...,invalid] = -1
-    vecget = np.vectorize(dinuc_to_int.get, otypes = [np.int])
-    try:
-        dinuccov[...,1:][...,np.logical_not(invalid)] = vecget(dinuc[...,np.logical_not(invalid)])
-    except ValueError:
-        print(quals)
-        print(dinuc)
-        print(dinuc[...,np.logical_not(invalid)])
-        raise
+    dinuccov[...,1:][...,np.logical_not(invalid)] = Dinucleotide.vecget(dinuc[...,np.logical_not(invalid)])
     return dinuccov
 
 ## Recalibrating FASTQ reads
@@ -868,9 +301,9 @@ def generic_dinuc_covariate(sequences, quals, dinuc_to_int, minscore = 6):
 def fastq_cycle_covariates(read, secondinpair = False):
     return generic_cycle_covariate(len(read.sequence), secondinpair)
 
-def fastq_dinuc_covariates(read, dinuc_to_int, minscore = 6):
+def fastq_dinuc_covariates(read, minscore = 6):
     quals = np.array(read.get_quality_array(), dtype = np.int)
-    return generic_dinuc_covariate(np.array(list(read.sequence)), quals, dinuc_to_int, minscore)
+    return generic_dinuc_covariate(np.array(list(read.sequence)), quals, minscore)
 
 def fastq_infer_secondinpair(read):
     namestr = read.name.split(sep='_')[0]
@@ -894,136 +327,18 @@ def recalibrate_fastq(read, meanq, globaldeltaq, qscoredeltaq, positiondeltaq, d
     valid_positions = (qcov >= minscore)
     qcov = qcov[valid_positions]
     cycle = fastq_cycle_covariates(read, secondinpair)[valid_positions]
-    dinuccov = fastq_dinuc_covariates(read, dinuc_to_int, minscore)[valid_positions]
+    dinuccov = fastq_dinuc_covariates(read, minscore)[valid_positions]
     recalibrated_quals[valid_positions] = (meanq[rg] + globaldeltaq[rg] + qscoredeltaq[rg, qcov] + dinucdeltaq[rg, qcov, dinuccov] + positiondeltaq[rg, qcov, cycle]).astype(np.int)
     return recalibrated_quals
 
 ## Recalibrate reads from a BAM
 
 def bamread_get_oq(read):
+    #TODO: add an assert or logic to ensure OQ is present
     oq = np.array(list(read.get_tag('OQ')), dtype = np.unicode)
     quals = np.array(oq.view(np.uint32) - 33, dtype = np.uint32)
     return quals
 
-def bamread_cycle_covariates(read):
-    fullcycle = np.zeros(read.query_length, dtype = np.int) #full length
-    cycle = generic_cycle_covariate(read.query_alignment_length, read.is_read2) #excludes soft-clipped bases!
-    #soft-clipped bases will be skipped in other code
-    #so it's no problem that some cycles will stay at 0
-    if read.is_reverse:
-        cycle = np.flip(cycle)
-    fullcycle[read.query_alignment_start:read.query_alignment_end] = cycle
-    return fullcycle
-
-def bamread_dinuc_covariates(read, dinuc_to_int, complement, minscore = 6):
-    #TODO: add stuff to check whether OQ is present,
-    # otherwise use read.query_qualities
-    unclipped_start = read.query_alignment_start
-    unclipped_end = read.query_alignment_end
-    seq = read.query_sequence[unclipped_start:unclipped_end]
-    oq = np.array(list(read.get_tag('OQ')), dtype = np.unicode_)
-    quals = np.array(oq.view(np.uint32) - 33, dtype = np.uint32)
-    quals = quals[unclipped_start:unclipped_end]
-    if read.is_reverse:
-        seq = ''.join([complement.get(x,'N') for x in reversed(seq)])
-        quals = np.flip(quals)
-    fulldinuc = np.zeros(read.query_length, dtype = np.int)
-    dinuccov = generic_dinuc_covariate(
-        np.array(list(seq), dtype = 'U1'),
-        quals, dinuc_to_int, minscore).copy()
-    if read.is_reverse:
-        # flip back to fwd coordinates
-        dinuccov = np.flip(dinuccov)
-    fulldinuc[unclipped_start:unclipped_end] = dinuccov
-    return fulldinuc
-
-def recalibrate_bamread(read, meanq, globaldeltaq, qscoredeltaq, positiondeltaq, dinucdeltaq, rg_to_int, dinuc_to_int, minscore = 6, maxscore = 42):
-    complement = {'A' : 'T', 'T' : 'A', 'G' : 'C', 'C' : 'G'}
-    
-    #TODO: add an assert or logic to ensure OQ is present
-    # alternatively, use OQ if present otherwise assume
-    # read.query_qualities is the raw score
-    oq = np.array(list(read.get_tag('OQ')), dtype = np.unicode_)
-    original_quals = np.array(oq.view(np.uint32) - 33, dtype = np.uint32)
-    recalibrated_quals = np.array(original_quals, dtype = np.int)
-    rg = rg_to_int[read.get_tag('RG')]
-
-    valid_positions = (original_quals >= minscore)
-    qcov = original_quals[valid_positions]
-    cycle = bamread_cycle_covariates(read)[valid_positions]
-    dinuccov = bamread_dinuc_covariates(read, dinuc_to_int, complement)[valid_positions]
-
-    recalibrated_quals[valid_positions] = (meanq[rg] + globaldeltaq[rg] + qscoredeltaq[rg, qcov] + dinucdeltaq[rg, qcov, dinuccov] + positiondeltaq[rg, qcov, cycle]).astype(np.int)
-    return recalibrated_quals
-
 def get_rg_to_pu(bamfileobj):
     rg_to_pu = {rg['ID'] : rg['PU'] for rg in bamfileobj.header.as_dict()['RG']}
     return rg_to_pu
-
-def main():
-    np.seterr(all = 'raise')
-    print(tstamp(), "Starting . . .", file=sys.stderr)
-    uncorrfile = "nospace.reads.fq"
-    corrfile = "nospace.lighter.fq"
-    bamfilename = "only_confident.sorted.recal.bam"
-    fastafilename = "../chr1.renamed.fa"
-    names, rawquals, corrected, seqs, rgs, seqlen = find_corrected_sites(uncorrfile, corrfile)
-
-    #corrected is true when the bases match the original, false otherwise
-    #hence corrected == false is where the errors are
-
-    bad_positions = load_positions("variable_sites.txt")
-    cachefile = 'cached_recal_errs.npz'
-    tablefile = 'only_confident.sorted.recal.txt'
-    if os.path.exists(cachefile):
-        print(tstamp(), "Loading cached errors . . .", file=sys.stderr)
-        loaded = np.load(cachefile)
-        gatkcalibratedquals = loaded['gatkcalibratedquals']
-        erroneous = loaded['erroneous']
-        skips = loaded['skips']
-    else:
-        gatkcalibratedquals, erroneous, skips = find_errors(bamfilename, fastafilename, bad_positions, names, seqlen)
-        np.savez_compressed(cachefile, gatkcalibratedquals = gatkcalibratedquals, erroneous = erroneous, skips = skips)
-
-    #important arrays: names, rawquals, corrected, calibquals, gatkcalibratedquals, erroneous, hmmquals
-
-    dinucleotide = get_dinucleotide(seqs, rawquals)
-    unique_rgs = np.unique(rgs)
-
-    rg_to_int = dict(zip(unique_rgs, range(len(unique_rgs))))
-    rgs = np.array([rg_to_int[r] for r in rgs], dtype = np.int_)
-    rgs = np.broadcast_to(rgs[:,np.newaxis], rgs.shape + (seqlen,)).copy()
-
-    bamfile = pysam.AlignmentFile(bamfilename,"r")
-    id_to_pu = {rg['ID'] : rg['PU'] for rg in bamfile.header.as_dict()['RG']}
-    unique_pus = [id_to_pu[rg] for rg in unique_rgs]
-
-    reversecycle = np.zeros(len(names), dtype = np.bool)
-    reversecycle[np.array(list(names.values()), dtype = np.int)] = np.char.endswith(np.array(list(names.keys()), dtype = np.unicode),'/2')
-
-    dq_calibrated = delta_q_recalibrate(rawquals, rgs, dinucleotide, np.logical_not(corrected), reversecycle)
-    #custom_gatk_calibrated = delta_q_recalibrate(rawquals, rgs, dinucleotide, erroneous, reversecycle)
-    #from_table = table_recalibrate(rawquals, tablefile, unique_pus, dinuc_order, seqlen, reversecycle, rgs, dinucleotide)
-    #assert np.array_equal(from_table, gatkcalibratedquals)
-
-    #nonsnp = (np.sum(erroneous, axis = 1) > 1) #reads with more than 1 "error" (ie an indel)
-    #skips[nonsnp,:] = True
-
-    print(tstamp(), "Skipping", np.sum(skips), "of", skips.size, "(", np.sum(skips)/skips.size ,"%)", "Sites . . .", file=sys.stderr)
-    raw = rawquals[~skips]
-    gatk = gatkcalibratedquals[~skips]
-    dq = dq_calibrated[~skips]
-    #custom = custom_gatk_calibrated[~skips]
-    #table = from_table[~skips]
-    truth = erroneous[~skips]
-
-    kbbq.plot.plot_calibration([raw, gatk, dq],
-        truth = truth,
-        labels = ["Uncalibrated Scores", "GATK BQSR", "Reference-Free BQSR"],
-        plotname = 'qualscores.pdf',
-        plottitle = "Substitution Error Calibration")
-
-
-if __name__ == '__main__':
-    main()
-

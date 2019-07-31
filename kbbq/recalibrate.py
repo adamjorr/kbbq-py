@@ -2,8 +2,9 @@
 Utilities for recalibrating reads.
 """
 
-from kbbq import compare_reads
+from kbbq import compare_reads as utils
 from kbbq import recaltable
+from kbbq.gatk import applybqsr
 import pysam
 import numpy as np
 
@@ -34,7 +35,7 @@ def fastq_to_covariate_arrays(fastq, infer_rg = False, minscore = 6, maxscore = 
     if infer_rg is False:
         rgfun = lambda x: 0 #since we currently only support 1 fastq at a time
     else:
-        rgfun = compare_reads.fastq_infer_rg
+        rgfun = utils.fastq_infer_rg
     rg_to_int = dict()
     nrgs = 0
     seqlen = 0
@@ -96,8 +97,8 @@ def fastq_to_covariate_arrays(fastq, infer_rg = False, minscore = 6, maxscore = 
             rgs[:] = rgint
             errors = find_corrected_sites(uncorr_read, corr_read)
             q = np.array(uncorr_read.get_quality_array(), dtype = np.int)
-            pos = compare_reads.fastq_cycle_covariates(uncorr_read, compare_reads.fastq_infer_secondinpair(uncorr_read))
-            dinucleotide = compare_reads.fastq_dinuc_covariates(uncorr_read, compare_reads.Dinucleotide.dinuc_to_int, minscore)
+            pos = utils.fastq_cycle_covariates(uncorr_read, utils.fastq_infer_secondinpair(uncorr_read))
+            dinucleotide = utils.fastq_dinuc_covariates(uncorr_read, minscore)
 
             skips = get_fq_skips(uncorr_read) #this fn exists specifically to be overriden for testing
             skips[q < minscore] = True
@@ -114,7 +115,7 @@ def fastq_to_covariate_arrays(fastq, infer_rg = False, minscore = 6, maxscore = 
             qv = q[valid]
 
             #tally it all up
-            np.add.at(expected_errs, rgv, compare_reads.q_to_p(qv))
+            np.add.at(expected_errs, rgv, utils.q_to_p(qv))
             np.add.at(rg_errs, rge, 1)
             np.add.at(rg_total, rgv, 1)
             np.add.at(q_errs, (rge, qe), 1)
@@ -123,7 +124,7 @@ def fastq_to_covariate_arrays(fastq, infer_rg = False, minscore = 6, maxscore = 
             np.add.at(pos_total, (rgv, qv, pos[valid]), 1)
             np.add.at(dinuc_errs, (rgs[e_and_dvalid], q[e_and_dvalid], dinucleotide[e_and_dvalid]), 1)
             np.add.at(dinuc_total, (rgs[dinuc_valid], q[dinuc_valid], dinucleotide[dinuc_valid]), 1)
-    meanq = compare_reads.p_to_q(expected_errs / rg_total)
+    meanq = utils.p_to_q(expected_errs / rg_total)
     return meanq, rg_errs, rg_total, q_errs, q_total, pos_errs, pos_total, dinuc_errs, dinuc_total
 
 def recalibrate_fastq(fastq, infer_rg = False):
@@ -138,12 +139,12 @@ def recalibrate_fastq(fastq, infer_rg = False):
     if infer_rg is False:
         rgfun = lambda x: 0 #since we currently only support 1 fastq at a time
     else:
-        rgfun = compare_reads.fastq_infer_rg
+        rgfun = utils.fastq_infer_rg
     rg_to_int = dict()
     nrgs = 0
 
     meanq, *vectors = fastq_to_covariate_arrays(fastq, infer_rg)
-    dqs = compare_reads.get_delta_qs(meanq, *vectors)
+    dqs = applybqsr.get_delta_qs(meanq, *vectors)
     with pysam.FastxFile(fastq[0]) as fin:
         for read in fin:
             rg = rgfun(read)
@@ -152,9 +153,9 @@ def recalibrate_fastq(fastq, infer_rg = False):
                 rgint = nrgs
                 rg_to_int[rg] = rgint
                 nrgs = nrgs + 1
-            recalibrated_quals = compare_reads.recalibrate_fastq(read, meanq, *dqs,
-                rg = rgint, dinuc_to_int = compare_reads.Dinucleotide.dinuc_to_int,
-                secondinpair = compare_reads.fastq_infer_secondinpair(read))
+            recalibrated_quals = utils.recalibrate_fastq(read, meanq, *dqs,
+                rg = rgint, dinuc_to_int = utils.Dinucleotide.dinuc_to_int,
+                secondinpair = utils.fastq_infer_secondinpair(read))
             strquals = ''.join((recalibrated_quals + 33).astype(np.uint32).view('U1'))
             print('@' + read.name)
             print(read.sequence)
