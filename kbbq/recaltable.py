@@ -210,7 +210,7 @@ class GATKTable:
         if strdata != []:
             d = dict(zip(header, zip(*strdata))) #dictionary {colname : coldata}
         else:
-            d = dict(zip(header),[[]] * len(header))
+            d = dict(zip(header,[[]] * len(header)))
         data = pd.DataFrame(d).astype(typedict)
         return cls(title, description, data)
 
@@ -314,7 +314,10 @@ class GATKTable:
                 formatted[h] = items.apply(fmtfuncs[h])
         datawidths = formatted.apply(lambda x: x.str.len().max()).to_numpy()
         headwidths = np.array([len(x) for x in header])
-        colwidths = np.maximum(datawidths, headwidths)
+        if len(datawidths) != 0:
+            colwidths = np.maximum(datawidths, headwidths)
+        else:
+            colwidths = headwidths
 
         datastr = '  '.join([h.ljust(colwidths[i]) for i,h in enumerate(header)])
         for row in unindexed.itertuples(index = False):
@@ -449,9 +452,11 @@ class RecalibrationReport(GATKReport):
         #typer.pop('EstimatedQReported')
         #typer.update({'QualityScore' : np.int_})
 
-        typer = {'QualityScore' : np.int_}
+        typer = {'ReadGroup' : str, 'QualityScore' : np.int}
         self.tables[3].data = self.tables[3].data.astype(typer)
         self.tables[3].data = self.tables[3].data.set_index(['ReadGroup','QualityScore'])
+
+        typer.update({'CovariateName': str, 'CovariateValue' : str})
         self.tables[4].data = self.tables[4].data.astype(typer)
         self.tables[4].data = self.tables[4].data.set_index(['ReadGroup','QualityScore','CovariateName','CovariateValue'])
 
