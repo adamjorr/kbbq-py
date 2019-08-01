@@ -15,7 +15,8 @@ def get_var_sites(vcf):
     vcf = pysam.VariantFile(vcf)
     d = dict()
     for record in vcf:
-        d.setdefault(record.chrom, list()).append(int(record.pos)-1)
+        for i in range(record.start, record.stop, 1):
+            d.setdefault(record.chrom, list()).append(i)
     return d
 
 def get_bed_dict(refdict, bedfh):

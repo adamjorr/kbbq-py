@@ -42,8 +42,10 @@ def simple_fasta(tmp_path):
     """
     This is given as an example in the SAM spec
     """
-    f = tmp_path / "example.fa"
+    import pysam
+    f = tmp_path / "simple.fa"
     f.write_text(">ref\nAGCATGTTAGATAAGATAGCTGTGCTAGTAGGCAGTCAGCGCCAT")
+    pysam.faidx(str(f))
     return str(f)
 
 @pytest.fixture()
@@ -65,7 +67,8 @@ def simple_bam(tmp_path, simple_sam):
     """
     import pysam
     f = tmp_path / "simple.bam"
-    pysam.view("-h","-b","-o",str(f),simple_sam)
+    bam = pysam.view("-h","-b",simple_sam)
+    f.write_bytes(bam)
     pysam.index(str(f))
     return str(f)
 
@@ -84,4 +87,24 @@ def simple_vcf(tmp_path):
         '##FORMAT=<ID=AD,Number=R,Type=Integer,Description="Allelic depths for the ref and alt alleles in the order listed">\n' +
         "#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO\tFORMAT\tsyndip\n" +
         "ref\t10\t.\tG\tT\t30\t.\t.\tGT:AD\t0|1:1,1\n")
+    return str(f)
+
+@pytest.fixture()
+def simple_bed(tmp_path):
+    """
+    A simple bed for excluding sites 0-7.
+
+    This should exclude the first 2 sites of r001. 
+    """
+    f = tmp_path / "simple.bed"
+    f.write_text('ref\t8\t46\n')
+    return str(f)
+
+@pytest.fixture()
+def simple_fastq(tmp_path, simple_bam):
+    import pysam
+    f = tmp_path / 'simple.fq'
+    fq = pysam.fastq('-t','-N','-O',simple_bam)
+    fq = fq.replace('\t','_')
+    f.write_text(fq)
     return str(f)
