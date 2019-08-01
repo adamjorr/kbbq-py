@@ -36,3 +36,52 @@ def benchmarkfile(request, monkeypatch, tmp_path, capfd):
     p = tmp_path / 'benchmark.txt'
     p.write_text(capfd.readouterr().out)
     return str(p)
+
+@pytest.fixture()
+def simple_fasta(tmp_path):
+    """
+    This is given as an example in the SAM spec
+    """
+    f = tmp_path / "example.fa"
+    f.write_text(">ref\nAGCATGTTAGATAAGATAGCTGTGCTAGTAGGCAGTCAGCGCCAT")
+    return str(f)
+
+@pytest.fixture()
+def simple_sam(tmp_path):
+    """
+    This is adapted from the example in the SAM spec
+    """
+    f = tmp_path / "simple.sam"
+    f.write_text("@HD\tVN:1.6\tSO:coordinate\n" +
+        "@SQ\tSN:ref\tLN:45\n" +
+        "r001\t99\tref\t7\t30\t8M2I4M1D3M\t=\t37\t39\tTTAGATAAAGGATACTG\t==99=?<*+/5:@A99:\n" +
+        "r001\t147\tref\t37\t30\t9M\t=\t7\t-39\tCAGCGGCAT\t><>???>>>\tNM:i:1\n")
+    return str(f)
+
+@pytest.fixture()
+def simple_bam(tmp_path, simple_sam):
+    """
+    BAM version of simple_sam.
+    """
+    import pysam
+    f = tmp_path / "simple.bam"
+    pysam.view("-h","-b","-o",str(f),simple_sam)
+    pysam.index(str(f))
+    return str(f)
+
+@pytest.fixture()
+def simple_vcf(tmp_path):
+    """
+    Pretends there is a variant at site 10 on the ref.
+
+    This will overlap the read in simple_sam.
+    """
+    f = tmp_path / "simple.vcf"
+    f.write_text('##fileformat=VCFv4.2\n' +
+        '##FILTER=<ID=PASS,Description="All filters passed">\n' +
+        '##contig=<ID=ref,length=45>\n' +
+        '##FORMAT=<ID=GT,Number=1,Type=String,Description="Genotype">\n' +
+        '##FORMAT=<ID=AD,Number=R,Type=Integer,Description="Allelic depths for the ref and alt alleles in the order listed">\n' +
+        "#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO\tFORMAT\tsyndip\n" +
+        "ref\t10\t.\tG\tT\t30\t.\t.\tGT:AD\t0|1:1,1\n")
+    return str(f)
