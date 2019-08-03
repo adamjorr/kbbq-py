@@ -1,5 +1,10 @@
 import pytest
 
+def pytest_configure(config):
+    config.addinivalue_line(
+        "markers", "slow: marks tests as slow (deselect with \'-m \"not slow\"\')"
+    )
+
 @pytest.fixture(params = ['tests/data/conf_regions.recal.txt'])
 def report_and_file(request):
     from kbbq import recaltable
@@ -43,9 +48,11 @@ def simple_fasta(tmp_path):
     This is given as an example in the SAM spec
     """
     import pysam
+    import subprocess
     f = tmp_path / "simple.fa"
-    f.write_text(">ref\nAGCATGTTAGATAAGATAGCTGTGCTAGTAGGCAGTCAGCGCCAT")
-    pysam.faidx(str(f))
+    f.write_text(">ref\nAGCATGTTAGATAAGATAGCTGTGCTAGTAGGCAGTCAGCGCCAT\n")
+    # pysam.faidx(str(f))
+    subprocess.run(['samtools','faidx',str(f)])
     return str(f)
 
 @pytest.fixture()

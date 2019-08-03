@@ -337,7 +337,7 @@ def bamread_get_oq(read):
     #TODO: add an assert or logic to ensure OQ is present
     oq = np.array(list(read.get_tag('OQ')), dtype = np.unicode)
     quals = np.array(oq.view(np.uint32) - 33, dtype = np.uint32)
-    return quals
+    return np.array(quals, dtype = np.int)
 
 def get_rg_to_pu(bamfileobj):
     rg_to_pu = {rg['ID'] : rg['PU'] for rg in bamfileobj.header.as_dict()['RG']}

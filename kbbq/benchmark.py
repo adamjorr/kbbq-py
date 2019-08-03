@@ -95,11 +95,10 @@ def benchmark_fastq(fqfile, bamfile, ref, var_sites, bedfh = None):
     edict = get_error_dict(bamfile, ref, fullskips)
     errors, skips, quals = zip(*(edict[get_fastq_readname(r)] + (np.array(r.get_quality_array()),) for r in pysam.FastxFile(fqfile)))
     #turn list of small arrays into 2d arrays
-    errors = np.array(errors)
-    skips = np.array(skips)
-    quals = np.array(quals)
+    errors = np.concatenate(errors)
+    skips = np.concatenate(skips)
+    quals = np.concatenate(quals)
     #get rid of skipped sites (we can't tell if these are errors or not)
-    
     e = errors[~skips]
     q = quals[~skips]
     return calculate_q(e, q) #actual_q, ntotal
@@ -119,9 +118,9 @@ def benchmark_bam(bamfile, ref, var_sites, use_oq = False, bedfh = None):
     fullskips = get_full_skips(ref, var_sites, bedfh)
     errors, skips, quals = zip(*(compare_reads.find_read_errors(read, ref, fullskips) + (get_bamread_quals(read, use_oq),) for read in bamfile)) #generator
     #turn list of 1d arrays into 2d arrays
-    errors = np.array(errors)
-    skips = np.array(skips)
-    quals = np.array(quals)
+    errors = np.concatenate(errors)
+    skips = np.concatenate(skips)
+    quals = np.concatenate(quals)
     #get rid of skipped sites
     e = errors[~skips]
     q = quals[~skips]
