@@ -6,6 +6,8 @@
 
 k-mer based base quality recalibration
 
+The full documentation can be found here: https://kbbq.readthedocs.io/
+
 ## Installation
 
 kbbq can be installed via pip or your favorite pip-compatible program,
