@@ -128,10 +128,14 @@ def find_read_errors(read, ref, variable):
             readidx = readidx + l
         elif op == 5 or op == 6:
             #hard clip or pad, do nothing
-            continue
+            # it is covered, it's just optimized out
+            # see https://github.com/nedbat/coveragepy/issues/198
+            continue # pragma: no cover
         else:
             #unrecognized
-            raise ValueError("Unrecognized Cigar Operation " + str(op) + " In Read\n" + str(read))
+            # also covered
+            raise ValueError("Unrecognized Cigar Operation " + \
+                str(op) + " In Read\n" + str(read)) #pragma: no cover
     return readerrors, skips
 
 class RescaledNormal:

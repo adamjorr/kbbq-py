@@ -104,7 +104,7 @@ def test_find_read_errors(simple_bam, simple_refdict, simple_fullskips, monkeypa
     assert np.array_equal(e,r2errs)
     assert np.array_equal(s,np.zeros(9, dtype = np.bool))
 
-    #test hard clip block
+    #test hard clip + n block
     readstr = 'clipped\t0\tref\t9\t255\t1M9H\t*\t0\t0\tA\t)'
     clippedread = pysam.AlignedSegment.fromstring(readstr,bam.header)
     e, s = compare_reads.find_read_errors(clippedread, simple_refdict, simple_fullskips)
