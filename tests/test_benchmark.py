@@ -4,29 +4,15 @@ import kbbq.benchmark as benchmark
 import numpy as np
 import pysam
 
-@pytest.fixture()
-def simple_refdict(simple_fasta):
-    return benchmark.get_ref_dict(simple_fasta)
-
 def test_get_ref_dict(simple_refdict):
     correct = {'ref':np.array(list('AGCATGTTAGATAAGATAGCTGTGCTAGTAGGCAGTCAGCGCCAT'),dtype = np.unicode)}
     for k in correct:
         assert k in simple_refdict
         assert np.array_equal(simple_refdict[k], correct[k])
 
-@pytest.fixture()
-def simple_varsites(simple_vcf):
-    return benchmark.get_var_sites(simple_vcf)
-
 def test_get_var_sites(simple_varsites):
     correct = {'ref':[9]}
     assert correct == simple_varsites
-
-@pytest.fixture()
-def simple_bedfh(simple_bed):
-    bedfh = open(simple_bed, 'r')
-    yield bedfh
-    bedfh.close()
 
 def test_get_bed_dict(simple_fasta, simple_bedfh):
     pos = np.zeros(45, dtype = np.bool)
@@ -36,13 +22,6 @@ def test_get_bed_dict(simple_fasta, simple_bedfh):
     for k in bed_dict:
         assert k in benchdict
         assert np.array_equal(bed_dict[k], benchdict[k])
-
-@pytest.fixture()
-def simple_fullskips(simple_fasta, simple_vcf, simple_bedfh):
-    return benchmark.get_full_skips(
-        benchmark.get_ref_dict(simple_fasta),
-        benchmark.get_var_sites(simple_vcf),
-        simple_bedfh)
 
 def test_get_full_skips(simple_fullskips):
     skips = np.zeros(45, dtype = np.bool)
@@ -64,12 +43,6 @@ def test_get_fastq_readname(simple_fastq):
     reads = list(fq)
     assert benchmark.get_fastq_readname(reads[0]) == 'r001/1'
     assert benchmark.get_fastq_readname(reads[1]) == 'r001/2'
-
-@pytest.fixture()
-def simple_error_dict(simple_bam, simple_refdict, simple_fullskips):
-    return benchmark.get_error_dict(pysam.AlignmentFile(simple_bam),
-        simple_refdict,
-        simple_fullskips)
 
 def test_get_error_dict(simple_error_dict):
     r1skips = np.zeros(17, dtype = np.bool)
