@@ -84,7 +84,7 @@ def test_regression_recalibrate():
     assert newq.shape == q.shape
     assert not np.all(newq == q)
 
-def test_find_read_errors(simple_bam, simple_refdict, simple_fullskips, monkeypatch):
+def test_find_read_errors(simple_bam, simple_refdict, simple_fullskips):
     """
     This will need more testing for some edge cases probably
     """
@@ -217,7 +217,7 @@ def test_fastq_infer_rg(simple_fastq_reads):
         r.name = r.name + '_RG:Z:FOO'
         assert compare_reads.fastq_infer_rg(r) == 'FOO'
 
-def test_recalibrate_fastq(simple_fastq_reads):
+def test_recalibrate_fastq():
     read = pysam.FastxRecord(
         name = 'foo',
         sequence = 'ATG',
