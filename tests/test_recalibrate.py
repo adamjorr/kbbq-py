@@ -21,5 +21,5 @@ def test_find_corrected_sites(simple_fastq, tmp_path):
     corrected_fastq = tmp_path / 'corrected.fq'
     with open(simple_fastq,'r') as fin, open(corrected_fastq,'w') as fout:
         inlines = fin.readlines()
-        inlines[5][5] = 'C'
+        inlines[5] = inlines[5][0:5] + 'C' + inlines[5][6:]
         fout.writelines(inlines)
