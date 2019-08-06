@@ -19,13 +19,6 @@ def find_corrected_sites(uncorr_read, corr_read):
     corr_seq = np.array(list(corr_read.sequence), dtype = np.unicode)
     return (uncorr_seq != corr_seq)
 
-def get_fq_skips(read):
-    """
-    This function exists just to override it in testing
-    """
-    seqlen = len(list(read.sequence))
-    return np.zeros(seqlen, dtype = np.bool)
-
 def fastq_to_covariate_arrays(fastq, infer_rg = False, minscore = 6, maxscore = 42):
     """
     TODO:We really really really need a class to keep track of the covariate arrays
@@ -100,7 +93,7 @@ def fastq_to_covariate_arrays(fastq, infer_rg = False, minscore = 6, maxscore = 
             pos = utils.fastq_cycle_covariates(uncorr_read, utils.fastq_infer_secondinpair(uncorr_read))
             dinucleotide = utils.fastq_dinuc_covariates(uncorr_read, minscore)
 
-            skips = get_fq_skips(uncorr_read) #this fn exists specifically to be overriden for testing
+            skips = np.zeros(seqlen, dtype = np.bool)
             skips[q < minscore] = True
             valid = ~skips
             dinuc_valid = np.logical_and(dinucleotide != -1, valid)
