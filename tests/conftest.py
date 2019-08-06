@@ -1,4 +1,5 @@
 import pytest
+import kbbq.benchmark as benchmark
 
 def pytest_configure(config):
     config.addinivalue_line(
@@ -115,3 +116,46 @@ def simple_fastq(tmp_path, simple_bam):
     fq = fq.replace('\t','_')
     f.write_text(fq)
     return str(f)
+
+@pytest.fixture()
+def simple_fastq_reads(simple_fastq):
+    import pysam
+    return list(pysam.FastxFile(simple_fastq,'r'))
+
+@pytest.fixture()
+def simple_bam_reads(simple_bam):
+    import pysam
+    return list(pysam.AlignmentFile(simple_bam,'rb'))
+
+#################################
+
+# Benchmark fixtures
+
+##################################
+
+@pytest.fixture()
+def simple_refdict(simple_fasta):
+    return benchmark.get_ref_dict(simple_fasta)
+
+@pytest.fixture()
+def simple_varsites(simple_vcf):
+    return benchmark.get_var_sites(simple_vcf)
+
+@pytest.fixture()
+def simple_bedfh(simple_bed):
+    bedfh = open(simple_bed, 'r')
+    yield bedfh
+    bedfh.close()
+
+@pytest.fixture()
+def simple_fullskips(simple_fasta, simple_vcf, simple_bedfh):
+    return benchmark.get_full_skips(
+        benchmark.get_ref_dict(simple_fasta),
+        benchmark.get_var_sites(simple_vcf),
+        simple_bedfh)
+
+@pytest.fixture()
+def simple_error_dict(simple_bam, simple_refdict, simple_fullskips):
+    return benchmark.get_error_dict(pysam.AlignmentFile(simple_bam),
+        simple_refdict,
+        simple_fullskips)

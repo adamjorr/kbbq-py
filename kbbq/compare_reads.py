@@ -24,11 +24,23 @@ import datetime
 import kbbq.benchmark
 
 def tstamp():
+    """
+    Return the current time up to the second in ISO format as a string.
+
+    :return: current time with brackets
+    :rtype: str
+    """
     return '[ ' + datetime.datetime.today().isoformat(' ', 'seconds') + ' ]'
 
 def load_positions(posfile):
     """
-    Use with a BED file
+    Get positions that are covered by a non-zipped BED file.
+
+    Pass the file name; it will be opened with :func:`python.open`.
+    This is slightly different than :func:`benchmark.get_bed_dict`
+    because it doesn't require a refdict and only provides a list
+    of 0-based positions, not a boolean array of all positions in
+    the reference.
     """
     d = dict()
     with open(posfile, 'r') as infh:
@@ -41,7 +53,10 @@ def load_positions(posfile):
 
 def get_var_sites(vcf):
     """
-    Use with a VCF file
+    Get positions covered by any record in a VCF file.
+
+    Pass the file name. Each value in the returned dict will
+    be a list of 0-based positions.
     """
     vcf = pysam.VariantFile(vcf)
     d = dict()
@@ -52,54 +67,28 @@ def get_var_sites(vcf):
             d.setdefault(record.chrom, list()).append(i)
     return d
 
-def find_corrected_sites(uncorrfile, corrfile):
-    print(tstamp(), "Finding corrected sites . . .", file=sys.stderr)
-    uncorr_reads = list(pysam.FastxFile(uncorrfile))
-    corr_reads = list(pysam.FastxFile(corrfile))
-    #verify the sequences are the same and can be accessed by index
-    for i in range(len(corr_reads)):
-        try:
-            assert corr_reads[i].name.startswith(uncorr_reads[i].name)
-        except AssertionError:
-            print("Corr_set[i]:",corr_reads[i])
-            print("Uncorr_Set[i]:", uncorr_reads[i])
-            raise
-
-    names = dict()
-    seqlen = len(uncorr_reads[0].get_quality_array())
-    rawquals = np.zeros([len(uncorr_reads), seqlen], dtype = np.int)
-    corrected = np.zeros([len(uncorr_reads),seqlen], dtype = np.bool)
-    seqs = np.zeros(len(uncorr_reads), dtype = 'U' + str(seqlen))
-    rgs = np.zeros(len(uncorr_reads), dtype = 'U7')
-    for i in range(len(uncorr_reads)):
-        names[uncorr_reads[i].name.split(sep='_')[0]] = i
-        #print(uncorr_reads[i].name)
-        rgs[i] = uncorr_reads[i].name.split(sep='_')[1].split(':')[-1]
-        rawquals[i,:] = uncorr_reads[i].get_quality_array()
-        seqs[i] = uncorr_reads[i].sequence
-        uncorr_s = np.array(list(uncorr_reads[i].sequence), dtype = np.unicode)
-        corr_s = np.array(list(corr_reads[i].sequence), dtype = np.unicode)
-        corrected[i] = (uncorr_s == corr_s)
-    return names, rawquals.copy(), corrected.copy(), seqs.copy(), rgs.copy(), seqlen
-
-def train_regression(rawquals, corrected, tol = 1e-4):
+def train_regression(rawquals, corrected, tol = 1e-8):
     print(tstamp(), "Doing Logit Regression", file=sys.stderr)
     lr = LR(tol = tol)
     lr = lr.fit(rawquals.flatten().reshape(-1,1), corrected.flatten())
     return lr
 
-def recalibrate(lr, q):
+def regression_recalibrate(lr, q):
     print(tstamp(), "Recalibrating Quality Scores . . .", file = sys.stderr)
     newprobs = lr.predict_proba(q.flatten().reshape(-1,1))[:,1]
     newq = p_to_q(newprobs)
     newq.reshape(q.shape)
     assert newq.shape == q.shape
-    return q.copy()
+    return newq.copy()
 
 def find_read_errors(read, ref, variable):
-    #use the CIGAR to find errors in the read or sites to skip
-    #we will add softclipped bases to a skip array and return the error array and the skip array
-    #we don't consider indel errors and just track them to properly navigate the reference
+    """
+    Use the CIGAR to find errors in the read or sites to skip.
+
+    Softclipped bases will be added to the skip array.
+    Returns a tuple with the error array and the skip array.
+    We don't consider indel errors.
+    """
     # here's how gatk does it: https://github.com/broadinstitute/gatk/blob/78df6b2f6573b3cd2807a71ec8950d7dfbc9a65d/src/main/java/org/broadinstitute/hellbender/utils/recalibration/BaseRecalibrationEngine.java#L370
     seq = np.array(list(read.query_sequence), dtype = np.unicode)
     skips = np.zeros(seq.shape, dtype = np.bool)
@@ -186,7 +175,8 @@ class RescaledNormal:
             prior_dist[i] = np.NINF
     np.seterr(**oldset)
 
-    def prior(self, difference):
+    @classmethod
+    def prior(cls, difference):
         """
         Return the prior probability for a given difference in quality score.
 
@@ -194,7 +184,7 @@ class RescaledNormal:
         :returns: the prior probability
         :rtype: np.longdouble
         """
-        return prior_dist[difference]
+        return cls.prior_dist[difference]
 
 class Dinucleotide:
     """
@@ -260,8 +250,6 @@ def gatk_delta_q(prior_q, numerrs, numtotal, maxscore = 42):
     assert posterior_q.shape == prior_q.shape
     return posterior_q - prior_q
 
-
-
 def p_to_q(p, maxscore = 42):
     q = np.zeros(p.shape, dtype = np.int)
     q[p != 0] = (-10.0*np.log10(p[p != 0])).astype(np.int) #avoid divide by 0
@@ -282,7 +270,6 @@ def generic_cycle_covariate(sequencelen, secondinpair = False):
     return cycle
 
 def generic_dinuc_covariate(sequences, quals, minscore = 6):
-    #this should be refactored to compensate for multiple seqs, multiple quals. it takes too long as is
     #sequences should be a numpy unicode character array, quals should be a numpy array of integer quality scores
     assert sequences.shape == quals.shape
     assert sequences.dtype == np.dtype('U1')

@@ -13,3 +13,13 @@ def test_fastq_to_covariate_arrays(recalibratedbam, variable_sites, monkeypatch)
     TODO
     """
     pass
+
+def test_find_corrected_sites(simple_fastq, tmp_path):
+    """
+    TODO
+    """
+    corrected_fastq = tmp_path / 'corrected.fq'
+    with open(simple_fastq,'r') as fin, open(corrected_fastq,'w') as fout:
+        inlines = fin.readlines()
+        inlines[5][5] = 'C'
+        fout.writelines(inlines)
