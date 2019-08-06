@@ -156,6 +156,7 @@ def simple_fullskips(simple_fasta, simple_vcf, simple_bedfh):
 
 @pytest.fixture()
 def simple_error_dict(simple_bam, simple_refdict, simple_fullskips):
+    import pysam
     return benchmark.get_error_dict(pysam.AlignmentFile(simple_bam),
         simple_refdict,
         simple_fullskips)
