@@ -84,10 +84,11 @@ def test_regression_recalibrate():
     assert newq.shape == q.shape
     assert not np.all(newq == q)
 
-def test_find_read_errors(simple_bam, simple_refdict, simple_fullskips):
+def test_find_read_errors(simple_bam, simple_refdict, simple_fullskips, monkeypatch):
     """
     This will need more testing for some edge cases probably
     """
+    import collections
     r1skips = np.zeros(17, dtype = np.bool)
     r1skips[3] = True #from vcf
     r1skips[0:2] = True #from BED
@@ -102,6 +103,23 @@ def test_find_read_errors(simple_bam, simple_refdict, simple_fullskips):
     e, s = compare_reads.find_read_errors(reads[1], simple_refdict, simple_fullskips)
     assert np.array_equal(e,r2errs)
     assert np.array_equal(s,np.zeros(9, dtype = np.bool))
+
+    #test hard clip block
+    readstr = 'clipped\t0\tref\t9\t255\t1M9H\t*\t0\t0\tA\t)'
+    clippedread = pysam.AlignedSegment.fromstring(readstr,bam.header)
+    e, s = compare_reads.find_read_errors(clippedread, simple_refdict, simple_fullskips)
+    assert np.array_equal(e, np.array([False]))
+    assert np.array_equal(s, np.array([False], dtype = np.bool))
+
+    # test exception for invalid CIGAR
+    # though the amount of effort required to do this means it's unlikely
+    # to ever happen to a user...
+    FakeRead = collections.namedtuple('FakeRead', clippedread.__dir__(), rename = True)
+    shallowvalues = {k:getattr(clippedread,k) for k in clippedread.__dir__()}
+    shallowvalues['cigartuples'] =  [('L',9)]
+    clippedread = FakeRead(*shallowvalues)
+    with pytest.raises(ValueError):
+        e, s = compare_reads.find_read_errors(clippedread, simple_refdict, simple_fullskips)
 
 def test_RescaledNormal_prior():
     assert compare_reads.RescaledNormal.prior(0) == np.log(.9)
