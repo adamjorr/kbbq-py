@@ -33,7 +33,24 @@ def uncorr_and_corr_fastq_files(tmp_path):
         fc.write(str(r2))
     return str(uncorr_fastq), str(corrected_fastq)
 
-def test_fastq_to_covariate_arrays(uncorr_and_corr_fastq_files):
+@pytest.fixture()
+def uncorr_and_corr_with_rg(tmp_path):
+    uncorr_fastq = tmp_path / 'uncorr_withrg.fq'
+    corrected_fastq = tmp_path / 'corr_withrg.fq'
+    with open(uncorr_fastq,'w') as fu, open(corrected_fastq,'w') as fc:
+        r = pysam.FastxRecord(
+            name = 'foo/1_RG:Z:bar',
+            sequence = 'ATG',
+            quality = '((#') #7, 7, 2
+        r2 = pysam.FastxRecord(
+            name = r.name,
+            sequence = 'ACG',
+            quality = r.quality)
+        fu.write(str(r))
+        fc.write(str(r2))
+    return str(uncorr_fastq), str(corrected_fastq)
+
+def test_fastq_to_covariate_arrays(uncorr_and_corr_fastq_files, uncorr_and_corr_with_rg):
     correct_pos_errs = np.zeros((1,43,6))
     correct_pos_total = np.zeros((1,43,6))
     correct_pos_errs[0,7,1] = 1
@@ -56,6 +73,9 @@ def test_fastq_to_covariate_arrays(uncorr_and_corr_fastq_files):
     for a,b in zip(correct_vectors, recalibrate.fastq_to_covariate_arrays(
         uncorr_and_corr_fastq_files)):
             assert np.array_equal(a,b)
+    for a,b in zip(correct_vectors, recalibrate.fastq_to_covariate_arrays(
+        uncorr_and_corr_with_rg, infer_rg = True)):
+            assert np.array_equal(a,b)
 
 #this read is used below
 correct_read = pysam.FastxRecord(
@@ -63,10 +83,20 @@ correct_read = pysam.FastxRecord(
         sequence = 'ATG',
         quality = '\'\'#') #6, 6, 2
 
-def test_recalibrate_fastq(uncorr_and_corr_fastq_files, capfd):
+correct_read_with_rg = pysam.FastxRecord(
+        name = 'foo/1_RG:Z:bar',
+        sequence = 'ATG',
+        quality = '\'\'#')
+
+def test_recalibrate_fastq(uncorr_and_corr_fastq_files, uncorr_and_corr_with_rg, capfd):
     recalibrate.recalibrate_fastq(uncorr_and_corr_fastq_files)
     captured = capfd.readouterr()
     assert captured.out == str(correct_read) + '\n'
+
+    #now test with infer_rg = True
+    recalibrate.recalibrate_fastq(uncorr_and_corr_with_rg, infer_rg = True)
+    captured = capfd.readouterr()
+    assert captured.out == str(correct_read_with_rg) + '\n'
 
     #TODO: we may want test 1000x this read to see a more realistic example
 
