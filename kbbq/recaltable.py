@@ -145,6 +145,7 @@ class GATKTable:
         * :meth:`fromstring` - Initialize a :class:`GATKTable` from a string.
         * :meth:`parse_fmtstring` - Parse a fmtstring into a dictionary of types
         * :meth:`get_fmtstring` - Get a formatstring by inspecting the dataframe.
+        * :meth:`get_unindexed` - Get a copy of the dataframe with indices reset
         * :meth:`get_colfmts` - Get a list of format strings for the data in 
             the dataframe
         * :meth:`get_titlestring` - Get the title string
@@ -258,10 +259,25 @@ class GATKTable:
 
         """
         fmtlist = ['#', 'GATKTable', str(self.get_ncols()), str(self.get_nrows())]
-        for f in self.get_colfmts():
-            fmtlist.append(f)
+        fmtlist = fmtlist + self.get_colfmts()
+        # for f in self.get_colfmts():
+            # fmtlist.append(f)
         fmtlist.append(';')
         return ':'.join(fmtlist)
+
+    def get_unindexed(self):
+        """
+        Return a copy of the dataframe without the indexes included.
+
+        If the table has an unnamed index, such as the default index,
+        return a copy of the data frame. Otherwise, reset the index.
+
+        """
+        if not self.data.index.names == [None]:
+            #only reset if we have a meaningful column name for this index
+            return self.data.reset_index()
+        else:
+            return self.data.copy()
 
     def get_colfmts(self):
         """
@@ -275,7 +291,7 @@ class GATKTable:
         :rtype: list(str)
         """
         fmtlist = []
-        unindexed = self.data.reset_index()
+        unindexed = self.get_unindexed()
         types = unindexed.dtypes
         heads = unindexed.columns.to_list()
         for t,h in zip(types, heads):
@@ -306,7 +322,7 @@ class GATKTable:
         :rtype: str
         """
         fmtstrings = self.get_colfmts()
-        unindexed = self.data.reset_index()
+        unindexed = self.get_unindexed()
         header = unindexed.columns.to_list()
         fmtfuncs = { h : lambda x: f % x for h,f in zip(header, fmtstrings)}
 
@@ -337,7 +353,7 @@ class GATKTable:
         :return: The number of rows in the dataframe.
         :rtype: int
         """
-        return self.data.reset_index().shape[0]
+        return self.get_unindexed().shape[0]
 
     def get_ncols(self):
         """
@@ -346,7 +362,7 @@ class GATKTable:
         :return: The number of columns in the dataframe.
         :rtype: int
         """
-        return self.data.reset_index().shape[1]
+        return self.get_unindexed().shape[1]
 
     def write(self, filehandle):
         """
