@@ -80,15 +80,28 @@ ReadGroup                   EventType  EmpiricalQuality  EstimatedQReported  Obs
 HJCMTCCXX160113.5.AAGGATGT  M                   22.0000             24.3199        210398  1382.00
 HK2WYCCXX160124.1.AAGGATGT  M                   22.0000             24.3994        196298  1391.00'''
 
-def test_GATKTable_fromstring(extablestr):
+@pytest.fixture
+def emptytablestr(extablestr):
+    lines = extablestr.splitlines(keepends = True)[0:3]
+    head = lines[2].split()
+    return ''.join(lines[0:2] + ['  '.join(head)])
+
+def test_GATKTable_fromstring(extablestr, emptytablestr):
     table = recaltable.GATKTable.fromstring(extablestr)
     assert table.title == 'RecalTable0'
     assert table.description == ''
     assert table.data.shape == (2, 6)
 
+    print(emptytablestr)
+    table = recaltable.GATKTable.fromstring(emptytablestr)
+
 @pytest.fixture
 def extable(extablestr):
     return recaltable.GATKTable.fromstring(extablestr)
+
+@pytest.fixture
+def emptytable(emptytablestr):
+    return recaltable.GATKTable.fromstring(emptytablestr)
 
 def test_GATKTable_parse_fmtstring():
     typedict = recaltable.GATKTable.parse_fmtstring(
@@ -110,8 +123,9 @@ def test_GATKTable_get_titlestring():
    table = recaltable.GATKTable(title = 'foo', description = 'bar', data = '')
    assert table.get_titlestring() == '#:GATKTable:foo:bar'
 
-def test_GATKTable_get_datastring(extable, extablestr):
+def test_GATKTable_get_datastring(extable, extablestr, emptytablestr, emptytable):
    assert extable.get_datastring() == '\n'.join(extablestr.splitlines()[2:])
+   assert emptytable.get_datastring() == '\n'.join(emptytablestr.splitlines()[2:])
 
 def test_GATKTable_get_nrows(extable):
     assert extable.get_nrows() == 2
