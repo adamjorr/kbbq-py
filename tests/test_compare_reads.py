@@ -143,7 +143,6 @@ def test_gatk_delta_q():
     numerrs = np.array([10, 200, 0])
     numtotal = np.array([1000, 1000, 50000])
     dq = compare_reads.gatk_delta_q(prior_q, numerrs, numtotal)
-    print(dq)
     assert dq.shape == prior_q.shape
     assert dq[0] > 0
     assert dq[1] < 0
