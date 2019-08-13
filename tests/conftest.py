@@ -81,6 +81,11 @@ def simple_bam(tmp_path, simple_sam):
     return str(f)
 
 @pytest.fixture()
+def simple_bam_header(simple_bam):
+    import pysam
+    return pysam.AlignmentFile(simple_bam,'rb').header
+
+@pytest.fixture()
 def simple_vcf(tmp_path):
     """
     Pretends there is a variant at site 10 on the ref.
