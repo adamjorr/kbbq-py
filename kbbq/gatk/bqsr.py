@@ -30,14 +30,11 @@ def bamread_bqsr_cycle(read):
     fullcycle[read.query_alignment_start:read.query_alignment_end] = cycle
     return fullcycle
 
-def bamread_bqsr_dinuc(read, minscore = 6):
-    #TODO: add stuff to check whether OQ is present,
-    # otherwise use read.query_qualities
+def bamread_bqsr_dinuc(read, use_oq = True, minscore = 6):
     unclipped_start = read.query_alignment_start
     unclipped_end = read.query_alignment_end
     seq = read.query_sequence[unclipped_start:unclipped_end]
-    oq = np.array(list(read.get_tag('OQ')), dtype = np.unicode_)
-    quals = np.array(oq.view(np.uint32) - 33, dtype = np.uint32)
+    quals = (utils.bamread_get_oq(read) if use_oq else np.array(read.query_qualities, dtype = np.int))
     quals = quals[unclipped_start:unclipped_end]
     if read.is_reverse:
         seq = ''.join([utils.Dinucleotide.complement.get(x,'N') for x in reversed(seq)])
@@ -212,7 +209,7 @@ def trim_bamread(read):
 
 ##################################################
 
-def quantize(q_errs, q_total, nlevels = 16, minscore = 6, maxscore = 93):
+def quantize(q_errs, q_total, maxscore = 93):
     """
     this function doesn't match the GATK version but
     it's not used so it's not a priority.
@@ -220,27 +217,10 @@ def quantize(q_errs, q_total, nlevels = 16, minscore = 6, maxscore = 93):
     qe = np.sum(q_errs, axis = 0)
     qt = np.sum(q_total, axis = 0)
     unobserved = (qt == 0)
-    qt[unobserved] = 1
-    actual_q = np.zeros((maxscore + 1))
-    actual_q[0:qt.shape[0]] = utils.p_to_q(qe / qt)
     quantizer = np.arange(maxscore + 1)
     quantizer[0:qt.shape[0]][unobserved] = maxscore
     quantizer[qt.shape[0]:] = maxscore
-    while len(np.unique(quantizer)) > nlevels:
-        levels = np.unique(quantizer)
-        penalty = np.sum(np.absolute(actual_q - quantizer))
-        newpenalty = np.zeros(len(levels))
-        for i in range(len(levels) - 1):
-            newquantizer = quantizer.copy()
-            newquantizer[quantizer == levels[i]] = levels[i + 1]
-            if levels[i] < minscore:
-                newpenalty[i] = 0
-            else:
-                newpenalty[i] = np.sum(np.absolute(actual_q - newquantizer))
-        minlevelidx = np.argmin(newpenalty[:-1])
-        quantizer[quantizer == levels[minlevelidx]] = levels[minlevelidx + 1]
     return quantizer
-
 
 def vectors_to_report(meanq, global_errs, global_total, q_errs, q_total,
     pos_errs, pos_total, dinuc_errs, dinuc_total, rg_order, maxscore = 42):
@@ -253,20 +233,20 @@ def vectors_to_report(meanq, global_errs, global_total, q_errs, q_total,
     represents the raw quality score, the final index is either the cycle or
     dinucleotide covariate.
 
-    :param np.array[\:] meanq: Mean q for each read group
-    :param np.array[\:] global_errs: Number of errors for each read group
-    :param np.array[\:] global_total: Number of observations for each read group
-    :param np.array[\:,\:] q_errs: Number of errors for each read group and q
+    :param np.array[:] meanq: Mean q for each read group
+    :param np.array[:] global_errs: Number of errors for each read group
+    :param np.array[:] global_total: Number of observations for each read group
+    :param np.array[:,:] q_errs: Number of errors for each read group and q
         score subset.
-    :param np.array[\:,\:] q_total: Number of observations for each read group
+    :param np.array[:,:] q_total: Number of observations for each read group
         and q score subset.
-    :param np.array[\:,\:,\:] pos_errs: Number of errors for each read group, q,
+    :param np.array[:,:,:] pos_errs: Number of errors for each read group, q,
         and cycle subset.
-    :param np.array[\:,\:,\:] pos_total: Number of observations for each read
+    :param np.array[:,:,:] pos_total: Number of observations for each read
         group, q, and cycle subset.
-    :param np.array[\:,\:,\:] dinuc_errs: Number of errors for each read group, q,
+    :param np.array[:,:,:] dinuc_errs: Number of errors for each read group, q,
         and dinucleotide subset.
-    :param np.array[\:,\:,\:] dinuc_total: Number of observations for each read
+    :param np.array[:,:,:] dinuc_total: Number of observations for each read
         group, q, and dinucleotide subset.
     :param list(str) rg_order: The order of read groups
     :param int maxscore: The maximum possible quality score
