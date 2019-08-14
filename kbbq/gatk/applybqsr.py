@@ -51,7 +51,7 @@ def bamread_cycle_covariates(read):
 
 def bamread_dinuc_covariates(read, use_oq = True, minscore = 6):
     seq = read.query_sequence
-    quals = (utils.bamread_get_oq(read) if use_oq else seq.query_qualities)
+    quals = (utils.bamread_get_oq(read) if use_oq else np.array(read.query_qualities, dtype = np.int))
     if read.is_reverse:
         seq = ''.join([utils.Dinucleotide.complement.get(x,'N') for x in reversed(seq)])
         quals = np.flip(quals)
@@ -62,10 +62,10 @@ def bamread_dinuc_covariates(read, use_oq = True, minscore = 6):
         dinuccov = np.flip(dinuccov)
     return dinuccov
 
-def recalibrate_bamread(read, meanq, globaldeltaq, qscoredeltaq, positiondeltaq, dinucdeltaq, rg_to_int, use_oq = True, minscore = 6, maxscore = 42):
+def recalibrate_bamread(read, meanq, globaldeltaq, qscoredeltaq, positiondeltaq, dinucdeltaq, rg_to_int, use_oq = True, minscore = 6):
     complement = utils.Dinucleotide.complement
     
-    original_quals = (utils.bamread_get_oq(read) if use_oq else seq.query_qualities)
+    original_quals = (utils.bamread_get_oq(read) if use_oq else np.array(read.query_qualities, dtype = np.int))
     recalibrated_quals = np.array(original_quals, dtype = np.int)
     rg = rg_to_int[read.get_tag('RG')]
 
@@ -77,7 +77,7 @@ def recalibrate_bamread(read, meanq, globaldeltaq, qscoredeltaq, positiondeltaq,
     recalibrated_quals[valid_positions] = (meanq[rg] + globaldeltaq[rg] + qscoredeltaq[rg, qcov] + dinucdeltaq[rg, qcov, dinuccov] + positiondeltaq[rg, qcov, cycle]).astype(np.int)
     return recalibrated_quals
 
-def get_delta_qs(meanq, rg_errs, rg_total, q_errs, q_total, pos_errs, pos_total, dinuc_errs, dinuc_total, maxscore = 42):
+def get_delta_qs(meanq, rg_errs, rg_total, q_errs, q_total, pos_errs, pos_total, dinuc_errs, dinuc_total):
     # shapes are:
     #   [rg]
     #   [rg, q]

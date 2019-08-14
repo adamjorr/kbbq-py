@@ -6,6 +6,7 @@ import numpy as np
 import filecmp
 from pandas.util.testing import assert_frame_equal
 import io
+import pysam
 
 @pytest.fixture
 def small_report(report, tmp_path):
@@ -61,7 +62,65 @@ def test_table_to_vectors(small_report):
     correct_dinuc_total[0,7,3] = 200000
     assert np.array_equal(dinuc_total, correct_dinuc_total)
 
-def test_recalibrate_bamread(report, recalibratedbam):
+def test_bamread_cycle_covariates(simple_bam_reads):
+    assert np.array_equal(applybqsr.bamread_cycle_covariates(simple_bam_reads[0]),
+        np.arange(17))
+    assert np.array_equal(applybqsr.bamread_cycle_covariates(simple_bam_reads[1]),
+        np.flip(-(np.arange(9)+1)))
+
+def test_bamread_dinuc_covariates(simple_bam_reads):
+    dinucs = np.array(['TT','TA','AG','GA','AT','TA','AA','AA','AG','GG','GA','AT','TA','AC','CT','TG'], dtype = np.unicode)
+    dinuc_ints = utils.Dinucleotide.vecget(dinucs)
+    correct = np.concatenate([[-1], dinuc_ints])
+    assert np.array_equal(applybqsr.bamread_dinuc_covariates(simple_bam_reads[0], use_oq = False), correct)
+
+    # np.array(['CA','AG','GC','CG','GG','GC','CA','AT'])
+    # reversed : np.array(['TA','AC','CG','GG','GC','CG','GA','AC'])
+    dinucs = np.array(['AT','TG','GC','CC','CG','GC','CT','TG'])
+    dinuc_ints = utils.Dinucleotide.vecget(dinucs)
+    correct = np.flip(np.concatenate([[-1], dinuc_ints]))
+    assert np.array_equal(applybqsr.bamread_dinuc_covariates(simple_bam_reads[1], use_oq = False), correct)
+
+def test_recalibrate_bamread():
+    read = pysam.AlignedSegment()
+    read.query_name = 'foo'
+    read.query_sequence = 'ATG'
+    read.query_qualities = [7,7,2]
+    read.set_tag('OQ','((#') #7,7,2
+    read.set_tag('RG',0)
+    meanq = np.array([10])
+    globaldeltaq = np.array([1])
+    qscoredeltaq = np.array([[2,2,2,2,2,2,2,2]])
+    positiondeltaq = np.zeros((1,8,6))
+    positiondeltaq[0,7,:] = 3
+    dinucdeltaq = np.zeros([1,8, 16])
+    dinucdeltaq[0,7,:] = 5
+    assert np.array_equal(applybqsr.recalibrate_bamread(read, meanq,
+        globaldeltaq, qscoredeltaq, positiondeltaq, dinucdeltaq, np.array([0]), use_oq = False),
+            np.array([21,21,2]))
+    assert np.array_equal(applybqsr.recalibrate_bamread(read, meanq,
+        globaldeltaq, qscoredeltaq, positiondeltaq, dinucdeltaq, np.array([0]), use_oq = True),
+            np.array([21,21,2]))
+
+def test_get_delta_qs():
+    meanq = np.array([10])
+    rg_errs = np.array([0])
+    rg_total = np.array([1000])
+    q_errs = np.array([[0]])
+    q_total = np.array([[1000]])
+    pos_errs = np.array([[[0]]])
+    pos_total = np.array([[[1000]]])
+    dinuc_errs = np.array([[[0]]])
+    dinuc_total = np.array([[[1000]]])
+    rgdeltaq, qscoredeltaq, positiondeltaq, dinucdeltaq = applybqsr.get_delta_qs(
+        meanq, rg_errs, rg_total, q_errs, q_total, pos_errs, pos_total, dinuc_errs,
+        dinuc_total)
+    assert np.array_equal(rgdeltaq, np.array([3]))
+    assert np.array_equal(qscoredeltaq,np.array([[2]]))
+    assert np.array_equal(positiondeltaq,np.array([[[1]]]))
+    assert np.array_equal(dinucdeltaq,np.array([[[1,0]]]))
+
+def test_bam_recalibration(report, recalibratedbam):
     """
     Test that our python implementation of GATK calibration matches GATK
     """
@@ -73,3 +132,5 @@ def test_recalibrate_bamread(report, recalibratedbam):
         gatk_calibrated_quals = np.array(read.query_qualities, dtype = np.int)
         recalibrated_quals = applybqsr.recalibrate_bamread(read, meanq, *dqs, rg_to_int, use_oq = True)
         assert np.array_equal(recalibrated_quals, gatk_calibrated_quals)
+
+
