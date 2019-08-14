@@ -165,3 +165,38 @@ def simple_error_dict(simple_bam, simple_refdict, simple_fullskips):
     return benchmark.get_error_dict(pysam.AlignmentFile(simple_bam),
         simple_refdict,
         simple_fullskips)
+
+### ApplyBQSR fixtures
+
+@pytest.fixture
+def small_report(report, tmp_path):
+    from kbbq import recaltable
+    t = """#:GATKReport.v1.1:5
+#:GATKTable:2:17:%s:%s:;
+#:GATKTable:Arguments:Recalibration argument collection values used in this run
+Argument                    Value                                                                   
+
+#:GATKTable:3:94:%d:%d:%d:;
+#:GATKTable:Quantized:Quality quantization map
+QualityScore  Count    QuantizedScore
+
+#:GATKTable:6:1:%s:%s:%.4f:%.4f:%d:%.2f:;
+#:GATKTable:RecalTable0:
+ReadGroup  EventType  EmpiricalQuality  EstimatedQReported  Observations  Errors 
+1          M                   23.0000              7.0000        200000  1000.00
+
+#:GATKTable:6:1:%s:%d:%s:%.4f:%d:%.2f:;
+#:GATKTable:RecalTable1:
+ReadGroup  QualityScore  EventType  EmpiricalQuality  Observations  Errors 
+1                     7  M                   23.0000        200000  1000.00
+
+#:GATKTable:8:50763:%s:%d:%s:%s:%s:%.4f:%d:%.2f:;
+#:GATKTable:RecalTable2:
+ReadGroup  QualityScore  CovariateValue  CovariateName  EventType  EmpiricalQuality  Observations  Errors 
+1                     7  1               Cycle          M                   23.0000        200000  1000.00
+1                     7  AC              Context        M                   23.0000        200000  1000.00
+
+"""
+    p = tmp_path / 'small_report.txt'
+    p.write_text(t)
+    return recaltable.RecalibrationReport.fromfile(p)
