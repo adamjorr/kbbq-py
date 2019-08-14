@@ -69,7 +69,7 @@ def get_var_sites(vcf):
 
 def train_regression(rawquals, corrected, tol = 1e-8):
     print(tstamp(), "Doing Logit Regression", file=sys.stderr)
-    lr = LR(tol = tol)
+    lr = LR(tol = tol, solver = lbfgs)
     lr = lr.fit(rawquals.flatten().reshape(-1,1), corrected.flatten())
     return lr
 
