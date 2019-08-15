@@ -111,6 +111,15 @@ def test_trim_bamread(simple_bam_reads, monkeypatch):
     correct = np.zeros(17, dtype = np.bool)
     correct[-3:] = True
     assert np.array_equal(bqsr.trim_bamread(simple_bam_reads[0]), correct)
+    #boundary in deletion that covers the remaining part of the read
+    deleted = simple_bam_reads[0]
+    deleted.cigartuples = ((0,8),(1,2),(0,4),(2,4)) #8M2I4M1D3M -> 8M2I4M4D
+    assert np.array_equal(bqsr.trim_bamread(deleted), np.zeros(17, dtype = np.bool))
+    #boundary in deletion that covers the remaining part of the reverse read
+    rev_deleted = simple_bam_reads[1]
+    rev_deleted.cigartuples = ((2,1),(0,8)) #9M -> 1D8M
+    monkeypatch.setattr(bqsr, 'bamread_adaptor_boundary', lambda x: 36)
+    assert np.array_equal(bqsr.trim_bamread(rev_deleted), np.zeros(9, dtype = np.bool))
 
 def test_quantize():
     q_errs = np.array([[1]])

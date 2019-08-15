@@ -180,7 +180,8 @@ def trim_bamread(read):
                         break
                 else:
                     #couldn't find boundary
-                    print("Can't find boundary.")
+                    #I think this can only happen if the boundary lies in a
+                    #deletion that covers the rest of the read.
                     adaptoridx = 0
                 skips[:adaptoridx] = True #skip first x bases
             return skips
@@ -198,7 +199,8 @@ def trim_bamread(read):
                         break
                 else:
                     #couldn't find boundary
-                    print("Can't find boundary.")
+                    #I think this can only happen if the boundary lies in a
+                    #deletion that covers the rest of the read.
                     adaptoridx = len(skips)
                 skips[adaptoridx:] = True #skip last x bases
             return skips
