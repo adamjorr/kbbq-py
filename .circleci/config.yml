@@ -143,7 +143,7 @@ jobs:
       - download-test-data
       - run:
           command: |
-            pipenv run python -m pytest --junitxml=test-reports/junit.xml --cov=kbbq --cov-report=xml
+            pipenv run python -m pytest --junitxml=test-reports/junit.xml --cov=kbbq --cov-report=xml --cov-branch
       - run:
           command: |
             bash <(curl -s https://codecov.io/bash)
