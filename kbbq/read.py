@@ -15,6 +15,9 @@ Functions
 
 """
 
+import numpy as np
+from . import compare_reads
+
 class ReadData():
     """
     A class that represents some minimal information from a sequencing read.
@@ -81,13 +84,13 @@ class ReadData():
         """string representing the name of the read"""
         self.rg = rg
         """int representing the read group the read belongs to"""
-        if rg not in rg_to_pu:
+        if rg not in ReadData.rg_to_pu:
             #if it hasn't been preloaded,
             #we create a new PU identical to the rg
             #and load it
-            rg_to_pu[rg] = rg
-            rg_to_int[rg] = numrgs
-            numrgs = numrgs + 1
+            ReadData.rg_to_pu[rg] = rg
+            ReadData.rg_to_int[rg] = ReadData.numrgs
+            ReadData.numrgs = ReadData.numrgs + 1
         self.second = second
         """bool representing whether the read is 2nd in pair"""
         self.errors = errors
@@ -235,16 +238,16 @@ class ReadData():
         :return: read group index
         :rtype: int
         """
-        return rg_to_int[self.rg]
+        return ReadData.rg_to_int[self.rg]
 
     def get_pu(self):
         """
-        Return the PU from the rg_to_int dict.
+        Return the PU from the rg_to_pu dict.
 
         :return: The Read Group's PU tag
         :rtype: str
         """
-        return rg_to_int[self.rg]
+        return ReadData.rg_to_pu[self.rg]
 
     def not_skipped_errors(self):
         """
@@ -330,7 +333,7 @@ class ReadData():
         dinuccov[0] = -1
         is_n = (self.seq[1:] == 'N')
         follows_n = (self.seq[:-1] == 'N')
-        invalid = np.logical_or(self.qual < minscore, np.logical_or(is_n, follows_n))
+        invalid = np.logical_or(self.qual[1:] < minscore, np.logical_or(is_n, follows_n))
         dinuccov[1:][invalid] = -1
         dinuccov[1:][~invalid] = compare_reads.Dinucleotide.vecget(dinuc[~invalid])
         return dinuccov
@@ -345,7 +348,7 @@ class ReadData():
         :rtype: tuple(:class:`numpy.ndarray` (int) , :class:`numpy.ndarray` (int))
         """
         dinuc = self.get_dinucleotide_array(minscore)
-        dvalid = np.logical_and(dinuc != -1, ~skips)
+        dvalid = np.logical_and(dinuc != -1, ~self.skips)
         dvalid_and_error = np.logical_and(dvalid, self.errors)
         de = dinuc[dvalid_and_error]
         dv = dinuc[dvalid]

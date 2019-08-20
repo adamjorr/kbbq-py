@@ -6,17 +6,19 @@ as well as the :func:`pad_axis` helper function for appending
 to the end of an arbitrary axis of an :class:`numpy.ndarray`.
 
 Classes
-    * :class:`Covariate`
+    * :class:`Covariate` - a covariate base class
     * :class:`RGCovariate`
     * :class:`QCovariate`
     * :class:`CycleCovariate`
     * :class:`DinucCovariate`
+    * :class:`CovariateData` - a container for the covariates
 
 Functions
-    * :func:`pad_axis`
+    * :func:`pad_axis` - helper function to pad an :class:`np.ndarray` with zeros.
 """
 from . import read
 from . import compare_reads
+import numpy as np
 
 def pad_axis(array, axis, n):
     """
@@ -158,6 +160,7 @@ class Covariate():
         :return: array shape
         :rtype: tuple(int)
         """
+        assert self.total.shape == self.errors.shape
         return self.total.shape
 
     def __getitem__(self, key):
@@ -268,7 +271,7 @@ class QCovariate(Covariate):
         rge, rgv = self.rgcov.consume_read(read)
         self.pad_axis_to_fit(axis = 0, idx = self.rgcov.num_rgs() - 1)
 
-        qe, qv = read.get_q_errors(read)
+        qe, qv = read.get_q_errors()
         try:
             self.increment(idx = ((rge,qe),(rge,qv)))
         except IndexError:
@@ -319,19 +322,23 @@ class CycleCovariate(Covariate):
         :param int n: size of pad to apply
         """
         if not (axis == 2 or axis == -1):
-            super().pad_axis(self, axis = axis, n = n)
+            super().pad_axis(axis = axis, n = n)
         else:
             if n % 2 != 0:
                 raise ValueError('n should be even for the 2nd axis ' +
                     'of a CycleCovariate. n = {} was given.'.format(n))
             oldlen = self.shape()[2]
             newlen = oldlen + n
-            newerrors = np.zeros(self.shape()[0:2] + (newlen,), dtype = np.int)
-            newtotal = np.zeros(self.shape()[0:2] + (newlen,), dtype = np.int)
-            newerrors[...,0:oldlen/2], newtotal[...,0:oldlen/2] = self[...,0:oldlen/2]
-            newerrors[...,-oldlen/2:], newtotal[...,-oldlen/2:] = self[...,-oldlen/2:]
-            self.errors = newerrors
-            self.total = newtotal
+            if oldlen == 0:
+                super().pad_axis(axis = axis, n = n)
+            else:
+                half_oldlen = int(oldlen / 2)                
+                newerrors = np.zeros(self.shape()[0:2] + (newlen,), dtype = np.int)
+                newtotal = np.zeros(self.shape()[0:2] + (newlen,), dtype = np.int)
+                newerrors[...,0:half_oldlen], newtotal[...,0:half_oldlen] = self[...,0:half_oldlen]
+                newerrors[...,-half_oldlen:], newtotal[...,-half_oldlen:] = self[...,-half_oldlen:]
+                self.errors = newerrors
+                self.total = newtotal
 
     def num_cycles(self):
         """
@@ -377,8 +384,7 @@ class CovariateData():
         * :attr:`poscov` - PosCovariate
         * :attr:`dinuccov` - DinucCovariate
 
-
-    Methods - TODO
+    Methods
 
         * :meth:`consume_read` - Add covariates from the read to the proper data arrays
         * :meth:`get_num_rgs` - Return number of rgs in the rg covariate
