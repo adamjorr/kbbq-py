@@ -66,14 +66,14 @@ kbbq benchmark -b alignment.bam -r reference.fa -v variants.vcf -d good-sites.be
 and an example output is:
 
 ```
-	2       10      alignment.bam    6460879
-	3       3       alignment.bam    170777
-	4       3       alignment.bam    173821
-	5       5       alignment.bam    246709
-	6       5       alignment.bam    304227
-	7       6       alignment.bam    463211
-	8       7       alignment.bam    416902
-	9       8       alignment.bam    491355
+2       10      alignment.bam    6460879
+3       3       alignment.bam    170777
+4       3       alignment.bam    173821
+5       5       alignment.bam    246709
+6       5       alignment.bam    304227
+7       6       alignment.bam    463211
+8       7       alignment.bam    416902
+9       8       alignment.bam    491355
 ```
 
 A FASTQ file of reads can be provided with the `-f` flag if the reads in the file are properly
