@@ -88,9 +88,9 @@ class ReadData():
             #if it hasn't been preloaded,
             #we create a new PU identical to the rg
             #and load it
-            ReadData.rg_to_pu[rg] = rg
-            ReadData.rg_to_int[rg] = ReadData.numrgs
-            ReadData.numrgs = ReadData.numrgs + 1
+            self.__class__.rg_to_pu[rg] = rg
+            self.__class__.rg_to_int[rg] = ReadData.numrgs
+            self.__class__.numrgs = ReadData.numrgs + 1
         self.second = second
         """bool representing whether the read is 2nd in pair"""
         self.errors = errors
@@ -109,7 +109,9 @@ class ReadData():
 
         If the read group hasn't been loaded in the dictionary, it will be registered
         with a PU equal to the value of :code:`rg`. To load the dictionary, call
-        :meth:`load_rgs_from_bamfile` first.
+        :meth:`load_rgs_from_bamfile` first. If there is no RG tag for the read it will
+        be given a generic RG of None and lumped in with all other reads that have no RG
+        tag.
 
         :param bamread: read to get data from
         :type bamread: :class:`pysam.AlignedSegment`
@@ -119,12 +121,13 @@ class ReadData():
         """
         seq = np.array(list(bamread.query_sequence), dtype = np.unicode)
         seqlen = len(seq)
+        rg = bamread.get_tag('RG') if bamread.has_tag('RG') else None
         return cls(
             seq = seq,
             qual = bamread_get_quals(bamread, use_oq),
             skips = np.zeros(seqlen, dtype = np.bool),
             name = bamread.query_name,
-            rg = bamread.get_tag('RG'),
+            rg = rg,
             second = bamread.is_read2,
             errors = np.zeros(seqlen, dtype = np.bool),
             )
@@ -143,7 +146,8 @@ class ReadData():
         read name. To infer rg, the read group must be
         in its own field with the field beginning with :code:`RG:`, such as :code:`RG:example`,
         with fields delimited by :code:`namedelimiter`. When multiple fields are found that
-        begin with :code:`RG:`, the last is chosen to be the true ID.
+        begin with :code:`RG:`, the last is chosen to be the true ID. If inference fails,
+        the read group will remain None.
 
         If the read group (either inferred or provided explicitly) hasn't been
         loaded in the dictionary, it will be registered with a PU equal to the value of :code:`rg`.
@@ -161,11 +165,13 @@ class ReadData():
         :return: a read object
         :rtype: :class:`ReadData`
         """
-        seq = np.array(list(read.sequence), dtype = np.unicode)
+        seq = np.array(list(fastqread.sequence), dtype = np.unicode)
         seqlen = len(seq)
-        splitname = read.name.split(sep = namedelimiter)
+        splitname = fastqread.name.split(sep = namedelimiter)
         if rg is None:
-            rg = [f[3:] for f in splitname if f[0:3] == 'RG:'][-1]
+            possible_rgs = [f.split(':')[-1] for f in splitname if f[0:3] == 'RG:']
+            if possible_rgs:
+                rg = possible_rgs[-1]
         if second is None:
             second = (splitname[0][-2:] == '/2')
         if splitname[0].endswith(('/1','/2')):
@@ -173,7 +179,7 @@ class ReadData():
 
         return cls(
             seq = seq,
-            qual = np.array(read.get_quality_array(), dtype = np.int),
+            qual = np.array(fastqread.get_quality_array(), dtype = np.int),
             skips = np.zeros(seqlen, dtype = np.bool),
             name = splitname[0],
             rg = rg,
@@ -199,9 +205,9 @@ class ReadData():
         :type bamfileobj: :class:`pysam.AlignmentFile`
         """
         for rg in bamfileobj.header.as_dict()['RG']:
-            rg_to_pu[rg['ID']] = rg['PU']
-            rg_to_int[rg['ID']] = numrgs
-            numrgs = numrgs + 1
+            cls.rg_to_pu[rg['ID']] = rg['PU']
+            cls.rg_to_int[rg['ID']] = cls.numrgs
+            cls.numrgs = cls.numrgs + 1
 
     def str_qual(self, offset = 33):
         """
@@ -238,7 +244,7 @@ class ReadData():
         :return: read group index
         :rtype: int
         """
-        return ReadData.rg_to_int[self.rg]
+        return self.__class__.rg_to_int[self.rg]
 
     def get_pu(self):
         """
@@ -247,7 +253,7 @@ class ReadData():
         :return: The Read Group's PU tag
         :rtype: str
         """
-        return ReadData.rg_to_pu[self.rg]
+        return self.__class__.rg_to_pu[self.rg]
 
     def not_skipped_errors(self):
         """
