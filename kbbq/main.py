@@ -26,9 +26,16 @@ def plot(args):
 def main():
     parser = argparse.ArgumentParser(description = 'K-mer Based Base Quality score recalibration')
     parser.add_argument('-v', '--version', action = 'version', version = kbbq.__version__)
-    parser.set_defaults(command = lambda args: parser.print_help())
     subparsers = parser.add_subparsers(title='command', description="valid commands")
     
+    #help
+    helpfn = lambda args: parser.print_help
+    parser.set_defaults(command = helpfn) #no args will print help information
+    help_parser = subparsers.add_parser('help', description = 'Print help information')
+    help_parser.set_defaults(command = helpfn)
+
+    #todo: citation
+
     #reused strings
     oq_help = 'Use the OQ tag to get quality scores when working with a BAM file. Does nothing if a fastq file is provided.'
 
