@@ -201,11 +201,11 @@ ReadGroup  QualityScore  CovariateValue  CovariateName  EventType  EmpiricalQual
     p.write_text(t)
     return recaltable.RecalibrationReport.fromfile(p)
 
-@pytest.fixture
+@pytest.fixture(scope = 'function')
 def exreaddata():
     import kbbq.read as read
     import numpy as np
-    return read.ReadData( seq = np.array(['A','T','G']),
+    yield read.ReadData( seq = np.array(['A','T','G']),
         qual = np.array([6,10,3]),
         skips = np.array([False, False, True]),
         name = 'read01',
@@ -213,3 +213,6 @@ def exreaddata():
         second = False,
         errors = np.array([False, True, True])
         )
+    read.ReadData.rg_to_pu = dict()
+    read.ReadData.rg_to_int = dict()
+    read.ReadData.numrgs = 0
