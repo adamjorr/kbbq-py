@@ -222,10 +222,15 @@ class Dinucleotide:
     """
 
     vectorized_get = np.vectorize(dinuc_to_int.get, otypes = [np.int])
+    vectorized_complement = np.vectorize(complement.get, otypes = [np.unicode])
 
     @classmethod
     def vecget(cls, *args, **kwargs):
         return cls.vectorized_get(*args, **kwargs)
+
+    @classmethod
+    def veccomplement(cls, *args, **kwargs):
+        return cls.vectorized_complement(*args, **kwargs)
 
 def gatk_delta_q(prior_q, numerrs, numtotal, maxscore = 42):
     """
