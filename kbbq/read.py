@@ -29,6 +29,7 @@ class ReadData():
     You should instantiate the object from one of the class methods instead
     of directly instantiating it if possible. You should never assign
     directly to any of the class attributes; treat them as read-only.
+    Instance variables should be fine to manipulate.
 
     Class Attributes
 
@@ -113,6 +114,9 @@ class ReadData():
         be given a generic RG of None and lumped in with all other reads that have no RG
         tag.
 
+        This will reverse-complement the sequence and reverse the qualities if the read
+        aligns on the reverse strand.
+
         :param bamread: read to get data from
         :type bamread: :class:`pysam.AlignedSegment`
         :param bool use_oq: use the OQ tag for quality scores
@@ -121,10 +125,14 @@ class ReadData():
         """
         seq = np.array(list(bamread.query_sequence), dtype = np.unicode)
         seqlen = len(seq)
+        qual = bamread_get_quals(bamread, use_oq)
+        if bamread.is_reverse:
+            seq = compare_reads.Dinucleotide.veccomplement(np.flip(seq),'N')
+            qual = np.flip(qual)
         rg = bamread.get_tag('RG') if bamread.has_tag('RG') else None
         return cls(
             seq = seq,
-            qual = bamread_get_quals(bamread, use_oq),
+            qual = qual,
             skips = np.zeros(seqlen, dtype = np.bool),
             name = bamread.query_name,
             rg = rg,
