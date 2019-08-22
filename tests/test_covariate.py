@@ -38,6 +38,8 @@ def test_covariate_pad_axis_to_fit():
     test = covariate.Covariate((1,2))
     test.pad_axis_to_fit(1,-10)
     assert test.shape() == (1,10)
+    test.pad_axis_to_fit(1,0)
+    assert test.shape() == (1,10)
 
 def test_covariate_increment():
     test = covariate.Covariate((10,))
