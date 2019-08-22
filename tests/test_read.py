@@ -44,12 +44,15 @@ def test_readdata_from_bamread(simple_bam_reads):
     read.ReadData.numrgs = 0
 
 def test_readdata_from_fastq(simple_fastq_reads):
-    print(read.ReadData.rg_to_int)
     fqread = simple_fastq_reads[0]
     r = read.ReadData.from_fastq(fqread, rg = 'foo', second = True)
-    print(read.ReadData.rg_to_int)
     assert r.name == 'r001'
     assert read.ReadData.rg_to_int['foo'] == 0
+    fqread.name = 'r001/1'
+    r = read.ReadData.from_fastq(fqread)
+    assert r.rg is None
+    assert r.second == False
+    assert r.name == 'r001'
     fqread.name = 'r001/2_RG:Z:foo'
     r = read.ReadData.from_fastq(fqread)
     assert r.name == 'r001'
