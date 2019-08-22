@@ -170,3 +170,5 @@ def recalibrate(bam, fastq, infer_rg = False, use_oq = False, set_oq = False, ga
         recalibrate_bam(bam, use_oq, set_oq)
     elif fastq is not None:
         recalibrate_fastq(fastq, infer_rg = infer_rg)
+    else: #this should never happen
+        raise ValueError("A BAM or FASTQ file should be provided for recalibration.")

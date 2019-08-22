@@ -115,6 +115,9 @@ def test_recalibrate(uncorr_and_corr_fastq_files, capfd):
     with pytest.raises(NotImplementedError):
         recalibrate.recalibrate(fastq = None, bam = None, gatkreport = 'foo')
 
+    with pytest.raises(ValueError):
+        recalibrate.recalibrate(fastq = None, bam = None, gatkreport = None)
+
 def test_recalibrate_main(uncorr_and_corr_fastq_files, monkeypatch, capfd):
     import sys
     with monkeypatch.context() as m:
