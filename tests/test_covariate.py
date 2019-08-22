@@ -68,16 +68,16 @@ def test_rgcovariate_init():
     test = covariate.RGCovariate()
     assert test.shape() == (0,)
 
-@pytest.fixture
-def exreaddata():
-    return read.ReadData( seq = np.array(['A','T','G']),
-        qual = np.array([6,10,3]),
-        skips = np.array([False, False, True]),
-        name = 'read01',
-        rg = 0,
-        second = False,
-        errors = np.array([False, True, True])
-        )
+# @pytest.fixture
+# def exreaddata():
+#     return read.ReadData( seq = np.array(['A','T','G']),
+#         qual = np.array([6,10,3]),
+#         skips = np.array([False, False, True]),
+#         name = 'read01',
+#         rg = 0,
+#         second = False,
+#         errors = np.array([False, True, True])
+#         )
 
 def test_rgcovariate_consume_read(exreaddata):
     r = exreaddata
