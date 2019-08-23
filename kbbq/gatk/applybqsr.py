@@ -101,3 +101,20 @@ def get_delta_qs(meanq, rg_errs, rg_total, q_errs, q_total, pos_errs, pos_total,
     dinucdq = np.pad(dinucdeltaq, pad_width = pad, mode = 'constant', constant_values = 0)
 
     return rgdeltaq.copy(), qscoredeltaq.copy(), positiondeltaq.copy(), dinucdq.copy()
+
+def get_delta_qs_from_covariates(covariates):
+    nrgs = covariates.qcov.rgcov.num_rgs()
+    expected_errs = np.sum(utils.q_to_p(np.arange(covariates.qcov.num_qs()))[np.newaxis,:] * covariates.qcov.total, axis = 1)
+    meanq = utils.p_to_q(expected_errs / covariates.qcov.rgcov.total)
+    rgdeltaq = utils.gatk_delta_q(meanq, *covariates.qcov.rgcov[...])
+    prior1 = np.broadcast_to((meanq + rgdeltaq)[:,np.newaxis], covariates.qcov.shape()).copy()
+    qscoredeltaq = utils.gatk_delta_q(prior1, *covariates.qcov[...])
+    prior2 = np.broadcast_to((prior1 + qscoredeltaq)[...,np.newaxis], covariates.cyclecov.shape()).copy()
+    cycledeltaq = utils.gatk_delta_q(prior2, *covariates.cyclecov[...])
+    prior3 = np.broadcast_to((prior1 + qscoredeltaq)[...,np.newaxis], cpvaroates.dinuccov.shape()).copy()
+    dinucdeltaq = utils.gatk_delta_q(prior3, *covariates.dinuccov[...])
+    #need to add another value of dinuc, for invalid dinuc
+    pad = np.zeros((len(dinucdeltaq.shape),2), dtype = np.int_)
+    pad[-1,1] = 1 #add a 0 to the last axis
+    dinucdq = np.pad(dinucdeltaq, pad_width = pad, mode = 'constant', constant_values = 0)
+    return meanq.copy(), rgdeltaq.copy(), qscoredeltaq.copy(), positiondeltaq.copy(), dinucdq.copy()
