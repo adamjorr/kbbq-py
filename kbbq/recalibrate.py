@@ -45,22 +45,21 @@ def recalibrate_read(read, dqs, minscore = 6):
         cycledeltaq[rg, qcov, cycle]).astype(np.int)
     return recalibrated_quals
 
-def recalibrate_fastq(fastq, dqs, infer_rg = False):
+def recalibrate_fastq(fastq, dqs, out, infer_rg = False):
     """
-    Recalibrate a FASTQ file given a list of tuples, (each tuple containing 
-    a fastq and a corrected fastq) and a :class:`CovariateData`.
+    Recalibrate reads in a FASTQ file given a fastq file name and
+    :class:`CovariateData` dqs. Out should be a file-like object.
     """
     # dqs = applybqsr.get_delta_qs_from_covariates(covariates)
-    for uncorr, corr in fastq:
-        rg = uncorr if infer_rg is False else None
-        with pysam.FastxFile(uncorr) as fin:
-            for fqread in fin:
-                r = kbbq.read.ReadData.from_fastq(fqread, rg = rg)
-                recalibrated_quals = recalibrate_read(r, dqs)
-                fqread.quality = list(recalibrated_quals)
-                print(str(fqread))
+    rg = fastq if infer_rg is False else None
+    with pysam.FastxFile(uncorr) as fin:
+        for fqread in fin:
+            r = kbbq.read.ReadData.from_fastq(fqread, rg = rg)
+            recalibrated_quals = recalibrate_read(r, dqs)
+            fqread.quality = list(recalibrated_quals)
+            out.write(str(fqread))
 
-def recalibrate_bam(read, output, original):
+def recalibrate_bam(bam, dqs, out):
     """
     Recalibrate ReadData read and output to filehandle output.
     """
@@ -126,6 +125,7 @@ def open_outputs(files, output, bams, infer_rg, use_oq, set_oq):
     for i, o, b in zip(files, output, bams):
         if b:
             with pysam.AlignmentFile(i) as fin:
+                kbbq.read.ReadData.load_rgs_from_bamfile(fin)
                 header = fin.header
                 headerid = max([x.get('ID',0) for x in header['PG']]) + 1
                 header['PG'] = header['PG'] + [{'ID' : headerid, 'PN' : 'kbbq', 'CL' : ' '.join(sys.argv)}]
