@@ -96,7 +96,7 @@ def load_headers_from_bams(inputs):
         if opens_as_bam(i):
             bams.append(True)
             with pysam.AlignmentFile(str(i)) as fin:
-                kbbq.read.load_rgs_from_bamfile(fin)
+                kbbq.read.ReadData.load_rgs_from_bamfile(fin)
         else:
             bams.append(False)
     return bams
@@ -125,7 +125,6 @@ def open_outputs(files, output, bams, infer_rg, use_oq, set_oq):
     for i, o, b in zip(files, output, bams):
         if b:
             with pysam.AlignmentFile(i) as fin:
-                kbbq.read.ReadData.load_rgs_from_bamfile(fin)
                 header = fin.header
                 headerid = max([x.get('ID',0) for x in header['PG']]) + 1
                 header['PG'] = header['PG'] + [{'ID' : headerid, 'PN' : 'kbbq', 'CL' : ' '.join(sys.argv)}]
@@ -167,17 +166,13 @@ def generate_reads_from_files(files, bams, infer_rg = False, use_oq = False):
     generators = []
     for f,b,i in zip(opened_files,bams,files):
         if b: #bam file
-            generators.append(yield_reads(f, use_oq))
+            generators.append(yield_reads(f, use_oq = use_oq))
         else: #fastq file
             if infer_rg = False:
-                rg = i
+                rg = str(i)
             else:
                 rg = None
             generators.append(yield_reads(f, rg = rg))
-    # for r in fin:
-    #     if set_oq is True:
-    #         r.set_tag(tag = 'OQ', value = ''.join([chr(q + 33) for q in r.query_qualities]), value_type = 'Z')
-    #     yield read.ReadData.from_bamread(read, use_oq), fout, r
     try:
         yield generators
     finally:
@@ -188,7 +183,7 @@ def recalibrate(files, output, cmd, infer_rg = False, use_oq = False, set_oq = F
     if gatkreport is not None:
         raise NotImplementedError('GATKreport reading / creation is not yet supported.')
     if output == []:
-        output = [ str(i.with_name(i.stem + '.kbbq' + i.suffix)) for pathlib.Path(i) in files ]
+        output = [str(i.with_name(i.stem + '.kbbq' + i.suffix)) for i in [pathlib.Path(f) for f in files ]]
     if len(files) != len(output):
         raise ValueError('One output should be specified for each input.')
     validate_files(files)
@@ -200,8 +195,6 @@ def recalibrate(files, output, cmd, infer_rg = False, use_oq = False, set_oq = F
 
         #3rd pass: recalibrate
 
-
-    for r, output, original in generate_reads_from_files(files, output, cmd, infer_rg, use_oq, set_oq):
         #ReadData, output, and original read (AlignedSegment or FastxProxy)
         # 3 passes:
         # 1st pass: load hash
