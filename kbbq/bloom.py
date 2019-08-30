@@ -81,7 +81,29 @@ def p_kmer_added(sampling_rate):
     I think the better model would be a negative binomial. In this case, we have no idea
     how many times an overlapping kmer appeared in our dataset. We do know that there are
     r kmers that failed to be added to the hash and that each time an overlapping kmer
-    appeared, there was a *sampling_rate* probability that it was added to the hash.
+    appeared, there was a *sampling_rate* probability that it was added to the hash. Then
+    the number of overlapping kmers in the dataset can be predicted with a negative binomial
+    distribution with r = (# in hash) and p = 1 - sampling_rate. If this distribution is
+    X, the read coverage at that site is X / (# k-mers that could overlap the site); in
+    most cases, X / k.
+
+    Thus with this technique, we can calculate the distribution of site-by-site coverage
+    in the dataset. In marginalizing, we sum the probability vector of each X then divide
+    by the number of sites. Once we're done, we must also divide by X again, since each base
+    with coverage x (element of X) was counted x times.
+
+    In our sequencing model, the number of sequenced reads at any position is Poisson.
+    Because errors are correlated, the number of sequenced erroneous reads is an overdispersed
+    Poisson. This can be accurately modeled with a different negative binomial.
+    Thus from our inference of coverage we should be able to fit a mixture of negative
+    binomials that represents the coverage expected in the dataset, and this binomial will
+    tell us the probability that a read is an error given its coverage. Note that we use
+    the negative binomial for two distinct purposes: one to estimate the coverage given a
+    site at a read, and one to model the total coverage of the dataset.
+
+    Notably, this approach suggests an optimal choice for the sampling rate since the
+    distribution becomes less predictive for some coverages at extreme points. A strategy
+    for picking the theoretically optimal sampling rate can likely be found.
     """
 
 
