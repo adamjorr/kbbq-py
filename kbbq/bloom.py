@@ -9,8 +9,11 @@ Nodegraph.consume(str) does add on each kmer in the string and returns the numbe
 Nodegraph.get_kmer_counts(str) does get on each kmer in the string and returns a list of counts
 Nodegraph.save(filename) saves to filename
 Nodegraph.load(filename) loads from filename
+Nodegraph.hash(kmer) returns the hash of the k-mer
+Nodegraph.get_kmer_hashes(kmer) hashes each k
 khmer.calc_expected_collisions(nodegraph, force = False, max_false_pos = .15) will return false positive rate and issue a warning if it's too high.
     when force is true, don't exit if false positive is higher than max.
+#may also want to try a Nodetable at some point. It should have the same fns.
 
 ksize = 32
 maxmem = khmer.khmer_args.memory_setting('8G')
@@ -23,7 +26,7 @@ import khmer
 import khmer.khmer_args
 import numpy as np
 
-binomial_thresholds = 
+binomial_thresholds = [0] #TODO
 
 def create_empty_nodegraph(ksize = 32, max_mem = '8G'):
     """
@@ -35,11 +38,23 @@ def create_empty_nodegraph(ksize = 32, max_mem = '8G'):
     tablesize = khmer.khmer_args.calculate_graphsize
     return khmer.Nodegraph(ksize, tablesize, fake_args.n_tables)
 
-def count_read(read, graph):
+def count_read(read, graph, sampling_rate):
     """
-    Put ReadData read in the countgraph
+    Put ReadData read in the countgraph. Each k-mer will be added with p = sampling_rate
     """
-    graph.consume(np.str.join('',read.seq))
+    # ksize = graph.ksize()
+    # #https://rigtorp.se/2011/01/01/rolling-statistics-numpy.html
+    # kmers = numpy.lib.stride_stricks.as_strided(read.seq,
+    #     shape = (len(read.seq) - ksize + 1, ksize),
+    #     strides = read.seq.strides * 2) #2D array of shape (nkmers, ksize)
+    #probably will be fastest to get all hashes in C then select the ones i want
+    hashes = np.array(graph.get_kmer_hashes(np.str.join('',read.seq)))
+    sampled = np.random.choice([True, False],
+        size = hashes.shape,
+        replace = True,
+        p = [sampling_rate, 1.0 - sampling_rate])
+    for h in hashes[sampled]:
+        graph.count(h)
 
 def kmers_in_graph(read, graph):
     """
@@ -54,22 +69,46 @@ def n_kmers_in_graph(read, graph):
     Get the number of kmers overlapping each read position that are in the graph.
 
     The returned array has length len(read).
+    This only behaves well for len(seq) > 2ksize.
     """
+    ksize = graph.ksize()
+    assert ksize <= len(read)
+    assert len(read) > 2 * ksize
+    kmers = kmers_in_graph(read, graph)
+    num_in_graph = np.array(len(read), dtype = np.int)
+    for i in range(ksize - 1):
+        #each base is overlapped by < k kmers
+        num_in_graph[i] = np.sum(kmers[0:i])
+        num_in_graph[-1 - i] = np.sum(kmers[-1 - i:])
+    for kidx, readidx in zip(range(len(kmers) - ksize + 1), range(ksize - 1, len(read) - ksize + 1)): #kidx len: len(read) - 2 ksize + 2; readidx range: len(read) - 2 ksize + 2
+        #each base is overlapped by k kmers
+        num_in_graph[readidx] = np.sum(kmers[kidx:kidx + ksize])
+    return num_in_graph
 
-def n_kmers_possible(read):
+def n_kmers_possible(read, ksize):
     """
     Get the possible number of kmers overlapping each read position.
 
     For example, position 1 will always have only 1 overlapping kmer, position 2 will
     have 2, etc.
     """
+    assert ksize <= len(read)
+    assert len(read) > 2 * ksize
+    num_possible = np.array(len(read), dtype = np.int)
+    #each base is overlapped by < k kmers
+    num_possible[np.arange(ksize - 1)] = np.arange(ksize - 1) + 1
+    num_possible[-np.arange(ksize - 1)-1] = np.arange(ksize - 1) + 1
+    #each base is overlapped by k kmers
+    num_possible[ksize - 1 : len(read) - ksize + 1] = ksize
+    return num_possible
 
-def p_kmer_added(sampling_rate):
+def p_kmer_added(sampling_rate, graph):
     """
-    The probability a kmer was added to the graph.
+    The probability a kmer was added to the graph, including the false positive rate.
 
-    This is 1 - ( 1 - sampling_rate ) ^ n, where n is the assumed highest multiplicity
+    P(A) =  1 - ( 1 - sampling_rate ) ^ n, where n is the assumed highest multiplicity
     of a weak kmer. When sampling_rate >= .1, n = 2. Otherwise, n = .2 / sampling_rate.
+    This function returns P*(A) = P(A) + B - B*P(A), where B is the false positive rate.
 
     The point is to perform a binomial test, with p = p_kmer_added, k = n_kmers_in_graph,
     N = n_kmers_possible. The null hypothesis is that the kmer is not an error, and this
@@ -105,7 +144,8 @@ def p_kmer_added(sampling_rate):
     distribution becomes less predictive for some coverages at extreme points. A strategy
     for picking the theoretically optimal sampling rate can likely be found.
     """
-
-
-
-
+    fpr = khmer.calc_expected_collisions(nodegraph, force = False, max_false_pos = .15)
+    exp = .2 / sampling_rate if sampling_rate < .1 else 2
+    p_a = 1 - ( 1 - sampling_rate ) ** exp
+    p_added = p_a + fpr - fpr * p_a
+    return p_added
