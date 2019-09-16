@@ -6,13 +6,15 @@ from kbbq import compare_reads as utils
 from kbbq import recaltable
 from kbbq.gatk import applybqsr
 import kbbq.read
-from kbbq import covariate
+import kbbq.covariate
+import kbbq.bloom
 import pysam
 import numpy as np
 import pathlib
 import subprocess
 import sys
 import contextlib
+import itertools
 
 def find_corrected_sites(uncorr_read, corr_read):
     """
@@ -50,7 +52,6 @@ def recalibrate_fastq(fastq, dqs, out, infer_rg = False):
     Recalibrate reads in a FASTQ file given a fastq file name and
     :class:`CovariateData` dqs. Out should be a file-like object.
     """
-    # dqs = applybqsr.get_delta_qs_from_covariates(covariates)
     rg = fastq if infer_rg is False else None
     with pysam.FastxFile(uncorr) as fin:
         for fqread in fin:
@@ -59,21 +60,14 @@ def recalibrate_fastq(fastq, dqs, out, infer_rg = False):
             fqread.quality = list(recalibrated_quals)
             out.write(str(fqread))
 
-def recalibrate_bam(bam, dqs, out):
-    """
-    Recalibrate ReadData read and output to filehandle output.
-    """
-
-
 def find_covariates(read_sources):
     """
     Consume reads from the given list of iterables and load
     them into a :class:`kbbq.covariate.CovariateData` object.
     """
-    data = covariate.CovariateData()
-    for i in read_sources:
-        for r in i:
-            data.consume_read(r)
+    data = kbbq.covariate.CovariateData()
+    for r in itertools.chain.from_iterables(read_sources):
+        data.consume_read(r)
     return data
 
 def opens_as_bam(path):
@@ -111,7 +105,7 @@ def validate_files(files):
                 raise ValueError('Given path {} does not exist or is not a regular file'.format(path))
 
 @contextlib.contextmanager
-def open_outputs(files, output, bams, infer_rg, use_oq, set_oq):
+def open_outputs(files, output, bams):
     """
     Initialize output files ensuring BAM headers are handled.
 
@@ -140,7 +134,7 @@ def open_outputs(files, output, bams, infer_rg, use_oq, set_oq):
 
 def yield_reads(iterable, *args, **kwargs):
     """
-    Return a generator of ReadData objects.
+    Return a generator of (ReadData, original_read) pairs.
     """
     if isinstance(iterable, pysam.AlignmentFile):
         convert = kbbq.read.ReadData.from_bamread
@@ -149,7 +143,7 @@ def yield_reads(iterable, *args, **kwargs):
     else:
         raise ValueError("Unknown iterable type {}".format(type(iterable)))
     for i in iterable:
-        yield convert(i, *args, **kwargs)
+        yield convert(i, *args, **kwargs), i
 
 @contextlib.contextmanager
 def generate_reads_from_files(files, bams, infer_rg = False, use_oq = False):
@@ -179,7 +173,8 @@ def generate_reads_from_files(files, bams, infer_rg = False, use_oq = False):
         for f in opened_files:
             f.close()
 
-def recalibrate(files, output, cmd, infer_rg = False, use_oq = False, set_oq = False, gatkreport = None):
+def recalibrate(files, output, infer_rg = False, use_oq = False, set_oq = False, ksize = 32, memory = '2G', alpha = .1, gatkreport = None):
+    #make these options later
     if gatkreport is not None:
         raise NotImplementedError('GATKreport reading / creation is not yet supported.')
     if output == []:
@@ -188,18 +183,36 @@ def recalibrate(files, output, cmd, infer_rg = False, use_oq = False, set_oq = F
         raise ValueError('One output should be specified for each input.')
     validate_files(files)
     bams = load_headers_from_bams(files)
-    with generate_reads_from_files(files, bams, infer_rg, use_oq) as allreaddata: #a list of ReadData iterators
+
+    graph = kbbq.bloom.create_empty_nodegraph(ksize = ksize, max_mem = memory)
+    with generate_reads_from_files(files, bams, infer_rg, use_oq) as allreaddata: #a list of ReadData generators
         #1st pass: load hash
+        for read, original in itertools.chain.from_iterable(allreaddata): #a single ReadData generator
+            kbbq.bloom.count_read(read, graph, sampling_rate = alpha)
 
+    thresholds = kbbq.bloom.calculate_thresholds(
+        kbbq.bloom.p_kmer_added(sampling_rate = alpha, graph), graph.ksize())
+    covariates = kbbq.covariate.CovariateData()
+    with generate_reads_from_files(files, bams, infer_rg, use_oq) as allreaddata: #a list of ReadData generators
         #2nd pass: find errors + build model
+        for read, original in itertools.chain.from_iterable(allreaddata): #a single ReadData generator
+            kbbq.bloom.infer_read_errors(read, graph, thresholds)
+            covariates.consume_read(read)
 
+    dqs = kbbq.gatk.applybqsr.get_modeldqs_from_covariates(covariates)
+    with generate_reads_from_files(files, bams, infer_rg, use_oq) as allreaddata, \
+        open_outputs(files, output, bams) as opened_outputs: #a list of ReadData generators
         #3rd pass: recalibrate
-
-        #ReadData, output, and original read (AlignedSegment or FastxProxy)
-        # 3 passes:
-        # 1st pass: load hash
-        # 2nd pass: find errors + build model
-        # 3rd pass: recalibrate
-    with open_outputs(files, output, bams, infer_rg, use_oq, set_oq) as opened_outputs:
-        #do things with open outputs here
-
+        for i, o in zip(allreaddata, opened_outputs):
+            for read, original in i:
+                recalibrated_quals = recalibrate_read(read, dqs)
+                if isinstance(original, pysam.AlignedSegment):
+                    if set_oq:
+                        original.set_tag('OQ',
+                            pysam.array_to_qualitystring(original.query_qualities))
+                    original.query_qualities = recalibrated_quals
+                elif isinstance(original, pysam.FastxProxy):
+                    original.quality = list(recalibrated_quals)
+                else:
+                    raise ValueError("Unknown read type {}".format(type(original)))
+                o.write(original)

@@ -10,6 +10,7 @@ import numpy as np
 import pandas as pd
 from .. import compare_reads as utils
 from .. import recaltable
+import collections
 
 def table_to_vectors(table, rg_order, maxscore = 42):
     #the recal table uses the PU of the read group as the read group entry in the table
@@ -102,7 +103,10 @@ def get_delta_qs(meanq, rg_errs, rg_total, q_errs, q_total, pos_errs, pos_total,
 
     return rgdeltaq.copy(), qscoredeltaq.copy(), positiondeltaq.copy(), dinucdq.copy()
 
-def get_delta_qs_from_covariates(covariates):
+ModelDQs = collections.namedtuple('ModelDQs', ['mean','rg','q','cycle','dinuc'],
+    module = __name__)
+
+def get_modeldqs_from_covariates(covariates):
     nrgs = covariates.qcov.rgcov.num_rgs()
     expected_errs = np.sum(utils.q_to_p(np.arange(covariates.qcov.num_qs()))[np.newaxis,:] * covariates.qcov.total, axis = 1)
     meanq = utils.p_to_q(expected_errs / covariates.qcov.rgcov.total)
@@ -117,4 +121,4 @@ def get_delta_qs_from_covariates(covariates):
     pad = np.zeros((len(dinucdeltaq.shape),2), dtype = np.int_)
     pad[-1,1] = 1 #add a 0 to the last axis
     dinucdq = np.pad(dinucdeltaq, pad_width = pad, mode = 'constant', constant_values = 0)
-    return meanq.copy(), rgdeltaq.copy(), qscoredeltaq.copy(), positiondeltaq.copy(), dinucdq.copy()
+    return ModelDQs(meanq, rgdeltaq, qscoredeltaq, positiondeltaq, dinucdq)

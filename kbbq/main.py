@@ -11,8 +11,9 @@ import sys
 #helper commands that pass arguments to the proper functions
 
 def recalibrate(args):
-    re.recalibrate(input = args.input, output = args.output, infer_rg = args.infer_rg,
-    use_oq = args.use_oq, set_oq = args.set_oq, gatkreport = args.gatkreport)
+    re.recalibrate(files = args.input, output = args.output, infer_rg = args.infer_rg,
+        use_oq = args.use_oq, set_oq = args.set_oq, ksize = args.ksize,
+        memory = args.memory, alpha = args.alpha, gatkreport = args.gatkreport)
 
 def benchmark(args):
     bm.benchmark(bamfile = args.bam, fafile = args.reference,
@@ -61,9 +62,17 @@ def main():
         The default behavior is to treat each input FASTQ file as its own read group.')
     recalibrate_parser.add_argument('-o', '--output', action = 'append', required = False,
         help = 'Output files. Should be specified as many times as input.')
+    recalibrate_parser.add_argument('-k','--ksize', type = int, default = 32,
+        required = False, help = "K-mer size to use. Must be less than 32.")
+    recalibrate_parser.add_argument('-m','--memory', type = str, default = '2G',
+        required = False, help = "Amount of memory to use for the hash table. If the \
+        false positive rate is too high, increase the amount of memory available.")
+    recalibrate_parser.add_argument('-a','--alpha', type = float, default = .1,
+        required = False, help = "K-mer sampling rate to use.")
     recalibrate_parser.add_argument('input', nargs = '+',
-        help = 'Input files. Should be SAM, BAM, FASTQ or FASTA format. Must not be a pipe.')
-    #TODO: method, model, lighter options, prefix, output, gatkreport
+        help = 'Input files. Should be SAM, BAM, FASTQ or FASTA format. \
+        Must not be a pipe.')
+    #TODO: gatkreport
     recalibrate_parser.set_defaults(command=recalibrate)
 
     #benchmark command

@@ -332,6 +332,7 @@ def recalibrate_fastq(read, meanq, globaldeltaq, qscoredeltaq, positiondeltaq, d
 def bamread_get_oq(read):
     #TODO: add an assert or logic to ensure OQ is present
     oq = np.array(list(read.get_tag('OQ')), dtype = np.unicode)
+    #quals = pysam.qualitystring_to_array(read.get_tag('OQ')) #this may be faster
     quals = np.array(oq.view(np.uint32) - 33, dtype = np.uint32)
     return np.array(quals, dtype = np.int)
 

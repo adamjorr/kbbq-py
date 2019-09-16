@@ -25,8 +25,8 @@ nodegraph = khmer.Nodegraph(ksize, tablesize, fake_args.n_tables)
 import khmer
 import khmer.khmer_args
 import numpy as np
-
-binomial_thresholds = [0] #TODO
+import scipy.stats
+import collections
 
 def create_empty_nodegraph(ksize = 32, max_mem = '8G'):
     """
@@ -34,9 +34,10 @@ def create_empty_nodegraph(ksize = 32, max_mem = '8G'):
     it with count.
     """
     mem = khmer.khmer_args.memory_setting(max_mem)
-    fake_args = namedtuple(max_memory_usage = mem, n_tables = 4)
-    tablesize = khmer.khmer_args.calculate_graphsize
-    return khmer.Nodegraph(ksize, tablesize, fake_args.n_tables)
+    fake_args = collections.namedtuple('fake_args', ['max_memory_usage', 'n_tables'])
+    fargs = fake_args(max_memory_usage = mem, n_tables = 4)
+    tablesize = khmer.khmer_args.calculate_graphsize(fargs, 'nodegraph', multiplier = 1.0)
+    return khmer.Nodegraph(ksize, tablesize, fargs.n_tables)
 
 def count_read(read, graph, sampling_rate):
     """
@@ -64,7 +65,7 @@ def kmers_in_graph(read, graph):
     """
     return np.array(graph.get_kmer_counts(np.str.join('',read.seq)), dtype = np.bool)
 
-def n_kmers_in_graph(read, graph):
+def overlapping_kmers_in_graph(read, graph):
     """
     Get the number of kmers overlapping each read position that are in the graph.
 
@@ -85,7 +86,7 @@ def n_kmers_in_graph(read, graph):
         num_in_graph[readidx] = np.sum(kmers[kidx:kidx + ksize])
     return num_in_graph
 
-def n_kmers_possible(read, ksize):
+def overlapping_kmers_possible(read, ksize):
     """
     Get the possible number of kmers overlapping each read position.
 
@@ -149,3 +150,39 @@ def p_kmer_added(sampling_rate, graph):
     p_a = 1 - ( 1 - sampling_rate ) ** exp
     p_added = p_a + fpr - fpr * p_a
     return p_added
+
+def calculate_thresholds(p_added, ksize):
+    """
+    Calculate the thresholds. If the number of overlapping kmers is less than this number,
+    the base is inferred to be erroneous.
+    """
+    dists = [scipy.stats.binom(n = i, p = p_added) for i in range(1, ksize, 1)] 
+    return np.array([d.ppf(.95) for d in dists]) 
+
+def infer_errors(overlapping, possible, thresholds):
+    """
+    Perform a binomial test to infer which bases are erroneous.
+
+    Given a vector of the number of overlapping kmers in the hash and the number of
+    possible kmers in the hash for each position, infer whether each base is erroneous.
+
+    This is done with essentially a binomial test. We evaluate the probability the sample
+    came from a binomial distribution with p = p_added. We do a right-tailed test with
+    the null hypothesis that all kmers overlapping the site are erroneous. We assume
+    the multiplicity of a weak kmer is less than ~2, so this is reflected in p_added.
+    We only use the right tail because a lower p parameter supports the null, while a
+    high value supports the alternative.
+    """
+    #n = 0 doesn't make sense
+    return overlapping < thresholds[possible] #if overlapping < thresholds, it's an error.
+
+def infer_read_errors(read, graph, thresholds):
+    """
+    Set the errors attribute of the read given a graph and the thresholds.
+    """
+    overlapping = overlapping_kmers_in_graph(read, graph)
+    possible = overlapping_kmers_possible(read, graph.ksize())
+    errors = infer_errors(overlapping, possible, thresholds)
+    assert len(errors) == len(read)
+    read.errors = errors
+

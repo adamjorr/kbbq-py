@@ -379,10 +379,9 @@ class CovariateData():
 
     Attributes
 
-        * :attr:`rgcov` - RGCovariate
-        * :attr:`qcov` - QCovariate
-        * :attr:`poscov` - PosCovariate
-        * :attr:`dinuccov` - DinucCovariate
+        * :attr:`qcov` - :class:`QCovariate`
+        * :attr:`cyclecov` - :class:`CycleCovariate`
+        * :attr:`dinuccov` - :class:`DinucCovariate`
 
     Methods
 
