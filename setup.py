@@ -1,4 +1,5 @@
 import setuptools
+import kbbq
 
 #see https://packaging.python.org/tutorials/packaging-projects/
 #see https://packaging.python.org/guides/distributing-packages-using-setuptools/
@@ -11,7 +12,7 @@ with open("requirements.txt", 'r') as fh:
 
 setuptools.setup(
     name="kbbq",
-    version="0.0.0",
+    version=kbbq.__version__,
     author="Adam Orr",
     author_email="ajorr1@asu.edu",
     description="A library and command line tool for reference-free base quality score recalibration.",
