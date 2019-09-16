@@ -101,8 +101,8 @@ def validate_files(files):
     """
     for i in files:
         path = pathlib.Path(i)
-            if not path.is_file():
-                raise ValueError('Given path {} does not exist or is not a regular file'.format(path))
+        if not path.is_file():
+            raise ValueError('Given path {} does not exist or is not a regular file'.format(path))
 
 @contextlib.contextmanager
 def open_outputs(files, output, bams):
