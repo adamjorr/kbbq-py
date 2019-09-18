@@ -207,8 +207,11 @@ def recalibrate(files, output, infer_rg = False, use_oq = False, set_oq = False,
     else:
         #gatkreport provided and exists
         #TODO: update to use new DQ / Covariate API
-        meanq, *recalvecs = kbbq.gatk.applybqsr.table_to_vectors(kbbq.recaltable.RecalibrationReport.fromfile(gatkreport))
-        dqs = ModelDQs(*get_delta_qs(meanq, *recalvecs))
+        #TODO: this won't work with a fastq because we don't know the RGs yet!!
+        #we need to get the RGs from the table and load them rather than the other way
+        #around
+        meanq, *recalvecs = kbbq.gatk.applybqsr.table_to_vectors(kbbq.recaltable.RecalibrationReport.fromfile(gatkreport), rg_order = list(kbbq.read.ReadData.rg_to_pu.values()))
+        dqs = kbbq.gatk.applybqsr.ModelDQs(meanq, *get_delta_qs(meanq, *recalvecs))
 
     with generate_reads_from_files(files, bams, infer_rg, use_oq) as allreaddata, \
         open_outputs(files, output, bams) as opened_outputs: #a list of ReadData generators
