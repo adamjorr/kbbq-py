@@ -12,7 +12,7 @@ from .. import compare_reads as utils
 from .. import recaltable
 import collections
 
-def table_to_vectors(table, rg_order, maxscore = 42):
+def table_to_vectors(table, rg_order, maxscore = 41):
     #the recal table uses the PU of the read group as the read group entry in the table
     #see vectors_to_report for more info
     dinuc_order = utils.Dinucleotide.dinuc_to_int.keys()
