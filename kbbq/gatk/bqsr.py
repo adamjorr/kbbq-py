@@ -49,7 +49,7 @@ def bamread_bqsr_dinuc(read, use_oq = True, minscore = 6):
     fulldinuc[unclipped_start:unclipped_end] = dinuccov
     return fulldinuc
 
-def bam_to_bqsr_covariates(bamfileobj, fastafilename, var_pos, minscore = 6, maxscore = 42):
+def bam_to_bqsr_covariates(bamfileobj, fastafilename, var_pos, minscore = 6, maxscore = 41):
     """
     Given a BAM file object, FASTA reference file name and var_pos dict,
     get the standard covariate arrays.
@@ -225,7 +225,7 @@ def quantize(q_errs, q_total, maxscore = 93):
     return quantizer
 
 def vectors_to_report(meanq, global_errs, global_total, q_errs, q_total,
-    pos_errs, pos_total, dinuc_errs, dinuc_total, rg_order, maxscore = 42):
+    pos_errs, pos_total, dinuc_errs, dinuc_total, rg_order, maxscore = 41):
     """
     Turn the set of recalibration vectors into a
     :class:`kbbq.recaltable.RecalibrationReport` object.

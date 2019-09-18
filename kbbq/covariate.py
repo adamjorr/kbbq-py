@@ -273,11 +273,11 @@ class QCovariate(Covariate):
 
         qe, qv = read.get_q_errors()
         try:
-            self.increment(idx = ((rge,qe),(rge,qv)))
+            self.increment(idx = ((rge,qe),(rgv,qv)))
         except IndexError:
             #this way we only need to find the max if assignment fails
             self.pad_axis_to_fit(axis = 1, idx = np.amax(qv))
-            self.increment(idx = ((rge,qe),(rge,qv)))
+            self.increment(idx = ((rge,qe),(rgv,qv)))
         return (rge, rgv), (qe, qv)
 
     def num_qs(self):
@@ -421,7 +421,19 @@ class CovariateData():
 
         self.cyclecov.pad_axis_to_fit(axis = 2, idx = 2 * len(read) - 1)
         self.cyclecov.increment(idx = ((rge,qe,ce),(rgv,qv,cv)))
-        self.dinuccov.increment(idx = ((rge,qe,de),(rgv,qv,dv)))
+
+        #we have to treat the dinuc covariate a bit differently because
+        #we don't count invalid dinucleotides (such as at the start of the read).
+        #so we have to take these out of the rge/v and de/v arrays.
+        dinucs = read.get_dinucleotide_array()
+        dinucs_noskip = dinucs[~read.skips]
+        dinucs_errors = dinucs[read.not_skipped_errors()]
+        valid_dinuc_noskip = (dinucs_noskip != -1)
+        valid_dinuc_errors = (dinucs_errors != -1)
+        dinuc_rge, dinuc_qe = rge[valid_dinuc_errors], qe[valid_dinuc_errors]
+        dinuc_rgv, dinuc_qv = rgv[valid_dinuc_noskip], qv[valid_dinuc_noskip]
+        self.dinuccov.increment(
+            idx = ((dinuc_rge, dinuc_qe, de),(dinuc_rgv, dinuc_qv, dv)))
 
     def get_num_rgs(self):
         """

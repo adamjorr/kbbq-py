@@ -165,7 +165,7 @@ class RescaledNormal:
 
     oldset = np.seterr(all = 'raise')
 
-    maxscore = 42
+    maxscore = 41
     """
     The maximum quality score supported by this class.
     """
@@ -259,7 +259,7 @@ def gatk_delta_q(prior_q, numerrs, numtotal, maxscore = 42):
     assert posterior_q.shape == prior_q.shape
     return posterior_q - prior_q
 
-def p_to_q(p, maxscore = 42):
+def p_to_q(p, maxscore = 41):
     q = np.zeros(p.shape, dtype = np.int)
     q[p != 0] = (-10.0*np.log10(p[p != 0])).astype(np.int) #avoid divide by 0
     q[p == 0] = maxscore
@@ -339,3 +339,6 @@ def bamread_get_oq(read):
 def get_rg_to_pu(bamfileobj):
     rg_to_pu = {rg['ID'] : rg['PU'] for rg in bamfileobj.header.as_dict()['RG']}
     return rg_to_pu
+
+def nparray_to_qualitystring(a, offset = 33):
+    return "".join((a + offset).astype(np.uint32).view('U1'))

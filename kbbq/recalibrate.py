@@ -2,9 +2,10 @@
 Utilities for recalibrating reads.
 """
 
+import kbbq
 from kbbq import compare_reads as utils
 from kbbq import recaltable
-from kbbq.gatk import applybqsr
+import kbbq.gatk.applybqsr
 import kbbq.read
 import kbbq.covariate
 import kbbq.bloom
@@ -34,14 +35,14 @@ def recalibrate_read(read, dqs, minscore = 6):
     """
     Return new qualities given :class:`ReadData` and DQ arrays.
     """
-    meanq, globaldeltaq, qscoredeltaq, dinucdeltaq, cycledeltaq = dqs
+    meanq, globaldeltaq, qscoredeltaq, cycledeltaq, dinucdeltaq = dqs
     rg = read.get_rg_int()
     qcov = read.qual
     recalibrated_quals = np.array(qcov, copy = True)
     valid_positions = (qcov >= minscore)
     qcov = qcov[valid_positions]
     cycle = read.get_cycle_array()[valid_positions]
-    dinuc = read.get_dinuc_array()[valid_positions]
+    dinuc = read.get_dinucleotide_array()[valid_positions]
     recalibrated_quals[valid_positions] = (meanq[rg] + globaldeltaq[rg] +\
         qscoredeltaq[rg, qcov] + dinucdeltaq[rg, qcov, dinuc] +\
         cycledeltaq[rg, qcov, cycle]).astype(np.int)
@@ -119,12 +120,14 @@ def open_outputs(files, output, bams):
     for i, o, b in zip(files, output, bams):
         if b:
             with pysam.AlignmentFile(i) as fin:
-                header = fin.header
-                headerid = max([x.get('ID',0) for x in header['PG']]) + 1
-                header['PG'] = header['PG'] + [{'ID' : headerid, 'PN' : 'kbbq', 'CL' : ' '.join(sys.argv)}]
+                header = fin.header.to_dict()
+                pgids = [x.get('ID','') for x in header['PG']]
+                suffixes = [int(x.split('.',1)[-1]) for x in pgids if x.startswith("kbbq")]
+                headerid = 'kbbq' if suffixes == [] else 'kbbq.' + str(max(suffixes) + 1)
+                header['PG'] = header['PG'] + [{'ID' : headerid, 'PN' : 'kbbq', 'CL' : ' '.join(sys.argv), 'VN' : kbbq.__version__}]
             fout = pysam.AlignmentFile(str(o), mode = 'wb', header = header)
         else:
-            fout = pysam.FastxFile(str(o), mode = 'w')
+            fout = open(str(o), mode = 'w')
         opened_outputs.append(fout)
     try:
         yield opened_outputs
@@ -138,7 +141,7 @@ def yield_reads(iterable, *args, **kwargs):
     """
     if isinstance(iterable, pysam.AlignmentFile):
         convert = kbbq.read.ReadData.from_bamread
-    elif isinstance(iterable pysam.FastxFile):
+    elif isinstance(iterable, pysam.FastxFile):
         convert = kbbq.read.ReadData.from_fastq
     else:
         raise ValueError("Unknown iterable type {}".format(type(iterable)))
@@ -162,7 +165,7 @@ def generate_reads_from_files(files, bams, infer_rg = False, use_oq = False):
         if b: #bam file
             generators.append(yield_reads(f, use_oq = use_oq))
         else: #fastq file
-            if infer_rg = False:
+            if infer_rg == False:
                 rg = str(i)
             else:
                 rg = None
@@ -191,7 +194,7 @@ def recalibrate(files, output, infer_rg = False, use_oq = False, set_oq = False,
             kbbq.bloom.count_read(read, graph, sampling_rate = alpha)
 
     thresholds = kbbq.bloom.calculate_thresholds(
-        kbbq.bloom.p_kmer_added(sampling_rate = alpha, graph), graph.ksize())
+        kbbq.bloom.p_kmer_added(sampling_rate = alpha, graph = graph), graph.ksize())
     covariates = kbbq.covariate.CovariateData()
     with generate_reads_from_files(files, bams, infer_rg, use_oq) as allreaddata: #a list of ReadData generators
         #2nd pass: find errors + build model
@@ -210,9 +213,10 @@ def recalibrate(files, output, infer_rg = False, use_oq = False, set_oq = False,
                     if set_oq:
                         original.set_tag('OQ',
                             pysam.array_to_qualitystring(original.query_qualities))
-                    original.query_qualities = recalibrated_quals
-                elif isinstance(original, pysam.FastxProxy):
-                    original.quality = list(recalibrated_quals)
+                    original.query_qualities = list(recalibrated_quals)
+                    o.write(original)
+                elif isinstance(original, pysam.FastxRecord):
+                    original.quality = utils.nparray_to_qualitystring(recalibrated_quals)
+                    o.write(str(original) + '\n')
                 else:
                     raise ValueError("Unknown read type {}".format(type(original)))
-                o.write(original)

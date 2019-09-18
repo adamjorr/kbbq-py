@@ -49,13 +49,13 @@ def count_read(read, graph, sampling_rate):
     #     shape = (len(read.seq) - ksize + 1, ksize),
     #     strides = read.seq.strides * 2) #2D array of shape (nkmers, ksize)
     #probably will be fastest to get all hashes in C then select the ones i want
-    hashes = np.array(graph.get_kmer_hashes(np.str.join('',read.seq)))
+    hashes = np.array(graph.get_kmer_hashes(np.str.join('',read.seq)), dtype = np.ulonglong)
     sampled = np.random.choice([True, False],
         size = hashes.shape,
         replace = True,
         p = [sampling_rate, 1.0 - sampling_rate])
     for h in hashes[sampled]:
-        graph.count(h)
+        graph.count(h.item())
 
 def kmers_in_graph(read, graph):
     """
@@ -76,7 +76,7 @@ def overlapping_kmers_in_graph(read, graph):
     assert ksize <= len(read)
     assert len(read) > 2 * ksize
     kmers = kmers_in_graph(read, graph)
-    num_in_graph = np.array(len(read), dtype = np.int)
+    num_in_graph = np.zeros(len(read), dtype = np.int)
     for i in range(ksize - 1):
         #each base is overlapped by < k kmers
         num_in_graph[i] = np.sum(kmers[0:i])
@@ -95,7 +95,7 @@ def overlapping_kmers_possible(read, ksize):
     """
     assert ksize <= len(read)
     assert len(read) > 2 * ksize
-    num_possible = np.array(len(read), dtype = np.int)
+    num_possible = np.zeros(len(read), dtype = np.int)
     #each base is overlapped by < k kmers
     num_possible[np.arange(ksize - 1)] = np.arange(ksize - 1) + 1
     num_possible[-np.arange(ksize - 1)-1] = np.arange(ksize - 1) + 1
@@ -145,7 +145,7 @@ def p_kmer_added(sampling_rate, graph):
     distribution becomes less predictive for some coverages at extreme points. A strategy
     for picking the theoretically optimal sampling rate can likely be found.
     """
-    fpr = khmer.calc_expected_collisions(nodegraph, force = False, max_false_pos = .15)
+    fpr = khmer.calc_expected_collisions(graph, force = False, max_false_pos = .15)
     exp = .2 / sampling_rate if sampling_rate < .1 else 2
     p_a = 1 - ( 1 - sampling_rate ) ** exp
     p_added = p_a + fpr - fpr * p_a
@@ -156,8 +156,8 @@ def calculate_thresholds(p_added, ksize):
     Calculate the thresholds. If the number of overlapping kmers is less than this number,
     the base is inferred to be erroneous.
     """
-    dists = [scipy.stats.binom(n = i, p = p_added) for i in range(1, ksize, 1)] 
-    return np.array([d.ppf(.95) for d in dists]) 
+    dists = [scipy.stats.binom(n = i, p = p_added) for i in range(1, ksize + 1, 1)] 
+    return np.array([0.0] + [d.ppf(.95) for d in dists]) 
 
 def infer_errors(overlapping, possible, thresholds):
     """

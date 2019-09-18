@@ -115,10 +115,10 @@ def get_modeldqs_from_covariates(covariates):
     qscoredeltaq = utils.gatk_delta_q(prior1, *covariates.qcov[...])
     prior2 = np.broadcast_to((prior1 + qscoredeltaq)[...,np.newaxis], covariates.cyclecov.shape()).copy()
     cycledeltaq = utils.gatk_delta_q(prior2, *covariates.cyclecov[...])
-    prior3 = np.broadcast_to((prior1 + qscoredeltaq)[...,np.newaxis], cpvaroates.dinuccov.shape()).copy()
+    prior3 = np.broadcast_to((prior1 + qscoredeltaq)[...,np.newaxis], covariates.dinuccov.shape()).copy()
     dinucdeltaq = utils.gatk_delta_q(prior3, *covariates.dinuccov[...])
     #need to add another value of dinuc, for invalid dinuc
     pad = np.zeros((len(dinucdeltaq.shape),2), dtype = np.int_)
     pad[-1,1] = 1 #add a 0 to the last axis
     dinucdq = np.pad(dinucdeltaq, pad_width = pad, mode = 'constant', constant_values = 0)
-    return ModelDQs(meanq, rgdeltaq, qscoredeltaq, positiondeltaq, dinucdq)
+    return ModelDQs(meanq, rgdeltaq, qscoredeltaq, cycledeltaq, dinucdq)
