@@ -178,8 +178,6 @@ def generate_reads_from_files(files, bams, infer_rg = False, use_oq = False):
 
 def recalibrate(files, output, infer_rg = False, use_oq = False, set_oq = False, ksize = 32, memory = '2G', alpha = .1, gatkreport = None):
     #make these options later
-    if gatkreport is not None:
-        raise NotImplementedError('GATKreport reading / creation is not yet supported.')
     if output == []:
         output = [str(i.with_name(i.stem + '.kbbq' + i.suffix)) for i in [pathlib.Path(f) for f in files ]]
     if len(files) != len(output):
@@ -187,22 +185,31 @@ def recalibrate(files, output, infer_rg = False, use_oq = False, set_oq = False,
     validate_files(files)
     bams = load_headers_from_bams(files)
 
-    graph = kbbq.bloom.create_empty_nodegraph(ksize = ksize, max_mem = memory)
-    with generate_reads_from_files(files, bams, infer_rg, use_oq) as allreaddata: #a list of ReadData generators
-        #1st pass: load hash
-        for read, original in itertools.chain.from_iterable(allreaddata): #a single ReadData generator
-            kbbq.bloom.count_read(read, graph, sampling_rate = alpha)
+    if gatkreport is None or not pathlib.Path(gatkreport).is_file():
+        #gatkreport not provided or the provided report doesn't exist
+        graph = kbbq.bloom.create_empty_nodegraph(ksize = ksize, max_mem = memory)
+        with generate_reads_from_files(files, bams, infer_rg, use_oq) as allreaddata: #a list of ReadData generators
+            #1st pass: load hash
+            for read, original in itertools.chain.from_iterable(allreaddata): #a single ReadData generator
+                kbbq.bloom.count_read(read, graph, sampling_rate = alpha)
 
-    thresholds = kbbq.bloom.calculate_thresholds(
-        kbbq.bloom.p_kmer_added(sampling_rate = alpha, graph = graph), graph.ksize())
-    covariates = kbbq.covariate.CovariateData()
-    with generate_reads_from_files(files, bams, infer_rg, use_oq) as allreaddata: #a list of ReadData generators
-        #2nd pass: find errors + build model
-        for read, original in itertools.chain.from_iterable(allreaddata): #a single ReadData generator
-            kbbq.bloom.infer_read_errors(read, graph, thresholds)
-            covariates.consume_read(read)
+        thresholds = kbbq.bloom.calculate_thresholds(
+            kbbq.bloom.p_kmer_added(sampling_rate = alpha, graph = graph), graph.ksize())
+        covariates = kbbq.covariate.CovariateData()
+        with generate_reads_from_files(files, bams, infer_rg, use_oq) as allreaddata: #a list of ReadData generators
+            #2nd pass: find errors + build model
+            for read, original in itertools.chain.from_iterable(allreaddata): #a single ReadData generator
+                kbbq.bloom.infer_read_errors(read, graph, thresholds)
+                covariates.consume_read(read)
 
-    dqs = kbbq.gatk.applybqsr.get_modeldqs_from_covariates(covariates)
+        dqs = kbbq.gatk.applybqsr.get_modeldqs_from_covariates(covariates)
+        #TODO: if gatkreport doesn't exist, save the model to it
+    else:
+        #gatkreport provided and exists
+        #TODO: update to use new DQ / Covariate API
+        meanq, *recalvecs = kbbq.gatk.applybqsr.table_to_vectors(kbbq.recaltable.RecalibrationReport.fromfile(gatkreport))
+        dqs = ModelDQs(*get_delta_qs(meanq, *recalvecs))
+
     with generate_reads_from_files(files, bams, infer_rg, use_oq) as allreaddata, \
         open_outputs(files, output, bams) as opened_outputs: #a list of ReadData generators
         #3rd pass: recalibrate
