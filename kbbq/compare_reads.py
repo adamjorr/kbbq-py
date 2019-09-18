@@ -113,9 +113,15 @@ def find_read_errors(read, ref, variable):
             refidx = refidx + l
         elif op == 1:
             #insertion in read
-            #gatk counts all insertions as aligning to the ref base to the right (maybe?)
-            #i think for now we skip if it's skipped on both sides
-            skips[readidx:readidx+l] = np.logical_and(subset_variable[refidx-1], subset_variable[refidx])
+            #gatk counts insertions as aligning to the ref base to the left, unless
+            #the insertion is the first op, when it will align to the right.
+            #we skip if it's skipped on both sides since we don't implement 
+            #variant sites as a range
+            #if we're at the end, we can just look at the base to the left
+            if refidx < len(subset_variable):
+                skips[readidx:readidx+l] = np.logical_and(subset_variable[refidx-1], subset_variable[refidx])
+            else:
+                skips[readidx:readidx+l] = subset_variable[refidx-1]
             readidx = readidx + l
         elif op == 2 or op == 3:
             #deletion in read or N op
