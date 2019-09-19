@@ -157,7 +157,7 @@ def calculate_thresholds(p_added, ksize):
     the base is inferred to be erroneous.
     """
     dists = [scipy.stats.binom(n = i, p = p_added) for i in range(1, ksize + 1, 1)] 
-    return np.array([0.0] + [d.ppf(.95) for d in dists]) 
+    return np.array([-1] + [d.ppf(.995) for d in dists]) + 1 
 
 def infer_errors(overlapping, possible, thresholds):
     """
