@@ -223,6 +223,10 @@ def recalibrate(files, output, infer_rg = False, use_oq = False, set_oq = False,
                     if set_oq:
                         original.set_tag('OQ',
                             pysam.array_to_qualitystring(original.query_qualities))
+                    if original.is_reverse:
+                        #the read class considers the read as fwd, so the recalibrated
+                        #quals will be flipped if the read is reversed.
+                        recalibrated_quals = np.flip(recalibrated_quals)
                     original.query_qualities = list(recalibrated_quals)
                     o.write(original)
                 elif isinstance(original, pysam.FastxRecord):
