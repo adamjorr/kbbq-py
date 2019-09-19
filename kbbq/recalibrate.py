@@ -211,7 +211,7 @@ def recalibrate(files, output, infer_rg = False, use_oq = False, set_oq = False,
         #we need to get the RGs from the table and load them rather than the other way
         #around
         meanq, *recalvecs = kbbq.gatk.applybqsr.table_to_vectors(kbbq.recaltable.RecalibrationReport.fromfile(gatkreport), rg_order = list(kbbq.read.ReadData.rg_to_pu.values()))
-        dqs = kbbq.gatk.applybqsr.ModelDQs(meanq, *get_delta_qs(meanq, *recalvecs))
+        dqs = kbbq.gatk.applybqsr.ModelDQs(meanq, *kbbq.gatk.applybqsr.get_delta_qs(meanq, *recalvecs))
 
     with generate_reads_from_files(files, bams, infer_rg, use_oq) as allreaddata, \
         open_outputs(files, output, bams) as opened_outputs: #a list of ReadData generators
