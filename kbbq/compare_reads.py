@@ -171,7 +171,7 @@ class RescaledNormal:
 
     oldset = np.seterr(all = 'raise')
 
-    maxscore = 41
+    maxscore = 42
     """
     The maximum quality score supported by this class.
     """
@@ -265,7 +265,7 @@ def gatk_delta_q(prior_q, numerrs, numtotal, maxscore = 42):
     assert posterior_q.shape == prior_q.shape
     return posterior_q - prior_q
 
-def p_to_q(p, maxscore = 41):
+def p_to_q(p, maxscore = 42):
     q = np.zeros(p.shape, dtype = np.int)
     q[p != 0] = (-10.0*np.log10(p[p != 0])).astype(np.int) #avoid divide by 0
     q[p == 0] = maxscore
