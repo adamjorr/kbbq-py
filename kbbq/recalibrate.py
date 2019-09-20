@@ -38,7 +38,7 @@ def recalibrate_read(read, dqs, minscore = 6):
     meanq, globaldeltaq, qscoredeltaq, cycledeltaq, dinucdeltaq = dqs
     rg = read.get_rg_int()
     qcov = read.qual
-    recalibrated_quals = np.array(qcov, copy = True)
+    recalibrated_quals = np.array(qcov, copy = True, dtype = np.int)
     valid_positions = (qcov >= minscore)
     qcov = qcov[valid_positions]
     cycle = read.get_cycle_array()[valid_positions]
@@ -46,6 +46,7 @@ def recalibrate_read(read, dqs, minscore = 6):
     recalibrated_quals[valid_positions] = (meanq[rg] + globaldeltaq[rg] +\
         qscoredeltaq[rg, qcov] + dinucdeltaq[rg, qcov, dinuc] +\
         cycledeltaq[rg, qcov, cycle]).astype(np.int)
+    assert np.all(recalibrated_quals > 0)
     return recalibrated_quals
 
 def recalibrate_fastq(fastq, dqs, out, infer_rg = False):
@@ -199,7 +200,8 @@ def recalibrate(files, output, infer_rg = False, use_oq = False, set_oq = False,
         with generate_reads_from_files(files, bams, infer_rg, use_oq) as allreaddata: #a list of ReadData generators
             #2nd pass: find errors + build model
             for read, original in itertools.chain.from_iterable(allreaddata): #a single ReadData generator
-                kbbq.bloom.infer_read_errors(read, graph, thresholds)
+                errors = kbbq.bloom.infer_read_errors(read, graph, thresholds)
+                read.errors = errors
                 covariates.consume_read(read)
 
         dqs = kbbq.gatk.applybqsr.get_modeldqs_from_covariates(covariates)

@@ -184,5 +184,5 @@ def infer_read_errors(read, graph, thresholds):
     possible = overlapping_kmers_possible(read, graph.ksize())
     errors = infer_errors(overlapping, possible, thresholds)
     assert len(errors) == len(read)
-    read.errors = errors
+    return errors
 
