@@ -46,7 +46,16 @@ def recalibrate_read(read, dqs, minscore = 6):
     recalibrated_quals[valid_positions] = (meanq[rg] + globaldeltaq[rg] +\
         qscoredeltaq[rg, qcov] + dinucdeltaq[rg, qcov, dinuc] +\
         cycledeltaq[rg, qcov, cycle]).astype(np.int)
-    assert np.all(recalibrated_quals > 0)
+    assert np.all(qcov > 0)
+    try:
+        assert np.all(recalibrated_quals >= 0)
+    except AssertionError:
+        print('rg:',rg)
+        print('qcov:',qcov)
+        print('valid_positions:',valid_positions)
+        print('cycle:',cycle)
+        print('dinuc:',dinuc)
+        raise
     return recalibrated_quals
 
 def recalibrate_fastq(fastq, dqs, out, infer_rg = False):
