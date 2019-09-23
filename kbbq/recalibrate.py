@@ -195,6 +195,8 @@ def recalibrate(files, output, infer_rg = False, use_oq = False, set_oq = False,
             for read, original in itertools.chain.from_iterable(allreaddata): #a single ReadData generator
                 kbbq.bloom.count_read(read, graph, sampling_rate = alpha)
 
+        fpr = khmer.calc_expected_collisions(graph, force = False, max_false_pos = .15)
+        utils.print_info("False positive rate:", str(fpr))
         p_added = kbbq.bloom.p_kmer_added(sampling_rate = alpha, graph = graph)
         utils.print_info("Probability any k-mer was added:", str(p_added))
         thresholds = kbbq.bloom.calculate_thresholds(p_added, graph.ksize())
