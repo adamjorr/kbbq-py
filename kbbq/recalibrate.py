@@ -46,23 +46,7 @@ def recalibrate_read(read, dqs, minscore = 6):
     recalibrated_quals[valid_positions] = (meanq[rg] + globaldeltaq[rg] +\
         qscoredeltaq[rg, qcov] + dinucdeltaq[rg, qcov, dinuc] +\
         cycledeltaq[rg, qcov, cycle]).astype(np.int)
-    assert np.all(qcov > 0)
-    try:
-        assert np.all(recalibrated_quals >= 0)
-    except AssertionError:
-        print('read:',read)
-        print('rg:',rg)
-        print('qcov:',qcov)
-        print('valid_positions:',valid_positions)
-        print('cycle:',cycle)
-        print('dinuc:',dinuc)
-        print('recal:',recalibrated_quals)
-        print('meanq:',meanq)
-        print('globaldeltaq:',globaldeltaq)
-        print('qscoredeltaq:',qscoredeltaq)
-        print('cycledeltaq:',cycledeltaq)
-        print('dinucdeltaq:',dinucdeltaq)
-        raise
+    recalibrated_quals = np.clip(recalibrated_quals, 0, utils.RescaledNormal.maxscore)
     return recalibrated_quals
 
 def recalibrate_fastq(fastq, dqs, out, infer_rg = False):
@@ -204,15 +188,19 @@ def recalibrate(files, output, infer_rg = False, use_oq = False, set_oq = False,
 
     if gatkreport is None or not pathlib.Path(gatkreport).is_file():
         #gatkreport not provided or the provided report doesn't exist
+        utils.print_info("Loading hash")
         graph = kbbq.bloom.create_empty_nodegraph(ksize = ksize, max_mem = memory)
         with generate_reads_from_files(files, bams, infer_rg, use_oq) as allreaddata: #a list of ReadData generators
             #1st pass: load hash
             for read, original in itertools.chain.from_iterable(allreaddata): #a single ReadData generator
                 kbbq.bloom.count_read(read, graph, sampling_rate = alpha)
 
-        thresholds = kbbq.bloom.calculate_thresholds(
-            kbbq.bloom.p_kmer_added(sampling_rate = alpha, graph = graph), graph.ksize())
+        p_added = kbbq.bloom.p_kmer_added(sampling_rate = alpha, graph = graph)
+        utils.print_info("Probability any k-mer was added:", str(p_added))
+        thresholds = kbbq.bloom.calculate_thresholds(p_added, graph.ksize())
+        utils.print_info("Error thresholds:", thresholds)
         covariates = kbbq.covariate.CovariateData()
+        utils.print_info("Finding errors")
         with generate_reads_from_files(files, bams, infer_rg, use_oq) as allreaddata: #a list of ReadData generators
             #2nd pass: find errors + build model
             for read, original in itertools.chain.from_iterable(allreaddata): #a single ReadData generator
@@ -228,9 +216,11 @@ def recalibrate(files, output, infer_rg = False, use_oq = False, set_oq = False,
         #TODO: this won't work with a fastq because we don't know the RGs yet!!
         #we need to get the RGs from the table and load them rather than the other way
         #around
+        utils.print_info("Loading model from", str(gatkreport))
         meanq, *recalvecs = kbbq.gatk.applybqsr.table_to_vectors(kbbq.recaltable.RecalibrationReport.fromfile(gatkreport), rg_order = list(kbbq.read.ReadData.rg_to_pu.values()))
         dqs = kbbq.gatk.applybqsr.ModelDQs(meanq, *kbbq.gatk.applybqsr.get_delta_qs(meanq, *recalvecs))
 
+    utils.print_info("Recalibrating reads")
     with generate_reads_from_files(files, bams, infer_rg, use_oq) as allreaddata, \
         open_outputs(files, output, bams) as opened_outputs: #a list of ReadData generators
         #3rd pass: recalibrate
@@ -252,3 +242,4 @@ def recalibrate(files, output, infer_rg = False, use_oq = False, set_oq = False,
                     o.write(str(original) + '\n')
                 else:
                     raise ValueError("Unknown read type {}".format(type(original)))
+    utils.print_info("Done")

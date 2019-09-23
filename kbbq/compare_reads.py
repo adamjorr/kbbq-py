@@ -32,6 +32,12 @@ def tstamp():
     """
     return '[ ' + datetime.datetime.today().isoformat(' ', 'seconds') + ' ]'
 
+def print_info(*args, **kwargs):
+    """
+    Print input to stderr prepended by a timestamp.
+    """
+    print(tstamp(), *args, file = sys.stderr, **kwargs)
+
 def load_positions(posfile):
     """
     Get positions that are covered by a non-zipped BED file.
