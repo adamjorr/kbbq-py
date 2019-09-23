@@ -56,6 +56,12 @@ def recalibrate_read(read, dqs, minscore = 6):
         print('valid_positions:',valid_positions)
         print('cycle:',cycle)
         print('dinuc:',dinuc)
+        print('recal:',recalibrated_quals)
+        print('meanq:',meanq)
+        print('globaldeltaq:',globaldeltaq)
+        print('qscoredeltaq:',qscoredeltaq)
+        print('cycledeltaq:',cycledeltaq)
+        print('dinucdeltaq:',dinucdeltaq)
         raise
     return recalibrated_quals
 
