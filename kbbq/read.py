@@ -384,13 +384,13 @@ class ReadData():
         :return: string representation of read
         :rtype: str
         """
-        return "\n".join(str(self.name),
+        return "\n".join([str(self.name),
             str(self.rg),
             str(self.second),
             str(self.seq),
             str(self.qual),
             str(self.skips),
-            str(self.errors)) + "\n"
+            str(self.errors)]) + "\n"
 
 def bamread_get_oq(read, offset = 33):
     """
