@@ -50,6 +50,7 @@ def recalibrate_read(read, dqs, minscore = 6):
     try:
         assert np.all(recalibrated_quals >= 0)
     except AssertionError:
+        print('read:',read)
         print('rg:',rg)
         print('qcov:',qcov)
         print('valid_positions:',valid_positions)

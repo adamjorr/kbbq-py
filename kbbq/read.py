@@ -377,6 +377,21 @@ class ReadData():
         """
         return len(self.seq)
 
+    def __str__(self):
+        """
+        A string representation of the read.
+
+        :return: string representation of read
+        :rtype: str
+        """
+        return "\n".join(str(self.name),
+            str(self.rg),
+            str(self.second),
+            str(self.seq),
+            str(self.qual),
+            str(self.skips),
+            str(self.errors)) + "\n"
+
 def bamread_get_oq(read, offset = 33):
     """
     Get the OQ of the given bamread as an array of int.
