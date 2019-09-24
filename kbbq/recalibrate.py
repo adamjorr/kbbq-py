@@ -9,6 +9,7 @@ import kbbq.gatk.applybqsr
 import kbbq.read
 import kbbq.covariate
 import kbbq.bloom
+import khmer
 import pysam
 import numpy as np
 import pathlib
