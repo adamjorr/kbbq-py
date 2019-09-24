@@ -174,15 +174,54 @@ def infer_errors(overlapping, possible, thresholds):
     high value supports the alternative.
     """
     #n = 0 doesn't make sense
-    return overlapping < thresholds[possible] #if overlapping < thresholds, it's an error.
+    return overlapping <= thresholds[possible] #if overlapping < thresholds, it's an error.
 
 def infer_read_errors(read, graph, thresholds):
     """
-    Set the errors attribute of the read given a graph and the thresholds.
+    Return an array of errors given a graph and the thresholds.
     """
     overlapping = overlapping_kmers_in_graph(read, graph)
     possible = overlapping_kmers_possible(read, graph.ksize())
     errors = infer_errors(overlapping, possible, thresholds)
     assert len(errors) == len(read)
     return errors
+
+def add_trusted_kmers(read, graph):
+    """
+    Add trusted kmers to graph.
+    """
+    # #https://rigtorp.se/2011/01/01/rolling-statistics-numpy.html
+    hashes = np.array(graph.get_kmer_hashes(np.str.join('',read.seq)), dtype = np.ulonglong)
+    errors = np.lib.stride_tricks.as_strided(read.errors,
+        shape = (len(read.errors) - ksize + 1, ksize),
+        strides = read.errors.strides * 2) #2D array of shape (nkmers, ksize)
+    trusted_kmers = np.all(errors, axis = 1)
+    for h in hashes[trusted_kmers]:
+        graph.count(h.item())
+
+def infer_errors_from_trusted_kmers(read, graph):
+    trusted_kmers = kbbq.bloom.kmers_in_graph(read, graph)
+    errors = np.zeros(len(read), dtype = np.bool)
+    if np.all(trusted_kmers):
+        return errors
+    else:
+        transitions = np.nonzero(np.diff(trusted_kmers) != 0)[0] + 1 #indices where changes occur
+        segments = np.concatenate(np.array([0]), transitions, np.array([len(read) - 1])) #indices including beginning and end
+        segment_lens = np.diff(segments) #lengths of each segment
+        longest = numpy.argmax(segment_lens) #slice segments[longest] : segments[longest + 1]
+
+        #right side
+        #kmer segments[longest + 1] is an error
+        #for kmer k in range(len(seq) + ksize - 1)
+            #base to look at is base k + ksize - 1
+        segmentidx = longest + 1
+        k = segments[segmentidx]
+        while k < len(read) - graph.ksize() + 1:
+            if trusted_kmers[k]:
+                k = k + 1 #this can probably be optimized using the segments
+            else:
+                errors[k + graph.ksize() - 1] = True
+                k = k + graph.ksize()
+
+
 

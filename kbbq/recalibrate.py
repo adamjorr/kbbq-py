@@ -202,12 +202,23 @@ def recalibrate(files, output, infer_rg = False, use_oq = False, set_oq = False,
         thresholds = kbbq.bloom.calculate_thresholds(p_added, graph.ksize())
         utils.print_info("Error thresholds:", thresholds)
         covariates = kbbq.covariate.CovariateData()
-        utils.print_info("Finding errors")
+        utils.print_info("Finding trusted k-mers")
+        trustgraph = kbbq.bloom.create_empty_nodegraph(ksize = ksize, max_mem = memory)
+        with generate_reads_from_files(files, bams, infer_rg, use_oq) as allreaddata: #a list of ReadData generators
+            #pass 1.5: find trusted kmers
+            for read, original in itertools.chain.from_iterable(allreaddata): #a single ReadData generator
+                errors = kbbq.bloom.infer_read_errors(read, graph, thresholds)
+                #don't trust bad quality
+                errors[read.qual <= 6] = True
+                read.errors = errors
+                #find k-size blocks of non-errors and add to the trusted graph
+                kbbq.bloom.add_trusted_kmers(read, trustgraph)
+
+        utils.print_info("Finding errors and building model")
         with generate_reads_from_files(files, bams, infer_rg, use_oq) as allreaddata: #a list of ReadData generators
             #2nd pass: find errors + build model
             for read, original in itertools.chain.from_iterable(allreaddata): #a single ReadData generator
-                errors = kbbq.bloom.infer_read_errors(read, graph, thresholds)
-                read.errors = errors
+                read.errors = kbbq.bloom.infer_errors_from_trusted_kmers(read, trustgraph)
                 covariates.consume_read(read)
 
         dqs = kbbq.gatk.applybqsr.get_modeldqs_from_covariates(covariates)
