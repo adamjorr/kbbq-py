@@ -207,21 +207,35 @@ def infer_errors_from_trusted_kmers(read, graph):
     else:
         transitions = np.nonzero(np.diff(trusted_kmers) != 0)[0] + 1 #indices where changes occur
         segments = np.concatenate(np.array([0]), transitions, np.array([len(read) - 1])) #indices including beginning and end
+        segment_pairs = np.lib.stride_tricks.as_strided(segments,
+            shape = (len(segments) - 2 + 1, 2),
+            strides = segments.strides * 2) #numsegments, 2
         segment_lens = np.diff(segments) #lengths of each segment
-        longest = numpy.argmax(segment_lens) #slice segments[longest] : segments[longest + 1]
+        trusted_segments = trusted_kmers[segment_pairs[:,0]] #hack
+        # trusted_segments = [np.all(trusted_kmers[s[0] : s[1]]) for s in segment_pairs]
+        trusted_segment_lens = np.array(segment_lens, copy = True)
+        trusted_segment_lens[~trusted_segments] = 0
+        longest_trusted = numpy.argmax(trusted_segment_lens)
 
         #right side
         #kmer segments[longest + 1] is an error
         #for kmer k in range(len(seq) + ksize - 1)
             #base to look at is base k + ksize - 1
-        segmentidx = longest + 1
-        k = segments[segmentidx]
+        k = segment_pairs[longest_trusted, 1]
         while k < len(read) - graph.ksize() + 1:
             if trusted_kmers[k]:
-                k = k + 1 #this can probably be optimized using the segments
+                k = k + 1
             else:
                 errors[k + graph.ksize() - 1] = True
                 k = k + graph.ksize()
 
-
+        #left side
+        #fix below
+        k = segment_pairs[longest_trusted, 0] - 1
+        while k >= 0:
+            if trusted_kmers[k]:
+                k = k - 1
+            else:
+                errors[k - graph.ksize() + 1] = True
+                k = k - graph.ksize()
 
