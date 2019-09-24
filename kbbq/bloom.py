@@ -238,4 +238,4 @@ def infer_errors_from_trusted_kmers(read, graph):
             else:
                 errors[k] = True
                 k = k - graph.ksize()
-
+        return errors
