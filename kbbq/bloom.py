@@ -236,6 +236,6 @@ def infer_errors_from_trusted_kmers(read, graph):
             if trusted_kmers[k]:
                 k = k - 1
             else:
-                errors[k - graph.ksize() + 1] = True
+                errors[k] = True
                 k = k - graph.ksize()
 
