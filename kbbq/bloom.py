@@ -196,12 +196,12 @@ def add_trusted_kmers(read, graph):
     errors = np.lib.stride_tricks.as_strided(read.errors,
         shape = (len(read.errors) - ksize + 1, ksize),
         strides = read.errors.strides * 2) #2D array of shape (nkmers, ksize)
-    trusted_kmers = np.all(errors, axis = 1)
+    trusted_kmers = np.all(~errors, axis = 1)
     for h in hashes[trusted_kmers]:
         graph.count(h.item())
 
 def infer_errors_from_trusted_kmers(read, graph):
-    trusted_kmers = kbbq.bloom.kmers_in_graph(read, graph)
+    trusted_kmers = kmers_in_graph(read, graph)
     errors = np.zeros(len(read), dtype = np.bool)
     if np.all(trusted_kmers):
         return errors
