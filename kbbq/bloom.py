@@ -264,7 +264,7 @@ def correction_len(seq, graph, right = True):
         possible_fixes = reversed(possible_fixes)
     for b, base in enumerate(bases):
         kmers[idx] = base #kmers[0,-1] or kmers[-1,0]
-        for i in iterator:
+        for i in possible_fixes:
             if not graph.get_kmer_counts(np.str.join('',kmers[i])):
                 counts[b] = i if right else largest_possible_fix - i - 1
                 break
