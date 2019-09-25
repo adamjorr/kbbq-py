@@ -216,13 +216,21 @@ def recalibrate(files, output, infer_rg = False, use_oq = False, set_oq = False,
                 kbbq.bloom.add_trusted_kmers(read, trustgraph)
 
         utils.print_info("Finding errors and building model")
+        num_error_free = 0
+        num_errors = 0
         with generate_reads_from_files(files, bams, infer_rg, use_oq) as allreaddata: #a list of ReadData generators
             #2nd pass: find errors + build model
             for read, original in itertools.chain.from_iterable(allreaddata): #a single ReadData generator
                 read.errors = kbbq.bloom.infer_errors_from_trusted_kmers(read, trustgraph)
+                if np.all(~read.errors):
+                    num_error_free = num_error_free + 1
+                else:
+                    num_errors = num_errors + np.sum(read.errors)
                 covariates.consume_read(read)
 
         dqs = kbbq.gatk.applybqsr.get_modeldqs_from_covariates(covariates)
+        utils.print_info(str(num_error_free), "reads are error free.")
+        utils.print_info(str(num_errors), "errors detected.")
         #TODO: if gatkreport doesn't exist, save the model to it
     else:
         #gatkreport provided and exists
