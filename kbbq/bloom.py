@@ -227,7 +227,6 @@ def infer_errors_from_trusted_kmers(read, graph):
             if trusted_kmers[k]:
                 k = k + 1
             else:
-                corr_len = correction_len()
                 errors[k + graph.ksize() - 1] = True
                 k = k + correction_len(read.seq[k:], graph, right = True)
 
