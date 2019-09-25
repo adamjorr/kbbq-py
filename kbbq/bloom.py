@@ -227,6 +227,7 @@ def infer_errors_from_trusted_kmers(read, graph):
             if trusted_kmers[k]:
                 k = k + 1
             else:
+                corr_len = correction_len()
                 errors[k + graph.ksize() - 1] = True
                 k = k + graph.ksize()
 
@@ -240,3 +241,22 @@ def infer_errors_from_trusted_kmers(read, graph):
                 errors[k] = True
                 k = k - graph.ksize()
         return errors
+
+def kmer_correctable(kmer, graph):
+    for base in ["A","T","G","C"]:
+        if 
+
+def correction_len(kmers, graph):
+    """
+    Get the number of corrections given a ndarray of kmers.
+    """
+    kmers = kmers.copy()
+    counts = {"A":0, "T":0, "G":0, "C":0}
+    for base in count.keys():
+        for i in range(min(graph.ksize(), len(kmers))):
+            kmer = kmers[i,:]
+            kmer[-(i+1)] = base 
+            if not graph.get_kmer_counts(np.str.join('',kmer)):
+                counts[base] = i
+                break
+    return max(counts.values())
