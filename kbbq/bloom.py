@@ -203,7 +203,7 @@ def add_trusted_kmers(read, graph):
 def infer_errors_from_trusted_kmers(read, graph):
     trusted_kmers = kmers_in_graph(read, graph)
     errors = np.zeros(len(read), dtype = np.bool)
-    if np.all(trusted_kmers):
+    if np.all(trusted_kmers) or np.all(~trusted_kmers): #do nothing
         return errors
     else:
         transitions = np.nonzero(np.diff(trusted_kmers) != 0)[0] + 1 #indices where changes occur
@@ -217,7 +217,7 @@ def infer_errors_from_trusted_kmers(read, graph):
         trusted_segment_lens = np.array(segment_lens, copy = True)
         trusted_segment_lens[~trusted_segments] = 0
         longest_trusted = np.argmax(trusted_segment_lens)
-
+        #note argmax will pick the first in case of a tie
         #right side
         #kmer segments[longest + 1] is an error
         #for kmer k in range(len(seq) + ksize - 1)
@@ -227,8 +227,10 @@ def infer_errors_from_trusted_kmers(read, graph):
             if trusted_kmers[k]:
                 k = k + 1
             else:
-                errors[k + graph.ksize() - 1] = True
-                k = k + correction_len(read.seq[k:], graph, right = True)
+                cor_len = correction_len(read.seq[k:], graph, right = True)
+                if len(cor_len) == 1: #there was not a tie
+                    errors[k + graph.ksize() - 1] = True
+                k = k + cor_len[0]
 
         #left side
         #fix below
@@ -237,15 +239,19 @@ def infer_errors_from_trusted_kmers(read, graph):
             if trusted_kmers[k]:
                 k = k - 1
             else:
-                errors[k] = True
-                k = k - correction_len(read.seq[:(k+graph.ksize())], graph, right = False)
+                cor_len = correction_len(read.seq[:(k+graph.ksize())], graph, right = False)
+                if len(cor_len) == 1: #no tie
+                    errors[k] = True
+                k = k - cor_len[0]
         return errors
 
 def correction_len(seq, graph, right = True):
     """
     Get the number of corrections given an ndarray of sequence.
 
-    This value is between 1 and ksize, or len(seq) if no correction can be made.
+    This value is an array of values between between 1 and ksize, or len(seq) if no
+    correction can be made. The length of the array represents the number of results if
+    there is a tie.
     """
     ksize = graph.ksize()
     kmers = np.lib.stride_tricks.as_strided(seq.copy(),
@@ -274,9 +280,8 @@ def correction_len(seq, graph, right = True):
     if np.all(counts == 0):
         #end correction if we cannot find any
         #https://github.com/mourisl/Lighter/blob/df39031f8254f8351852f9f8b51b643475226ea0/ErrorCorrection.cpp#L574
-        return len(seq)
+        return np.array(len(seq), dtype = np.int)
     else:
         m = np.amax(counts)
-        return m
         #we may also want to test if there are multiple maxima
-        #return counts[counts == m] #if there are multiple this will be an array
+        return counts[counts == m] #if there are multiple this will be an array
