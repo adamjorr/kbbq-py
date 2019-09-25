@@ -191,6 +191,7 @@ def add_trusted_kmers(read, graph):
     Add trusted kmers to graph.
     """
     # #https://rigtorp.se/2011/01/01/rolling-statistics-numpy.html
+    ksize = graph.ksize()
     hashes = np.array(graph.get_kmer_hashes(np.str.join('',read.seq)), dtype = np.ulonglong)
     errors = np.lib.stride_tricks.as_strided(read.errors,
         shape = (len(read.errors) - ksize + 1, ksize),
