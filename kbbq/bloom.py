@@ -207,7 +207,7 @@ def infer_errors_from_trusted_kmers(read, graph):
         return errors
     else:
         transitions = np.nonzero(np.diff(trusted_kmers) != 0)[0] + 1 #indices where changes occur
-        segments = np.concatenate(np.array([0]), transitions, np.array([len(read) - 1])) #indices including beginning and end
+        segments = np.concatenate([np.array([0]), transitions, np.array([len(read) - 1])]) #indices including beginning and end
         segment_pairs = np.lib.stride_tricks.as_strided(segments,
             shape = (len(segments) - 2 + 1, 2),
             strides = segments.strides * 2) #numsegments, 2
