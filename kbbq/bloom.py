@@ -229,7 +229,7 @@ def infer_errors_from_trusted_kmers(read, graph):
             else:
                 corr_len = correction_len()
                 errors[k + graph.ksize() - 1] = True
-                k = k + graph.ksize()
+                k = k + correction_len(read.seq[k:], graph, right = True)
 
         #left side
         #fix below
@@ -239,24 +239,45 @@ def infer_errors_from_trusted_kmers(read, graph):
                 k = k - 1
             else:
                 errors[k] = True
-                k = k - graph.ksize()
+                k = k - correction_len(read.seq[:(k+graph.ksize())], graph, right = False)
         return errors
 
-def kmer_correctable(kmer, graph):
-    for base in ["A","T","G","C"]:
-        if 
+def correction_len(seq, graph, right = True):
+    """
+    Get the number of corrections given an ndarray of sequence.
 
-def correction_len(kmers, graph):
+    This value is between 1 and ksize, or len(seq) if no correction can be made.
     """
-    Get the number of corrections given a ndarray of kmers.
-    """
-    kmers = kmers.copy()
-    counts = {"A":0, "T":0, "G":0, "C":0}
-    for base in count.keys():
-        for i in range(min(graph.ksize(), len(kmers))):
-            kmer = kmers[i,:]
-            kmer[-(i+1)] = base 
-            if not graph.get_kmer_counts(np.str.join('',kmer)):
-                counts[base] = i
+    ksize = graph.ksize()
+    kmers = np.lib.stride_tricks.as_strided(seq.copy(),
+        shape = (len(seq) - ksize + 1, ksize),
+        strides = 2 * seq.strides) #note the memory is preserved across windows,
+        #so changing one base in one kmer will change every kmer!
+        #this is exactly the behavior we want so we can exploit this for efficiency
+    largest_possible_fix = min(ksize, len(kmers))
+
+    bases = list("ATGC")
+    counts = np.zeros(len(bases), dtype = np.int)
+    idx = np.array([0,-1])
+    possible_fixes = range(largest_possible_fix)
+    if not right:
+        np.flip(idx)
+        possible_fixes = reversed(possible_fixes)
+    for b, base in enumerate(bases):
+        kmers[idx] = base #kmers[0,-1] or kmers[-1,0]
+        for i in iterator:
+            if not graph.get_kmer_counts(np.str.join('',kmers[i])):
+                counts[b] = i if right else largest_possible_fix - i - 1
                 break
-    return max(counts.values())
+        else:
+            #if every kmer is corrected, we move forward k
+            counts[b] = largest_possible_fix
+    if np.all(counts == 0):
+        #end correction if we cannot find any
+        #https://github.com/mourisl/Lighter/blob/df39031f8254f8351852f9f8b51b643475226ea0/ErrorCorrection.cpp#L574
+        return len(seq)
+    else:
+        m = np.amax(counts)
+        return m
+        #we may also want to test if there are multiple maxima
+        #return counts[counts == m] #if there are multiple this will be an array
