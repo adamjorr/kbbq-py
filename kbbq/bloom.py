@@ -216,7 +216,7 @@ def infer_errors_from_trusted_kmers(read, graph):
         # trusted_segments = [np.all(trusted_kmers[s[0] : s[1]]) for s in segment_pairs]
         trusted_segment_lens = np.array(segment_lens, copy = True)
         trusted_segment_lens[~trusted_segments] = 0
-        longest_trusted = numpy.argmax(trusted_segment_lens)
+        longest_trusted = np.argmax(trusted_segment_lens)
 
         #right side
         #kmer segments[longest + 1] is an error
