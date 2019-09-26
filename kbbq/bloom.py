@@ -207,7 +207,7 @@ def infer_errors_from_trusted_kmers(read, graph):
         return errors
     else:
         transitions = np.nonzero(np.diff(trusted_kmers) != 0)[0] + 1 #indices where changes occur
-        segments = np.concatenate([np.array([0]), transitions, np.array([len(read) - 1])]) #indices including beginning and end
+        segments = np.concatenate([np.array([0]), transitions, np.array([len(trusted_kmers)])]) #indices including beginning and end
         segment_pairs = np.lib.stride_tricks.as_strided(segments,
             shape = (len(segments) - 2 + 1, 2),
             strides = segments.strides * 2) #numsegments, 2
@@ -261,7 +261,7 @@ def correction_len(seq, graph, right = True):
         #this is exactly the behavior we want so we can exploit this for efficiency
     largest_possible_fix = min(ksize, len(kmers))
 
-    bases = list("ATGC")
+    bases = list("ACGT")
     counts = np.zeros(len(bases), dtype = np.int)
     idx = np.array([0,-1])
     possible_fixes = range(largest_possible_fix)
@@ -274,9 +274,21 @@ def correction_len(seq, graph, right = True):
             if not graph.get_kmer_counts(np.str.join('',kmers[i])):
                 counts[b] = i if right else largest_possible_fix - i - 1
                 break
-        else:
-            #if every kmer is corrected, we move forward k
-            counts[b] = largest_possible_fix
+        else: #we made it through every possible fix
+            if right and largest_possible_fix == len(kmers): #we ran out of kmers, try to extend
+                last_kmer = np.str.join('',kmers[-1])
+                for j in range(ksize - len(kmers)): #ksize - len(kmers) is the number of kmers we didn't see at the end
+                    for extra in bases:
+                        if graph.get(last_kmer[1:] + extra):
+                            last_kmer = last_kmer[1:] + extra
+                            break #stop looking at more bases because we found one
+                    else: #we didn't find an appropriate base; we're done extending
+                        counts[b] = largest_possible_fix + j
+                        break
+                else: #we extended and got to see all ksize kmers
+                    counts[b] = ksize
+            else: #if every kmer is corrected and we saw ksize kmers, we move forward k
+                counts[b] = largest_possible_fix
     if np.all(counts == 0):
         #end correction if we cannot find any
         #https://github.com/mourisl/Lighter/blob/df39031f8254f8351852f9f8b51b643475226ea0/ErrorCorrection.cpp#L574
