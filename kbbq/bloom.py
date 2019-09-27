@@ -297,3 +297,41 @@ def correction_len(seq, graph, right = True):
         m = np.amax(counts)
         #we may also want to test if there are multiple maxima
         return counts[counts == m] #if there are multiple this will be an array
+
+def fix_overcorrection(read, ksize, minqual = 6, window = 20, threshold = 4):
+    corrections = read.errors.copy()
+    corrections_windowed = rolling_window(corrections, window)
+    correction_count = np.array(rolling_window(corrections, window), dtype = np.int)
+    seq = rolling_window(read.seq, window)
+    quals = rolling_window(read.qual, window)
+    correction_count[seq == 'N'] = 0
+    correction_count[quals < minqual] = .5
+    overcorrected = np.sum(correction_count, axis = 1) > threshold
+    overcorrected_sites = np.zeros([len(seq)], dtype = np.bool)
+    overcorrected_sites_windowed = rolling_window(overcorrected_sites, window)
+    overcorrected_sites_windowed[overcorrected,corrections_windowed[overcorrected,:]] = True #overcorrected_sites is modified
+    
+    #now anything within k of an overcorrected site we call overcorrected
+    num_fixed = np.sum(overcorrected_sites)
+    fixed_before = 0
+    overcorrected_sites_windowed = rolling_window(overcorrected_sites, ksize)
+    while num_fixed > 0:
+        #mark anything within k of an overcorrected site as overcorrected
+        #i'm guessing most of the time this just gets rid of all corrections
+        overcorrected_sites_windowed[np.any(overcorrected_sites_windowed, axis = 1),:] = True
+        num_fixed = np.sum(overcorrected_sites) - fixed_before
+    corrections[overcorrected_sites] = False
+    return corrections
+
+def rolling_window(a, window):
+    """
+    Use stride tricks to reshape an array into an array of sliding windows.
+
+    Different values in the array will point to the same place in memory, so
+    copy the array before altering it if that behavior is undesired.
+
+    From https://rigtorp.se/2011/01/01/rolling-statistics-numpy.html
+    """
+    shape = a.shape[:-1] + (a.shape[-1] - window + 1, window)
+    strides = a.strides + (a.strides[-1],)
+    return np.lib.stride_tricks.as_strided(a, shape=shape, strides=strides)

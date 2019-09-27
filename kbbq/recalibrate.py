@@ -225,6 +225,7 @@ def recalibrate(files, output, infer_rg = False, use_oq = False, set_oq = False,
                 if np.all(~read.errors):
                     num_error_free = num_error_free + 1
                 else:
+                    read.errors = kbbq.bloom.fix_overcorrection(read, ksize)
                     num_errors = num_errors + np.sum(read.errors)
                 covariates.consume_read(read)
 
