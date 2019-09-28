@@ -314,11 +314,13 @@ def fix_overcorrection(read, ksize, minqual = 6, window = 20, threshold = 4):
     #now anything within k of an overcorrected site we call overcorrected
     num_fixed = np.sum(overcorrected_sites)
     fixed_before = 0
+    corrections_windowed = rolling_window(corrections, ksize)
     overcorrected_sites_windowed = rolling_window(overcorrected_sites, ksize)
     while num_fixed > 0:
         #mark anything within k of an overcorrected site as overcorrected
         #i'm guessing most of the time this just gets rid of all corrections
-        overcorrected_sites_windowed[np.any(overcorrected_sites_windowed, axis = 1),:] = True
+        any_overcorrected = np.any(overcorrected_sites_windowed, axis = 1)
+        overcorrected_sites_windowed[any_overcorrected,:] = corrections_windowed[any_overcorrected]
         fixed_now = np.sum(overcorrected_sites)
         num_fixed = fixed_now - fixed_before
         fixed_before = fixed_now
