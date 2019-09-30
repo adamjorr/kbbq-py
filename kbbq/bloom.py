@@ -54,6 +54,8 @@ def count_read(read, graph, sampling_rate):
         size = hashes.shape,
         replace = True,
         p = [sampling_rate, 1.0 - sampling_rate])
+    contains_n = np.any(rolling_window(read.seq, graph.ksize()) == 'N', axis = 1)
+    sampled[contains_n] = False
     for h in hashes[sampled]:
         graph.count(h.item())
 
@@ -63,7 +65,9 @@ def kmers_in_graph(read, graph):
 
     The returned array has length len(read) - ksize + 1
     """
-    return np.array(graph.get_kmer_counts(np.str.join('',read.seq)), dtype = np.bool)
+    ingraph = np.array(graph.get_kmer_counts(np.str.join('',read.seq)), dtype = np.bool)
+    ingraph[np.any(rolling_window(read.seq, graph.ksize()) == 'N', axis = 1)] = False
+    return ingraph
 
 def overlapping_kmers_in_graph(read, graph):
     """
@@ -73,17 +77,10 @@ def overlapping_kmers_in_graph(read, graph):
     This only behaves well for len(seq) > 2ksize.
     """
     ksize = graph.ksize()
-    assert ksize <= len(read)
-    assert len(read) > 2 * ksize
     kmers = kmers_in_graph(read, graph)
     num_in_graph = np.zeros(len(read), dtype = np.int)
-    for i in range(ksize - 1):
-        #each base is overlapped by < k kmers
-        num_in_graph[i] = np.sum(kmers[0:i])
-        num_in_graph[-1 - i] = np.sum(kmers[-1 - i:])
-    for kidx, readidx in zip(range(len(kmers) - ksize + 1), range(ksize - 1, len(read) - ksize + 1)): #kidx len: len(read) - 2 ksize + 2; readidx range: len(read) - 2 ksize + 2
-        #each base is overlapped by k kmers
-        num_in_graph[readidx] = np.sum(kmers[kidx:kidx + ksize])
+    num_in_graph_windowed = rolling_window(num_in_graph, ksize)
+    np.add.at(num_in_graph_windowed, (kmers,), 1) #this will modify num_in_graph
     return num_in_graph
 
 def overlapping_kmers_possible(read, ksize):
