@@ -192,7 +192,7 @@ def recalibrate(files, output, infer_rg = False, use_oq = False, set_oq = False,
         utils.print_info("Loading hash")
         graph = kbbq.bloom.create_empty_nodegraph(ksize = ksize, max_mem = memory)
         with generate_reads_from_files(files, bams, infer_rg, use_oq) as allreaddata: #a list of ReadData generators
-            #1st pass: load hash
+            # 1st pass: load hash
             for read, original in itertools.chain.from_iterable(allreaddata): #a single ReadData generator
                 kbbq.bloom.count_read(read, graph, sampling_rate = alpha)
 
@@ -221,12 +221,14 @@ def recalibrate(files, output, infer_rg = False, use_oq = False, set_oq = False,
         with generate_reads_from_files(files, bams, infer_rg, use_oq) as allreaddata: #a list of ReadData generators
             #2nd pass: find errors + build model
             for read, original in itertools.chain.from_iterable(allreaddata): #a single ReadData generator
-                read.errors = kbbq.bloom.infer_errors_from_trusted_kmers(read, trustgraph)
+                original_seq = read.seq.copy()
+                read.errors = kbbq.bloom.infer_errors_from_trusted_kmers(read, trustgraph) #this will alter read.seq
                 if np.all(~read.errors):
                     num_error_free = num_error_free + 1
                 else:
                     read.errors = kbbq.bloom.fix_overcorrection(read, ksize)
                     num_errors = num_errors + np.sum(read.errors)
+                read.seq = original_seq
                 covariates.consume_read(read)
 
         dqs = kbbq.gatk.applybqsr.get_modeldqs_from_covariates(covariates)

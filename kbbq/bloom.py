@@ -224,9 +224,10 @@ def infer_errors_from_trusted_kmers(read, graph):
             if trusted_kmers[k]:
                 k = k + 1
             else:
-                cor_len = correction_len(read.seq[k:], graph, right = True)
+                cor_len, base = correction_len(read.seq[k:], graph, right = True)
                 if len(cor_len) == 1: #there was not a tie
                     errors[k + graph.ksize() - 1] = True
+                    read.seq[k + graph.ksize() - 1] = base
                 k = k + cor_len[0]
 
         #left side
@@ -236,9 +237,10 @@ def infer_errors_from_trusted_kmers(read, graph):
             if trusted_kmers[k]:
                 k = k - 1
             else:
-                cor_len = correction_len(read.seq[:(k+graph.ksize())], graph, right = False)
+                cor_len, base = correction_len(read.seq[:(k+graph.ksize())], graph, right = False)
                 if len(cor_len) == 1: #no tie
                     errors[k] = True
+                    read.seq[k] = base
                 k = k - cor_len[0]
         return errors
 
@@ -249,6 +251,8 @@ def correction_len(seq, graph, right = True):
     This value is an array of values between between 1 and ksize, or len(seq) if no
     correction can be made. The length of the array represents the number of results if
     there is a tie.
+
+    This function is in desperate need of a refactor.
     """
     ksize = graph.ksize()
     kmers = np.lib.stride_tricks.as_strided(seq.copy(),
@@ -260,40 +264,59 @@ def correction_len(seq, graph, right = True):
 
     bases = list("ACGT")
     counts = np.zeros(len(bases), dtype = np.int)
-    idx = np.array([0,-1])
-    possible_fixes = range(largest_possible_fix)
-    if not right:
-        np.flip(idx)
-        possible_fixes = reversed(possible_fixes)
+    if right:
+        idx = (0,-1)
+        possible_fixes = range(largest_possible_fix)
+    else:
+        idx = (-1,0)
+        possible_fixes = range(-1,-largest_possible_fix-1, -1)
     for b, base in enumerate(bases):
         kmers[idx] = base #kmers[0,-1] or kmers[-1,0]
         for i in possible_fixes:
             if not graph.get(np.str.join('',kmers[i])):
-                counts[b] = i if right else largest_possible_fix - i - 1
+                if right:
+                    counts[b] = i
+                else:
+                    counts[b] = (-i - 1)
                 break
         else: #we made it through every possible fix
-            if right and largest_possible_fix == len(kmers): #we ran out of kmers, try to extend
-                last_kmer = np.str.join('',kmers[-1])
-                for j in range(ksize - len(kmers)): #ksize - len(kmers) is the number of kmers we didn't see at the end
-                    for extra in bases:
-                        if graph.get(last_kmer[1:] + extra):
-                            last_kmer = last_kmer[1:] + extra
-                            break #stop looking at more bases because we found one
-                    else: #we didn't find an appropriate base; we're done extending
-                        counts[b] = largest_possible_fix + j
-                        break
-                else: #we extended and got to see all ksize kmers
-                    counts[b] = ksize
+            if largest_possible_fix == len(kmers): #we ran out of kmers, try to extend
+                if right:
+                    last_kmer = np.str.join('',kmers[-1])
+                    for j in range(ksize - len(kmers)): #ksize - len(kmers) is the number of kmers we didn't see at the end
+                        for extra in bases:
+                            if graph.get(last_kmer[1:] + extra):
+                                last_kmer = last_kmer[1:] + extra
+                                break #stop looking at more bases because we found one
+                        else: #we didn't find an appropriate base; we're done extending
+                            counts[b] = largest_possible_fix + j
+                            break
+                    else: #we extended and got to see all ksize kmers
+                        counts[b] = ksize
+                else: #left side
+                    last_kmer = np.str.join('',kmers[0])
+                    for j in range(ksize - len(kmers)): #ksize - len(kmers) is the number of kmers we didn't see at the end
+                        for extra in bases:
+                            if graph.get(extra + last_kmer[:-1]):
+                                last_kmer = extra + last_kmer[:-1]
+                                break #stop looking at more bases because we found one
+                        else: #we didn't find an appropriate base; we're done extending
+                            counts[b] = largest_possible_fix + j
+                            break
+                    else: #we extended and got to see all ksize kmers
+                        counts[b] = ksize
             else: #if every kmer is corrected and we saw ksize kmers, we move forward k
                 counts[b] = largest_possible_fix
     if np.all(counts == 0):
         #end correction if we cannot find any
         #https://github.com/mourisl/Lighter/blob/df39031f8254f8351852f9f8b51b643475226ea0/ErrorCorrection.cpp#L574
-        return np.array(len(seq), dtype = np.int)
+        return np.array([len(seq)] * 2, dtype = np.int), None
     else:
         m = np.amax(counts)
         #we may also want to test if there are multiple maxima
-        return counts[counts == m] #if there are multiple this will be an array
+        largest = counts[counts == m] #if there are multiple this will be an array
+        largest[largest > largest_possible_fix] = largest_possible_fix #if we extended we only want to continue k
+        return largest, bases[counts.argmax()]
 
 def fix_overcorrection(read, ksize, minqual = 6, window = 20, threshold = 4):
     corrections = read.errors.copy()
