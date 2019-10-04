@@ -197,51 +197,72 @@ def add_trusted_kmers(read, graph):
     for h in hashes[trusted_kmers]:
         graph.count(h.item())
 
+def find_longest_trusted_block(trusted_kmers):
+    """
+    Given a boolean array describing whether each kmer is trusted, return a pair of
+    indices to the start and end of the block.
+
+    The indices will be standard for python ranges; inclusive on the left side and
+    exclusive on the right side.
+    """
+    transitions = np.nonzero(np.diff(trusted_kmers) != 0)[0] + 1 #indices where changes occur
+    segments = np.concatenate([np.array([0]), transitions, np.array([len(trusted_kmers)])]) #indices including beginning and end
+    segment_pairs = rolling_window(segments, 2) #numsegments, 2
+    segment_lens = np.diff(segments) #lengths of each segment
+    trusted_segments = trusted_kmers[segment_pairs[:,0]] #hack
+    trusted_segment_lens = np.array(segment_lens, copy = True)
+    trusted_segment_lens[~trusted_segments] = 0
+    longest_trusted = np.argmax(trusted_segment_lens)
+    #argmax will pick the first in case of tie
+    return segment_pairs[longest_trusted,0], segment_pairs[longest_trusted,1]
+
 def infer_errors_from_trusted_kmers(read, graph):
     trusted_kmers = kmers_in_graph(read, graph)
     errors = np.zeros(len(read), dtype = np.bool)
     if np.all(trusted_kmers) or np.all(~trusted_kmers): #do nothing
         return errors
     else:
-        transitions = np.nonzero(np.diff(trusted_kmers) != 0)[0] + 1 #indices where changes occur
-        segments = np.concatenate([np.array([0]), transitions, np.array([len(trusted_kmers)])]) #indices including beginning and end
-        segment_pairs = np.lib.stride_tricks.as_strided(segments,
-            shape = (len(segments) - 2 + 1, 2),
-            strides = segments.strides * 2) #numsegments, 2
-        segment_lens = np.diff(segments) #lengths of each segment
-        trusted_segments = trusted_kmers[segment_pairs[:,0]] #hack
-        # trusted_segments = [np.all(trusted_kmers[s[0] : s[1]]) for s in segment_pairs]
-        trusted_segment_lens = np.array(segment_lens, copy = True)
-        trusted_segment_lens[~trusted_segments] = 0
-        longest_trusted = np.argmax(trusted_segment_lens)
-        #note argmax will pick the first in case of a tie
+        longest_trusted = find_longest_trusted_block(trusted_kmers)
+        ksize = graph.ksize()
         #right side
-        #kmer segments[longest + 1] is an error
+        #kmer trusted_kmers[longest_trusted[1]] is an error
         #for kmer k in range(len(seq) + ksize - 1)
             #base to look at is base k + ksize - 1
-        k = segment_pairs[longest_trusted, 1]
-        while k < len(read) - graph.ksize() + 1:
+        k = longest_trusted[1]
+        while k < len(trusted_kmers):
             if trusted_kmers[k]:
                 k = k + 1
             else:
                 cor_len, base = correction_len(read.seq[k:], graph, right = True)
-                if len(cor_len) == 1: #there was not a tie
-                    errors[k + graph.ksize() - 1] = True
-                    read.seq[k + graph.ksize() - 1] = base
-                k = k + cor_len[0]
-
+                if cor_len is not None: #there was not a tie
+                    errors[k + ksize - 1] = True
+                    read.seq[k + ksize - 1] = base
+                    k = k + cor_len[0]
+                else:
+                    #could not find a fix; try chopping up the read and trying again
+                    #need to make sure this doesn't loop forever somehow; in lighter this
+                    #happens once and only once
+                    #it should be OK since we will eventually run out of trusted kmers
+                    errors[k:] = infer_errors_from_trusted_kmers(read[k:], graph)
+                    break
+                
         #left side
-        #fix below
-        k = segment_pairs[longest_trusted, 0] - 1
+        k = longest_trusted[0] - 1 # = -1 if the trusted block is at the start
         while k >= 0:
             if trusted_kmers[k]:
                 k = k - 1
             else:
-                cor_len, base = correction_len(read.seq[:(k+graph.ksize())], graph, right = False)
-                if len(cor_len) == 1: #no tie
+                cor_len, base = correction_len(read.seq[:(k+ksize)], graph, right = False)
+                if cor_len is not None: #no tie
                     errors[k] = True
                     read.seq[k] = base
-                k = k - cor_len[0]
+                    k = k - cor_len[0]
+                else: #could not find a fix; try chopping up the read and trying again
+                    #need to make sure this doesn't loop forever somehow; in lighter this
+                    #happens once and only once
+                    #it should be OK since we will eventually run out of trusted kmers
+                    errors[:(k+ksize)] = infer_errors_from_trusted_kmers(read[:(k+ksize)], graph)
+                    break
         return errors
 
 def correction_len(seq, graph, right = True):
@@ -255,9 +276,8 @@ def correction_len(seq, graph, right = True):
     This function is in desperate need of a refactor.
     """
     ksize = graph.ksize()
-    kmers = np.lib.stride_tricks.as_strided(seq.copy(),
-        shape = (len(seq) - ksize + 1, ksize),
-        strides = 2 * seq.strides) #note the memory is preserved across windows,
+    kmers = rolling_window(seq.copy(), ksize)
+        #note the memory is preserved across windows,
         #so changing one base in one kmer will change every kmer!
         #this is exactly the behavior we want so we can exploit this for efficiency
     largest_possible_fix = min(ksize, len(kmers))
@@ -273,6 +293,7 @@ def correction_len(seq, graph, right = True):
     for b, base in enumerate(bases):
         kmers[idx] = base #kmers[0,-1] or kmers[-1,0]
         for i in possible_fixes:
+            # print(np.str.join('',kmers[i]), i)
             if not graph.get(np.str.join('',kmers[i])):
                 if right:
                     counts[b] = i
@@ -310,22 +331,25 @@ def correction_len(seq, graph, right = True):
     if np.all(counts == 0):
         #end correction if we cannot find any
         #https://github.com/mourisl/Lighter/blob/df39031f8254f8351852f9f8b51b643475226ea0/ErrorCorrection.cpp#L574
-        return np.array([len(seq)] * 2, dtype = np.int), None
+        return None, None
     else:
         m = np.amax(counts)
         #we may also want to test if there are multiple maxima
         largest = counts[counts == m] #if there are multiple this will be an array
         largest[largest > largest_possible_fix] = largest_possible_fix #if we extended we only want to continue k
+        # print('counts',counts)
+        # print('m',m)
+        # print('largest',largest)
         return largest, bases[counts.argmax()]
 
 def fix_overcorrection(read, ksize, minqual = 6, window = 20, threshold = 4):
     corrections = read.errors.copy()
     corrections_windowed = rolling_window(corrections, window)
-    correction_count = np.array(rolling_window(corrections, window), dtype = np.int)
+    correction_count = np.array(rolling_window(corrections, window), dtype = np.double)
     seq = rolling_window(read.seq, window)
     quals = rolling_window(read.qual, window)
-    correction_count[seq == 'N'] = 0
-    correction_count[quals < minqual] = .5
+    correction_count[np.logical_and(seq == 'N', corrections_windowed)] = 0
+    correction_count[np.logical_and(quals < minqual, corrections_windowed)] = .5
     overcorrected = np.sum(correction_count, axis = 1) > threshold
     overcorrected_sites = np.zeros(len(corrections), dtype = np.bool)
     overcorrected_sites_windowed = rolling_window(overcorrected_sites, window)

@@ -392,6 +392,30 @@ class ReadData():
             str(self.skips),
             str(self.errors)]) + "\n"
 
+    def __getitem__(self, key):
+        """
+        Return a read subset by key.
+        """
+        return self.__class__(
+            seq = self.seq[key],
+            qual = self.qual[key],
+            skips = self.skips[key],
+            name = self.name,
+            rg = self.rg,
+            second = self.second,
+            errors = self.errors[key],
+            )
+    def __setitem__(self, key, value):
+        """
+        Set key given another read (or an object with the same attributes).
+        Note only the arrays will be modified; name, rg, and second should all be set
+        directly. The key should probably be a slice that is the size of len(value).
+        """
+        self.seq[key] = value.seq
+        self.seq[key] = value.qual
+        self.skips[key] = value.skips
+        self.errors[key] = value.errors
+
 def bamread_get_oq(read, offset = 33):
     """
     Get the OQ of the given bamread as an array of int.
