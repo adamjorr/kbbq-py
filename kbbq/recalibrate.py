@@ -232,12 +232,20 @@ def recalibrate(files, output, infer_rg = False, use_oq = False, set_oq = False,
                 counter = counter + 1
                 c = np.array([bool(int(x)) for x in corrected.rstrip()], dtype = np.bool)
                 original_seq = read.seq.copy()
-                read.errors = kbbq.bloom.infer_errors_from_trusted_kmers(read, trustgraph) #this will alter read.seq
+                trusted_kmers = kbbq.bloom.kmers_in_graph(read,trustgraph)
+                read.errors, multiple = kbbq.bloom.infer_errors_from_trusted_kmers(read, trustgraph) #this will alter read.seq
                 bo = read.errors.copy()
                 if np.all(~read.errors):
                     num_error_free = num_error_free + 1
                 else:
-                    read.errors = kbbq.bloom.fix_overcorrection(read, ksize)
+                    trusted_sites = np.zeros(len(read), dtype = np.bool)
+                    t = kbbq.bloom.rolling_window(trusted_sites, trustgraph.ksize())
+                    t[trusted_kmers,:] = True
+                    adjust = False
+                    if not np.any(np.logical_and(trusted_sites, original_seq != read.seq)):
+                        if not multiple:
+                            adjust = True
+                    read.errors = kbbq.bloom.fix_overcorrection(read, ksize, adjust = adjust)
                     num_errors = num_errors + np.sum(read.errors)
                 read.seq = original_seq
                 try:
@@ -247,10 +255,12 @@ def recalibrate(files, output, infer_rg = False, use_oq = False, set_oq = False,
                     print('c:', c)
                     print('before overcorrection:', bo)
                     print('counter:',counter)
-                    kmers_in_graph = kbbq.bloom.kmers_in_graph(read,trustgraph)
-                    print('kmers_in_graph:', kmers_in_graph)
-                    print('longest_trusted:', kbbq.bloom.find_longest_trusted_block(kmers_in_graph))
+                    print('trusted_kmers:', trusted_kmers)
+                    print('longest_trusted:', kbbq.bloom.find_longest_trusted_block(trusted_kmers))
                     print('lighterfixes:', lighterfixes.rstrip())
+                    print('multiple:',multiple)
+                    print('adjust:',adjust)
+                    print('trusted_sites:',trusted_sites)
                     raise
                 covariates.consume_read(read)
 
