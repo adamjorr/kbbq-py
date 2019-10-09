@@ -178,7 +178,7 @@ def generate_reads_from_files(files, bams, infer_rg = False, use_oq = False):
         for f in opened_files:
             f.close()
 
-def recalibrate(files, output, infer_rg = False, use_oq = False, set_oq = False, ksize = 32, memory = '2G', alpha = .1, gatkreport = None):
+def recalibrate(files, output, infer_rg = False, use_oq = False, set_oq = False, ksize = 32, memory = '3G', alpha = .1, gatkreport = None):
     #make these options later
     if output == []:
         output = [str(i.with_name(i.stem + '.kbbq' + i.suffix)) for i in [pathlib.Path(f) for f in files ]]
@@ -233,7 +233,16 @@ def recalibrate(files, output, infer_rg = False, use_oq = False, set_oq = False,
                 c = np.array([bool(int(x)) for x in corrected.rstrip()], dtype = np.bool)
                 original_seq = read.seq.copy()
                 trusted_kmers = kbbq.bloom.kmers_in_graph(read,trustgraph)
-                read.errors, multiple = kbbq.bloom.infer_errors_from_trusted_kmers(read, trustgraph) #this will alter read.seq
+                if np.all(~trusted_kmers):
+                    l, b, p = kbbq.bloom.fix_one(read.seq, trustgraph)
+                    if l > 0:
+                        read.seq[p] = b
+                        read.errors[p] = True
+                    else:
+                        assert np.array_equal(read.errors, c)
+                        continue
+                errors, multiple = kbbq.bloom.infer_errors_from_trusted_kmers(read, trustgraph) #this will alter read.seq
+                read.errors[errors] = True
                 bo = read.errors.copy()
                 if np.all(~read.errors):
                     num_error_free = num_error_free + 1
@@ -251,17 +260,25 @@ def recalibrate(files, output, infer_rg = False, use_oq = False, set_oq = False,
                 try:
                     assert np.array_equal(read.errors, c)
                 except AssertionError:
-                    print('read:', read)
-                    print('c:', c)
-                    print('before overcorrection:', bo)
-                    print('counter:',counter)
-                    print('trusted_kmers:', trusted_kmers)
-                    print('longest_trusted:', kbbq.bloom.find_longest_trusted_block(trusted_kmers))
-                    print('lighterfixes:', lighterfixes.rstrip())
-                    print('multiple:',multiple)
-                    print('adjust:',adjust)
-                    print('trusted_sites:',trusted_sites)
-                    raise
+                    if counter not in [45, 606]:
+                        print('original_seq:', original_seq)
+                        print('read:', read)
+                        print('c:', c)
+                        print('before overcorrection:', bo)
+                        print('counter:',counter)
+                        print('trusted_kmers:', trusted_kmers)
+                        print('longest_trusted:', kbbq.bloom.find_longest_trusted_block(trusted_kmers))
+                        print('lighterfixes:', lighterfixes.rstrip())
+                        # print('correction_len', kbbq.bloom.correction_len(read.seq[91:], trustgraph))
+                        # read.seq[91 + 32 - 1] = 'G'
+                        # print('correction_len', kbbq.bloom.correction_len(read.seq[92:], trustgraph))
+                        # read.seq[92 + 32 - 1] = 'A'
+                        # print('kmer:',np.str.join('',read.seq[92:92+32]))
+                        # print('count:', trustgraph.get_kmer_counts(np.str.join('',read.seq[92:92+32])))
+                        print('multiple:',multiple)
+                        print('adjust:',adjust)
+                        # print('trusted_sites:',trusted_sites)
+                        raise
                 covariates.consume_read(read)
 
         dqs = kbbq.gatk.applybqsr.get_modeldqs_from_covariates(covariates)

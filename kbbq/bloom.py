@@ -229,6 +229,12 @@ def infer_errors_from_trusted_kmers(read, graph):
         #kmer trusted_kmers[longest_trusted[1]] is an error
         #for kmer k in range(len(seq) + ksize - 1)
             #base to look at is base k + ksize - 1
+        # longest_trusted_len = longest_trusted[1] - longest_trusted[0]
+        # if longest_trusted_len < ksize:
+        #     k = longest_trusted[1]
+        # else:
+        #     k = longest_trusted[1] - 1
+        #     trusted_kmers[k] = False
         k = longest_trusted[1]
         while k < len(trusted_kmers):
             if trusted_kmers[k]:
@@ -236,7 +242,8 @@ def infer_errors_from_trusted_kmers(read, graph):
             else:
                 cor_len, base, m = correction_len(read.seq[k:], graph, right = True)
                 multiple = multiple or m
-                if cor_len is not None: #there was not a tie
+                if cor_len is not None: #correction found
+                    # if read.seq[k + ksize - 1] != base:  #not equal to current base
                     errors[k + ksize - 1] = True
                     read.seq[k + ksize - 1] = base
                     k = k + cor_len[0]
@@ -245,8 +252,12 @@ def infer_errors_from_trusted_kmers(read, graph):
                     #need to make sure this doesn't loop forever somehow; in lighter this
                     #happens once and only once
                     #it should be OK since we will eventually run out of trusted kmers
-                    errors[k:], m = infer_errors_from_trusted_kmers(read[k:], graph)
-                    multiple = multiple or m
+                    # print('k+ksize:',k + ksize - 1)
+                    subread = read[(k+ksize-1):]
+                    if len(subread) > (len(read) / 2) or (len(subread) > ksize * 2):
+                        # print('trying again')
+                        errors[k+ksize-1:], m = infer_errors_from_trusted_kmers(subread, graph)
+                        multiple = multiple or m
                     break
                 
         #left side
@@ -257,7 +268,7 @@ def infer_errors_from_trusted_kmers(read, graph):
             else:
                 cor_len, base, m = correction_len(read.seq[:(k+ksize)], graph, right = False)
                 multiple = multiple or m
-                if cor_len is not None: #no tie
+                if cor_len is not None: #correction found
                     errors[k] = True
                     read.seq[k] = base
                     k = k - cor_len[0]
@@ -265,8 +276,10 @@ def infer_errors_from_trusted_kmers(read, graph):
                     #need to make sure this doesn't loop forever somehow; in lighter this
                     #happens once and only once
                     #it should be OK since we will eventually run out of trusted kmers
-                    errors[:(k+ksize)], m = infer_errors_from_trusted_kmers(read[:(k+ksize)], graph)
-                    multiple = multiple or m
+                    subread = read[:(k+ksize)]
+                    if len(subread) > (len(read) / 2) or (len(subread) > ksize * 2):
+                        errors[:(k+ksize)], m = infer_errors_from_trusted_kmers(subread, graph)
+                        multiple = multiple or m
                     break
         return errors, multiple
 
@@ -344,10 +357,36 @@ def correction_len(seq, graph, right = True):
         #we may also want to test if there are multiple maxima
         largest = counts[counts == m] #if there are multiple this will be an array
         largest[largest > largest_possible_fix] = largest_possible_fix #if we extended we only want to continue k
-        # print('counts',counts)
-        # print('m',m)
-        # print('largest',largest)
+        if len(largest) > 1 and largest[0] < largest_possible_fix: #if there's a tie and the tie can't fix all k kmers
+            largest = None
         return largest, bases[counts.argmax()], len(counts[counts != 0]) > 1
+
+def fix_one(seq, graph):
+    """
+    If we don't start with an anchor we just fix one base that produces the largest
+    number of trusted kmers.
+    """
+    original_seq = seq.copy()
+    ksize = graph.ksize()
+    bases = list("ACGT")
+    best_fix_len = 0
+    best_fix_base = None
+    best_fix_pos = None
+    for i in range(len(seq)):
+        modified_seq = original_seq.copy()
+        kmers = rolling_window(modified_seq, ksize)
+        for b in bases:
+            modified_seq[i] = b
+            trusted_kmers = np.array(graph.get_kmer_counts(np.str.join('',modified_seq)), dtype = np.bool)
+            start_pos = int(min(max(i - ksize/2 + 1, 0), len(seq) - ksize))
+            if trusted_kmers[start_pos]:
+                num_in_graph = np.sum(trusted_kmers[start_pos:])
+                if num_in_graph > best_fix_len:
+                    best_fix_base = b
+                    best_fix_pos = i
+                    best_fix_len = num_in_graph
+    return best_fix_len, best_fix_base, best_fix_pos
+
 
 def fix_overcorrection(read, ksize, minqual = 6, window = 20, threshold = 4, adjust = False):
     """
