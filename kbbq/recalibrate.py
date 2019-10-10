@@ -191,13 +191,10 @@ def recalibrate(files, output, infer_rg = False, use_oq = False, set_oq = False,
         #gatkreport not provided or the provided report doesn't exist
         utils.print_info("Loading hash")
         graph = kbbq.bloom.create_empty_nodegraph(ksize = ksize, max_mem = memory)
-        # with generate_reads_from_files(files, bams, infer_rg, use_oq) as allreaddata: #a list of ReadData generators
-        #     # 1st pass: load hash
-        #     for read, original in itertools.chain.from_iterable(allreaddata): #a single ReadData generator
-        #         kbbq.bloom.count_read(read, graph, sampling_rate = alpha)
-        with open('tmp/sampled.txt', 'r') as f:
-            for k in f:
-                graph.count(k.rstrip())
+        with generate_reads_from_files(files, bams, infer_rg, use_oq) as allreaddata: #a list of ReadData generators
+            # 1st pass: load hash
+            for read, original in itertools.chain.from_iterable(allreaddata): #a single ReadData generator
+                kbbq.bloom.count_read(read, graph, sampling_rate = alpha)
 
         fpr = khmer.calc_expected_collisions(graph, force = False, max_false_pos = .15)
         utils.print_info("False positive rate:", str(fpr))
@@ -208,29 +205,25 @@ def recalibrate(files, output, infer_rg = False, use_oq = False, set_oq = False,
         covariates = kbbq.covariate.CovariateData()
         utils.print_info("Finding trusted k-mers")
         trustgraph = kbbq.bloom.create_empty_nodegraph(ksize = ksize, max_mem = memory)
-        # with generate_reads_from_files(files, bams, infer_rg, use_oq) as allreaddata: #a list of ReadData generators
-        #     #pass 1.5: find trusted kmers
-        #     for read, original in itertools.chain.from_iterable(allreaddata): #a single ReadData generator
-        #         errors = kbbq.bloom.infer_read_errors(read, graph, thresholds)
-        #         #don't trust bad quality
-        #         errors[read.qual <= 6] = True
-        #         read.errors = errors
-        #         #find k-size blocks of non-errors and add to the trusted graph
-        #         kbbq.bloom.add_trusted_kmers(read, trustgraph)
-        with open('tmp/trusted.txt', 'r') as f:
-            for k in f:
-                trustgraph.count(k.rstrip())
+        with generate_reads_from_files(files, bams, infer_rg, use_oq) as allreaddata: #a list of ReadData generators
+            #pass 1.5: find trusted kmers
+            for read, original in itertools.chain.from_iterable(allreaddata): #a single ReadData generator
+                errors = kbbq.bloom.infer_read_errors(read, graph, thresholds)
+                #don't trust bad quality
+                errors[read.qual <= 6] = True
+                read.errors = errors
+                #find k-size blocks of non-errors and add to the trusted graph
+                kbbq.bloom.add_trusted_kmers(read, trustgraph)
 
 
         utils.print_info("Finding errors and building model")
         num_error_free = 0
         num_errors = 0
-        with generate_reads_from_files(files, bams, infer_rg, use_oq) as allreaddata, open('tmp/corrected.txt', 'r') as f, open('tmp/fixes.txt','r') as g: #a list of ReadData generators
+        with generate_reads_from_files(files, bams, infer_rg, use_oq) as allreaddata: #a list of ReadData generators
             #2nd pass: find errors + build model
             counter = 0
-            for (read, original), corrected, lighterfixes in zip(itertools.chain.from_iterable(allreaddata), f, g): #a single ReadData generator
+            for read, original in itertools.chain.from_iterable(allreaddata): #a single ReadData generator
                 counter = counter + 1
-                c = np.array([bool(int(x)) for x in corrected.rstrip()], dtype = np.bool)
                 original_seq = read.seq.copy()
                 trusted_kmers = kbbq.bloom.kmers_in_graph(read,trustgraph)
                 if np.all(~trusted_kmers):
@@ -239,11 +232,11 @@ def recalibrate(files, output, infer_rg = False, use_oq = False, set_oq = False,
                         read.seq[p] = b
                         read.errors[p] = True
                     else:
-                        assert np.array_equal(read.errors, c)
+                        #cant find anything, keep going
+                        covariates.consume_read(read)
                         continue
                 errors, multiple = kbbq.bloom.infer_errors_from_trusted_kmers(read, trustgraph) #this will alter read.seq
                 read.errors[errors] = True
-                bo = read.errors.copy()
                 if np.all(~read.errors):
                     num_error_free = num_error_free + 1
                 else:
@@ -257,28 +250,6 @@ def recalibrate(files, output, infer_rg = False, use_oq = False, set_oq = False,
                     read.errors = kbbq.bloom.fix_overcorrection(read, ksize, adjust = adjust)
                     num_errors = num_errors + np.sum(read.errors)
                 read.seq = original_seq
-                try:
-                    assert np.array_equal(read.errors, c)
-                except AssertionError:
-                    if counter not in [45, 606]:
-                        print('original_seq:', original_seq)
-                        print('read:', read)
-                        print('c:', c)
-                        print('before overcorrection:', bo)
-                        print('counter:',counter)
-                        print('trusted_kmers:', trusted_kmers)
-                        print('longest_trusted:', kbbq.bloom.find_longest_trusted_block(trusted_kmers))
-                        print('lighterfixes:', lighterfixes.rstrip())
-                        # print('correction_len', kbbq.bloom.correction_len(read.seq[91:], trustgraph))
-                        # read.seq[91 + 32 - 1] = 'G'
-                        # print('correction_len', kbbq.bloom.correction_len(read.seq[92:], trustgraph))
-                        # read.seq[92 + 32 - 1] = 'A'
-                        # print('kmer:',np.str.join('',read.seq[92:92+32]))
-                        # print('count:', trustgraph.get_kmer_counts(np.str.join('',read.seq[92:92+32])))
-                        print('multiple:',multiple)
-                        print('adjust:',adjust)
-                        # print('trusted_sites:',trusted_sites)
-                        raise
                 covariates.consume_read(read)
 
         dqs = kbbq.gatk.applybqsr.get_modeldqs_from_covariates(covariates)
