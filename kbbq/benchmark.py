@@ -3,6 +3,8 @@ Utilities for benchmarking calibration methods.
 """
 
 from kbbq import compare_reads
+from kbbq import read
+from kbbq import recalibrate
 import pysam
 import numpy as np
 import contextlib
@@ -75,16 +77,14 @@ def get_error_dict(bamfile, refdict, fullskips):
         edict[name] = (e,s)
     return edict
 
-def calculate_q(errors, quals):
+def calculate_q(numerrs, numtotal):
     """
-    Calculate Actual Q and Predicted Q given a flat
-    array of errors and flat array of quality scores.
+    Calculate Actual Q and Predicted Q given an array containing counts of errors
+    and an array containing total counts for each quality score.
 
     The index of the returned array represents the predicted quality score,
     the value represents the actual quality score or the number of bases.
     """
-    numtotal = np.bincount(quals.reshape(-1))
-    numerrs = np.bincount(quals[errors].reshape(-1), minlength = len(numtotal))
     nonzero = (numtotal != 0)
     p = np.true_divide(numerrs[nonzero], numtotal[nonzero])
     q = compare_reads.p_to_q(p)
@@ -92,42 +92,29 @@ def calculate_q(errors, quals):
     actual_q[nonzero] = q
     return actual_q, numtotal
 
-def benchmark_fastq(fqfile, bamfile, ref, var_sites, bedfh = None):
-    fullskips = get_full_skips(ref, var_sites, bedfh)
-    edict = get_error_dict(bamfile, ref, fullskips)
-    errors, skips, quals = zip(*(edict[get_fastq_readname(r)] + (np.array(r.get_quality_array()),) for r in pysam.FastxFile(fqfile)))
-    #turn list of small arrays into 2d arrays
-    #this uses too much memory
-    errors = np.concatenate(errors)
-    skips = np.concatenate(skips)
-    quals = np.concatenate(quals)
-    #get rid of skipped sites (we can't tell if these are errors or not)
-    e = errors[~skips]
-    q = quals[~skips]
-    return calculate_q(e, q) #actual_q, ntotal
-
-def get_bamread_quals(read, use_oq = False):
+def benchmark_files(bamfh, ref, fullskips, use_oq = False, fastqfh = None, namedelimiter = '_'):
     """
-    Return the qualities of the read as an np.array.
+    Benchmark the given files and return the actual and predicted Q.
 
-    Use the OQ tag for read quals if use_oq = True.
+    If fastqfh is None (the default), reads from the BAM will be directly benchmarked.
+    Otherwise, names from the fastq files will be used to look up
     """
-    if use_oq:
-        return compare_reads.bamread_get_oq(read)
+    if fastqfh is not None:
+        edict = get_error_dict(bamfile, ref, fullskips)
+        readpairs = recalibrate.yield_reads(fastqfh, namedelimiter = namedelimiter)
+        error_finder = lambda x, y: edict.get(y.canonical_name()) #x=ReadData, y=read
     else:
-        return np.array(read.query_qualities, dtype = np.int)
-
-def benchmark_bam(bamfile, ref, var_sites, use_oq = False, bedfh = None):
-    fullskips = get_full_skips(ref, var_sites, bedfh)
-    errors, skips, quals = zip(*(compare_reads.find_read_errors(read, ref, fullskips) + (get_bamread_quals(read, use_oq),) for read in bamfile)) #generator
-    #turn list of 1d arrays into 2d arrays
-    errors = np.concatenate(errors)
-    skips = np.concatenate(skips)
-    quals = np.concatenate(quals)
-    #get rid of skipped sites
-    e = errors[~skips]
-    q = quals[~skips]
-    return calculate_q(e, q)
+        readpairs = recalibrate.yield_reads(bamfh, use_oq = use_oq)
+        error_finder = lambda x, y: compare_reads.find_read_errors(x, ref, fullskips)
+        
+    error_counter = np.zeros(compare_reads.RescaledNormal.maxscore, dtype = np.int64)
+    q_counter = np.zeros(compare_reads.RescaledNormal.maxscore, dtype = np.int64)
+    for rd, original in readpairs:
+        rd.errors, rd.skips = error_finder(rd, original)
+        qe, qv = rd.get_q_errors()
+        np.add.at(error_counter, qe, 1)
+        np.add.at(q_counter, qv, 1)
+    return calculate_q(error_counter, q_counter)
 
 def print_benchmark(actual_q, label, nbases):
     """
@@ -168,7 +155,7 @@ def open_bedfile(bedfile):
             bedfh.close()
 
 
-def benchmark(bamfile, fafile, vcffile, fastqfile = None, label = None, use_oq = False, bedfile = None):
+def benchmark(bamfile, fafile, vcffile, fastqfile = None, label = None, use_oq = False, bedfile = None, namedelimiter = '_'):
     """
     Perform the benchmark and print the results to stdout.
 
@@ -182,10 +169,14 @@ def benchmark(bamfile, fafile, vcffile, fastqfile = None, label = None, use_oq =
     ref = get_ref_dict(fafile)
     var_sites = get_var_sites(vcffile)
     with open_bedfile(bedfile) as bedfh:
+        fullskips = get_full_skips(ref, var_sites, bedfh)
+    with pysam.AlignmentFile(bamfile, 'r') as bam:
         if fastqfile is not None:
-            actual_q, nbases = benchmark_fastq(fastqfile, bam, ref, var_sites, bedfh)
+            # bamfh, ref, fullskips, use_oq = False, fastqfh = None, namedelimiter = '_'
+            with pysam.FastxFile(fastqfile) as fastqfh:
+                actual_q, nbases = benchmark_files(bam, ref, fullskips, use_oq, fastqfh, namedelimiter)
             label = (fastqfile if label is None else label)
         else:
-            actual_q, nbases = benchmark_bam(bam, ref, var_sites, use_oq, bedfh)
+            actual_q, nbases = benchmark_files(bam, ref, fullskips, use_oq)
             label = (bamfile if label is None else label)
     print_benchmark(actual_q, label, nbases)

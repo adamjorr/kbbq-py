@@ -19,7 +19,7 @@ def benchmark(args):
     bm.benchmark(bamfile = args.bam, fafile = args.reference,
         vcffile = args.vcf, fastqfile = args.fastq,
         label = args.label, use_oq = args.use_oq,
-        bedfile = args.bedfile)
+        bedfile = args.bedfile, namedelimiter = args.namedelimiter)
 
 def plot(args):
     kbbq.plot.plot_benchmark(fhin = args.file, outfile = args.outfile, plottype = args.type)
@@ -87,6 +87,9 @@ def main():
     benchmark_parser.add_argument('-u', '--use-oq', action = 'store_true', help = oq_help)
     benchmark_parser.add_argument('-d', '--bedfile', required = False,
         help = 'BED file of confident regions. Sites outside the given regions will be skipped.')
+    benchmark_parser.add_argument('-n', '--namedelimiter', required = False,
+        default = '_',
+        help = 'Delimiter for fields in the FASTQ read names; used to look up the read in the BAM file.')
     benchmark_parser.set_defaults(command=benchmark)
 
     #plot command
