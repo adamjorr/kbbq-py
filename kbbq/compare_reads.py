@@ -40,13 +40,13 @@ def print_info(*args, **kwargs):
 
 def load_positions(posfile):
     """
-    Get positions that are covered by a non-zipped BED file.
+    Get positions that are covered by a non-gzipped BED file.
 
     Pass the file name; it will be opened with :func:`python.open`.
     This is slightly different than :func:`benchmark.get_bed_dict`
     because it doesn't require a refdict and only provides a list
     of 0-based positions, not a boolean array of all positions in
-    the reference.
+    the reference. It also doesn't support gzipped files.
     """
     d = dict()
     with open(posfile, 'r') as infh:
