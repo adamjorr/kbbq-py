@@ -17,6 +17,7 @@ import subprocess
 import sys
 import contextlib
 import itertools
+import gzip
 
 def find_corrected_sites(uncorr_read, corr_read):
     """
@@ -129,7 +130,10 @@ def open_outputs(files, output, bams):
                 header['PG'] = header['PG'] + [{'ID' : headerid, 'PN' : 'kbbq', 'CL' : ' '.join(sys.argv), 'VN' : kbbq.__version__}]
             fout = pysam.AlignmentFile(str(o), mode = 'wb', header = header)
         else:
-            fout = open(str(o), mode = 'w')
+            if pathlib.Path(o).suffix == '.gz':
+                fout = gzip.open(str(o), 'w')
+            else:
+                fout = open(str(o), mode = 'wt')
         opened_outputs.append(fout)
     try:
         yield opened_outputs

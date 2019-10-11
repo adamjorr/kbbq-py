@@ -5,6 +5,8 @@ Utilities for benchmarking calibration methods.
 from kbbq import compare_reads
 import pysam
 import numpy as np
+import contextlib
+import gzip
 
 def get_ref_dict(reffilename):
     fasta = pysam.FastaFile(reffilename)
@@ -142,7 +144,30 @@ def print_benchmark(actual_q, label, nbases):
     for pq, aq, nb in zip(predicted_q, actual_q, nbases):
         print(pq, aq, label, nb, sep = "\t")
 
-def benchmark(bamfile, fafile, vcffile, fastqfile = None, label = None, use_oq = False, bedfh = None):
+@contextlib.contextmanager
+def open_bedfile(bedfile):
+    """
+    Attempt to open the given bedfile and return a filehandle.
+
+    If bedfile is None, None will be returned.
+
+    This is a context manager; the file will be closed once it goes out of scope.
+    """
+    if bedfile is None:
+        bedfh = None
+    else:
+        if pathlib.Path(bedfile).suffix == '.gz':
+            bedfh = gzip.open(bedfile, 'r')
+        else:
+            bedfh = open(str(o), mode = 'r')
+    try:
+        yield bedfh
+    finally:
+        if bedfh is not None:
+            bedfh.close()
+
+
+def benchmark(bamfile, fafile, vcffile, fastqfile = None, label = None, use_oq = False, bedfile = None):
     """
     Perform the benchmark and print the results to stdout.
 
@@ -155,6 +180,7 @@ def benchmark(bamfile, fafile, vcffile, fastqfile = None, label = None, use_oq =
     bam = pysam.AlignmentFile(bamfile, 'r')
     ref = get_ref_dict(fafile)
     var_sites = get_var_sites(vcffile)
+    bedfh = open_bedfile(bedfile)
     if fastqfile is not None:
         actual_q, nbases = benchmark_fastq(fastqfile, bam, ref, var_sites, bedfh)
         label = (fastqfile if label is None else label)
