@@ -259,7 +259,9 @@ def recalibrate(files, output, infer_rg = False, use_oq = False, set_oq = False,
         dqs = kbbq.gatk.applybqsr.get_modeldqs_from_covariates(covariates)
         utils.print_info(str(num_error_free), "reads are error free.")
         utils.print_info(str(num_errors), "errors detected.")
-        #TODO: if gatkreport doesn't exist, save the model to it
+        if gatkreport is not None:
+            #TODO: if gatkreport doesn't exist, save the model to it
+            pass
     else:
         #gatkreport provided and exists
         #TODO: update to use new DQ / Covariate API

@@ -97,6 +97,7 @@ def benchmark_fastq(fqfile, bamfile, ref, var_sites, bedfh = None):
     edict = get_error_dict(bamfile, ref, fullskips)
     errors, skips, quals = zip(*(edict[get_fastq_readname(r)] + (np.array(r.get_quality_array()),) for r in pysam.FastxFile(fqfile)))
     #turn list of small arrays into 2d arrays
+    #this uses too much memory
     errors = np.concatenate(errors)
     skips = np.concatenate(skips)
     quals = np.concatenate(quals)
@@ -180,11 +181,11 @@ def benchmark(bamfile, fafile, vcffile, fastqfile = None, label = None, use_oq =
     bam = pysam.AlignmentFile(bamfile, 'r')
     ref = get_ref_dict(fafile)
     var_sites = get_var_sites(vcffile)
-    bedfh = open_bedfile(bedfile)
-    if fastqfile is not None:
-        actual_q, nbases = benchmark_fastq(fastqfile, bam, ref, var_sites, bedfh)
-        label = (fastqfile if label is None else label)
-    else:
-        actual_q, nbases = benchmark_bam(bam, ref, var_sites, use_oq, bedfh)
-        label = (bamfile if label is None else label)
+    with open_bedfile(bedfile) as bedfh:
+        if fastqfile is not None:
+            actual_q, nbases = benchmark_fastq(fastqfile, bam, ref, var_sites, bedfh)
+            label = (fastqfile if label is None else label)
+        else:
+            actual_q, nbases = benchmark_bam(bam, ref, var_sites, use_oq, bedfh)
+            label = (bamfile if label is None else label)
     print_benchmark(actual_q, label, nbases)
