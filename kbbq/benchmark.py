@@ -108,8 +108,8 @@ def benchmark_files(bamfh, ref, fullskips, use_oq = False, fastqfh = None, named
         readpairs = recalibrate.yield_reads(bamfh, use_oq = use_oq)
         error_finder = lambda x, y: compare_reads.find_read_errors(y, ref, fullskips)
         
-    error_counter = np.zeros(compare_reads.RescaledNormal.maxscore, dtype = np.int64)
-    q_counter = np.zeros(compare_reads.RescaledNormal.maxscore, dtype = np.int64)
+    error_counter = np.zeros(compare_reads.RescaledNormal.maxscore + 1, dtype = np.int64)
+    q_counter = np.zeros(compare_reads.RescaledNormal.maxscore + 1, dtype = np.int64)
     for rd, original in readpairs:
         rd.errors, rd.skips = error_finder(rd, original)
         qe, qv = rd.get_q_errors()
