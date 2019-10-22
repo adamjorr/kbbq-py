@@ -177,7 +177,7 @@ class RescaledNormal:
 
     oldset = np.seterr(all = 'raise')
 
-    maxscore = 42
+    maxscore = 93
     """
     The maximum quality score supported by this class.
     """
