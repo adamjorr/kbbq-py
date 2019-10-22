@@ -103,10 +103,10 @@ def benchmark_files(bamfh, ref, fullskips, use_oq = False, fastqfh = None, named
     if fastqfh is not None:
         edict = get_error_dict(bamfile, ref, fullskips)
         readpairs = recalibrate.yield_reads(fastqfh, namedelimiter = namedelimiter)
-        error_finder = lambda x, y: edict.get(y.canonical_name()) #x=ReadData, y=read
+        error_finder = lambda x, y: edict.get(x.canonical_name()) #x=ReadData, y=read
     else:
         readpairs = recalibrate.yield_reads(bamfh, use_oq = use_oq)
-        error_finder = lambda x, y: compare_reads.find_read_errors(x, ref, fullskips)
+        error_finder = lambda x, y: compare_reads.find_read_errors(y, ref, fullskips)
         
     error_counter = np.zeros(compare_reads.RescaledNormal.maxscore, dtype = np.int64)
     q_counter = np.zeros(compare_reads.RescaledNormal.maxscore, dtype = np.int64)
