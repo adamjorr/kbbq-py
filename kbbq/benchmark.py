@@ -7,6 +7,7 @@ from kbbq import read
 from kbbq import recalibrate
 import pysam
 import numpy as np
+import pathlib
 import contextlib
 import gzip
 
