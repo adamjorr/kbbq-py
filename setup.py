@@ -33,7 +33,7 @@ setuptools.setup(
     install_requires=install_requires,
     entry_points={
         'console_scripts': [
-            'kbbq=kbbq.main:main'
+            'kbbq=kbbq.__main__:main'
         ]
     }
 )

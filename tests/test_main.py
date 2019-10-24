@@ -1,9 +1,9 @@
 import pytest
 import sys
-import kbbq.main
+import kbbq.__main__
 
 def test_no_args(monkeypatch, capfd):
-    import kbbq.main
+    import kbbq.__main__
     with monkeypatch.context() as m:
         m.setattr(sys, 'argv', [sys.argv[0]])
         kbbq.main.main()
