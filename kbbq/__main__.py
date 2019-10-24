@@ -30,7 +30,7 @@ def main():
     subparsers = parser.add_subparsers(title='command', description="valid commands")
     
     #help
-    helpfn = lambda args: parser.print_help
+    helpfn = lambda args: parser.print_help()
     parser.set_defaults(command = helpfn) #no args will print help information
     help_parser = subparsers.add_parser('help', description = 'Print help information')
     help_parser.set_defaults(command = helpfn)
