@@ -1,6 +1,6 @@
 import pytest
 import kbbq.plot
-import kbbq.main
+import kbbq.__main__
 import sys
 
 def test_benchmark_plot(monkeypatch, benchmarkfile, tmp_path):
@@ -11,7 +11,7 @@ def test_benchmark_plot(monkeypatch, benchmarkfile, tmp_path):
     outfile = tmp_path / 'plot.pdf'
     with monkeypatch.context() as m:
         m.setattr(sys, 'argv', [sys.argv[0],'plot', '-o', str(outfile), benchmarkfile])
-        kbbq.main.main()
+        kbbq.__main__.main()
     assert outfile.stat().st_size > 0
 
 def test_benchmark_plot_samplesize(monkeypatch, benchmarkfile, tmp_path):
@@ -23,7 +23,7 @@ def test_benchmark_plot_samplesize(monkeypatch, benchmarkfile, tmp_path):
     with monkeypatch.context() as m:
         m.setattr(sys, 'argv', [sys.argv[0],'plot', '-t', 'sample-size',
             '-o', str(outfile), benchmarkfile])
-        kbbq.main.main()
+        kbbq.__main__.main()
     assert outfile.stat().st_size > 0
 
 def test_plot_benchmark_invalid_type():

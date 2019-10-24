@@ -1,6 +1,6 @@
 import pytest
 from test_compare_reads import FakeRead, bamread_to_fakeread
-import kbbq.main
+import kbbq.__main__
 from kbbq import recalibrate
 from kbbq import compare_reads
 import pysam
@@ -122,14 +122,14 @@ def test_recalibrate_main(uncorr_and_corr_fastq_files, monkeypatch, capfd):
     import sys
     with monkeypatch.context() as m:
         m.setattr(sys, 'argv', [sys.argv[0]] + ["recalibrate",'-f'] + list(uncorr_and_corr_fastq_files) )
-        kbbq.main.main()
+        kbbq.__main__.main()
     captured = capfd.readouterr()
     assert captured.out == str(correct_read) + '\n'
 
     with pytest.raises(NotImplementedError), monkeypatch.context() as m:
         m.setattr(sys, 'argv', [sys.argv[0]] + ["recalibrate",'-b', 'foo'])
-        kbbq.main.main()
+        kbbq.__main__.main()
 
     with pytest.raises(NotImplementedError), monkeypatch.context() as m:
         m.setattr(sys, 'argv', [sys.argv[0]] + ["recalibrate",'-b', 'foo', '-g', 'bar'])
-        kbbq.main.main()
+        kbbq.__main__.main()

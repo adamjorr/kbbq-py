@@ -1,5 +1,5 @@
 import pytest
-import kbbq.main
+import kbbq.__main__
 import kbbq.benchmark as benchmark
 import numpy as np
 import pysam
@@ -160,13 +160,13 @@ def test_benchmark_main(simple_bam, simple_fasta, simple_vcf, simple_bed, simple
     import sys
     with monkeypatch.context() as m:
         m.setattr(sys, 'argv', [sys.argv[0]] + ["benchmark",'-b', simple_bam, '-r', simple_fasta, '-v', simple_vcf, '-d', simple_bed, '--label=test'])
-        kbbq.main.main()
+        kbbq.__main__.main()
     captured = capfd.readouterr()
     assert captured.out == correct_benchmark
 
     with monkeypatch.context() as m:
         m.setattr(sys, 'argv', [sys.argv[0]] + ["benchmark",'-b', simple_bam, '-r', simple_fasta, '-v', simple_vcf, '-d', simple_bed, '--label=test', '-f', simple_fastq])
-        kbbq.main.main()
+        kbbq.__main__.main()
     captured = capfd.readouterr()
     assert captured.out == correct_benchmark
 
@@ -180,11 +180,11 @@ def test_benchmarks_main_big(monkeypatch, capfd):
     import sys
     with monkeypatch.context() as m:
         m.setattr(sys, 'argv', [sys.argv[0]] + "benchmark -b tests/data/conf_regions.bam -r tests/data/ref.fa -v tests/data/conf_regions.vcf.gz --label=label --use-oq".split())
-        kbbq.main.main()
+        kbbq.__main__.main()
     bam_captured = capfd.readouterr()
 
     with monkeypatch.context() as m:
         m.setattr(sys, 'argv', [sys.argv[0]] + "benchmark -b tests/data/conf_regions.bam -r tests/data/ref.fa -v tests/data/conf_regions.vcf.gz --label=label -f tests/data/allreads.fq".split())
-        kbbq.main.main()
+        kbbq.__main__.main()
     fastq_captured = capfd.readouterr()
     assert bam_captured.out == fastq_captured.out
