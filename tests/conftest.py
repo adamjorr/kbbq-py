@@ -30,15 +30,16 @@ def uncalibratedbam(request):
     import pysam
     return pysam.AlignmentFile(request.param,"r")
 
+@pytest.mark.slow
 @pytest.fixture(params = [
     ["tests/data/conf_regions.bam", "tests/data/ref.fa", "tests/data/conf_regions.vcf.gz"]
     ])
 def benchmarkfile(request, monkeypatch, tmp_path, capfd):
     import sys
-    import kbbq
+    import kbbq.__main__
     with monkeypatch.context() as m:
         m.setattr(sys, 'argv', [sys.argv[0]] + f"benchmark -b {request.param[0]} -r {request.param[1]} -v {request.param[2]} --label=label --use-oq".split())
-        kbbq.main.main()
+        kbbq.__main__.main()
     p = tmp_path / 'benchmark.txt'
     p.write_text(capfd.readouterr().out)
     return str(p)

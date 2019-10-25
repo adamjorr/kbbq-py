@@ -66,15 +66,9 @@ def get_error_dict(bamfile, refdict, fullskips):
     The returned dict has readname keys and tuple(np.array, np.array) of bools as values.
     """
     edict = dict()
-    for read in bamfile:
-        name = get_bam_readname(read)
-        e, s = compare_reads.find_read_errors(read, refdict, fullskips)
-        #we have to reverse e and s because the samtools fastq command will
-        #automatically reverse them, causing the values from the fastq to 
-        #not match up.
-        if read.is_reverse:
-            e = np.flip(e)
-            s = np.flip(s)
+    for rd, original in recalibrate.yield_reads(bamfile):
+        name = rd.canonical_name()
+        e, s = compare_reads.find_read_errors(original, refdict, fullskips)
         edict[name] = (e,s)
     return edict
 
@@ -101,7 +95,7 @@ def benchmark_files(bamfh, ref, fullskips, use_oq = False, fastqfh = None, named
     Otherwise, names from the fastq files will be used to look up
     """
     if fastqfh is not None:
-        edict = get_error_dict(bamfile, ref, fullskips)
+        edict = get_error_dict(bamfh, ref, fullskips)
         readpairs = recalibrate.yield_reads(fastqfh, namedelimiter = namedelimiter)
         error_finder = lambda x, y: edict.get(x.canonical_name()) #x=ReadData, y=read
     else:
@@ -148,7 +142,7 @@ def open_bedfile(bedfile):
         if pathlib.Path(bedfile).suffix == '.gz':
             bedfh = gzip.open(bedfile, 'r')
         else:
-            bedfh = open(str(o), mode = 'r')
+            bedfh = open(str(bedfile), mode = 'r')
     try:
         yield bedfh
     finally:

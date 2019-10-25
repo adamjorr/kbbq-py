@@ -3,7 +3,8 @@ import kbbq.plot
 import kbbq.__main__
 import sys
 
-def test_benchmark_plot(monkeypatch, benchmarkfile, tmp_path):
+@pytest.mark.slow
+def test_plot_benchmark(monkeypatch, benchmarkfile, tmp_path):
     """
     Testing that the output file is actually written to is probably
     the best we can do. No telling if the plot actually makes sense...
@@ -14,7 +15,8 @@ def test_benchmark_plot(monkeypatch, benchmarkfile, tmp_path):
         kbbq.__main__.main()
     assert outfile.stat().st_size > 0
 
-def test_benchmark_plot_samplesize(monkeypatch, benchmarkfile, tmp_path):
+@pytest.mark.slow
+def test_plot_benchmark_samplesize(monkeypatch, benchmarkfile, tmp_path):
     """
     Testing that the output file is actually written to is probably
     the best we can do. No telling if the plot actually makes sense...

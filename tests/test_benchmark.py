@@ -1,6 +1,7 @@
 import pytest
 import kbbq.__main__
 import kbbq.benchmark as benchmark
+import kbbq.compare_reads
 import numpy as np
 import pysam
 
@@ -50,7 +51,6 @@ def test_get_error_dict(simple_error_dict):
     r1skips[0:2] = True #from BED
     r2errs = np.zeros(9, dtype = np.bool)
     r2errs[5] = True
-    r2errs = np.flip(r2errs) #since r2 is revcomped
     correct = {'r001/1' : (np.zeros(17, dtype = np.bool), r1skips),
         'r001/2' : (r2errs, np.zeros(9, dtype = np.bool))}
 
@@ -60,15 +60,14 @@ def test_get_error_dict(simple_error_dict):
             assert np.array_equal(a, b)
 
 def test_calculate_q():
-    errors = np.array([False, True, True] + [False] * 100)
-    quals = np.array([3, 2, 1] + [1] * 100, dtype = np.int)
     actual = np.array([0, 20, 0, 42], dtype = np.int)
+    errors = np.array([0,1,1,0], dtype = np.int)
     total = np.array([0,101,1,1], dtype = np.int)
-    a, t = benchmark.calculate_q(errors, quals)
+    a, t = benchmark.calculate_q(errors, total)
     assert np.array_equal(a, actual)
     assert np.array_equal(t, total)
 
-def test_benchmark_fastq(simple_fastq, simple_bam, simple_refdict, simple_varsites, simple_bedfh):
+def test_benchmark_files_fastq(simple_fastq, simple_bam, simple_refdict, simple_varsites, simple_fullskips):
     #r2errs[5] = True
     # r1skips[3] = True #from vcf
     # r1skips[0:2] = True #from BED
@@ -79,37 +78,34 @@ def test_benchmark_fastq(simple_fastq, simple_bam, simple_refdict, simple_varsit
     # [29, 27, 29, 30, 30, 30, 29, 29, 29]
     q = np.array([24, 28, 30, 27,  9, 10, 14, 20, 25, 31, 32, 24, 24, 25] +
         [29, 27, 29, 30, 30, 30, 29, 29, 29], dtype = np.int)
-    e = np.array([False] * 19 + [True] + [False] * 3, dtype = np.bool)
+    # e = np.array([False] * 19 + [True] + [False] * 3, dtype = np.bool)
+    e = np.zeros(kbbq.compare_reads.RescaledNormal.maxscore + 1, dtype = np.int)
+    e[30] = 1
+    t = np.zeros(kbbq.compare_reads.RescaledNormal.maxscore + 1, dtype = np.int)
+    np.add.at(t, q, 1)
     # errs = 30
     # Totals: 24 = 3, 28 = 1, 30 = 4, 27 = 2, 9 = 1, 10 = 1
     # 14 = 1, 20 = 1, 25 = 2, 31 = 1, 32 = 1, 29 = 5
-    bench_q, bench_t = benchmark.benchmark_fastq(simple_fastq, pysam.AlignmentFile(simple_bam), simple_refdict,
-        simple_varsites, simple_bedfh)
-    correct_q, correct_t = benchmark.calculate_q(e, q)
+    bench_q, bench_t = benchmark.benchmark_files(pysam.AlignmentFile(simple_bam), simple_refdict,
+        simple_fullskips, fastqfh = pysam.FastxFile(simple_fastq,'r'))
+    correct_q, correct_t = benchmark.calculate_q(e, t)
+    print(correct_q)
+    print(bench_q)
     assert np.array_equal(bench_q, correct_q)
     assert np.array_equal(bench_t, correct_t)
 
-def test_get_bamread_quals(simple_bam):
-    bam = pysam.AlignmentFile(simple_bam,'rb')
-    reads = list(bam)
-    assert np.array_equal(benchmark.get_bamread_quals(reads[0]),
-        np.array([28, 28, 24, 24, 28, 30, 27,  9, 10, 14, 20, 25, 31, 32, 24, 24, 25],
-            dtype = np.int))
-    assert np.array_equal(benchmark.get_bamread_quals(reads[1]),
-        np.array([29, 27, 29, 30, 30, 30, 29, 29, 29], dtype = np.int))
-    reads[0].set_tag('OQ','!"#$%&\'()*+,-./01')
-    reads[1].set_tag('OQ','!"#$%&\'()')
-    assert np.array_equal(benchmark.get_bamread_quals(reads[0], use_oq = True), np.arange(17))
-    assert np.array_equal(benchmark.get_bamread_quals(reads[1], use_oq = True), np.arange(9))
-
-def test_benchmark_bam(simple_bam, simple_refdict, simple_varsites, simple_bedfh):
-    #see test_benchmark_fastq
+def test_benchmark_files_bam(simple_bam, simple_refdict, simple_varsites, simple_fullskips):
+    #see test_benchmark_files_fastq
     q = np.array([24, 28, 30, 27,  9, 10, 14, 20, 25, 31, 32, 24, 24, 25] +
         [29, 27, 29, 30, 30, 30, 29, 29, 29], dtype = np.int)
-    e = np.array([False] * 19 + [True] + [False] * 3, dtype = np.bool)
-    bench_q, bench_t = benchmark.benchmark_bam(pysam.AlignmentFile(simple_bam), simple_refdict,
-        simple_varsites, bedfh = simple_bedfh)
-    correct_q, correct_t = benchmark.calculate_q(e, q)
+    # e = np.array([False] * 19 + [True] + [False] * 3, dtype = np.bool)
+    e = np.zeros(kbbq.compare_reads.RescaledNormal.maxscore + 1, dtype = np.int)
+    e[30] = 1
+    t = np.zeros(kbbq.compare_reads.RescaledNormal.maxscore + 1, dtype = np.int)
+    np.add.at(t, q, 1)
+    bench_q, bench_t = benchmark.benchmark_files(pysam.AlignmentFile(simple_bam), simple_refdict,
+        simple_fullskips)
+    correct_q, correct_t = benchmark.calculate_q(e, t)
     assert np.array_equal(bench_q, correct_q)
     assert np.array_equal(bench_t, correct_t)
 
@@ -135,9 +131,9 @@ correct_benchmark = "9\t42\ttest\t1\n" +\
     "31\t42\ttest\t1\n" +\
     "32\t42\ttest\t1\n"
 
-def test_benchmark(simple_bam, simple_fastq, simple_fasta, simple_vcf, simple_bedfh, capfd):
+def test_benchmark(simple_bam, simple_fastq, simple_fasta, simple_vcf, simple_bed, capfd):
     benchmark.benchmark(simple_bam, simple_fasta, simple_vcf, label = 'test',
-        bedfh = simple_bedfh)
+        bedfile = simple_bed)
     captured = capfd.readouterr()
     assert captured.out == correct_benchmark
     #q = np.array([24, 28, 30, 27,  9, 10, 14, 20, 25, 31, 32, 24, 24, 25] +
@@ -150,9 +146,8 @@ def test_benchmark(simple_bam, simple_fastq, simple_fasta, simple_vcf, simple_be
     #correct t
     #[0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 0, 0, 0, 1, 0, 0, 0, 0, 0, 1, 0,
     # 0, 0, 3, 2, 0, 2, 1, 5, 4, 1, 1]
-    simple_bedfh.seek(0)
     benchmark.benchmark(simple_bam, simple_fasta, simple_vcf, fastqfile = simple_fastq,
-        label = 'test', use_oq = False, bedfh = simple_bedfh)
+        label = 'test', use_oq = False, bedfile = simple_bed)
     captured = capfd.readouterr()
     assert captured.out == correct_benchmark
 
