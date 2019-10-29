@@ -123,7 +123,7 @@ def test_find_read_errors(simple_bam, simple_refdict, simple_fullskips):
 
 def test_RescaledNormal_prior():
     assert compare_reads.RescaledNormal.prior(0) == np.log(.9)
-    assert np.array_equal(compare_reads.RescaledNormal.prior(np.arange(43)),
+    assert np.array_equal(compare_reads.RescaledNormal.prior(np.arange(94)),
         compare_reads.RescaledNormal.prior_dist)
     assert np.all(compare_reads.RescaledNormal.prior_dist < 0) # 0 <= p <= 1
 

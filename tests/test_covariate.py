@@ -86,9 +86,10 @@ def test_rgcovariate_consume_read(exreaddata):
 
     test = covariate.RGCovariate()
     res = test.consume_read(r)
-    assert np.array_equal(res[0], np.array([0]))
-    assert np.array_equal(res[1], np.array([0,0]))
-    assert test[0] == (1,2)
+    rg = read.ReadData.rg_to_int[0]
+    assert np.array_equal(res[0], np.array([rg]))
+    assert np.array_equal(res[1], np.array([rg] * 2))
+    assert test[rg] == (1,2)
 
 def test_rgcovariate_num_rgs():
     test = covariate.RGCovariate()
