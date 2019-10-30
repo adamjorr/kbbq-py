@@ -45,8 +45,11 @@ def recalibrate_read(read, dqs, minscore = 6):
     qcov = qcov[valid_positions]
     cycle = read.get_cycle_array()[valid_positions]
     dinuc = read.get_dinucleotide_array()[valid_positions]
-    recalibrated_quals[valid_positions] = (meanq[rg] + globaldeltaq[rg] +\
-        qscoredeltaq[rg, qcov] + dinucdeltaq[rg, qcov, dinuc] +\
+    recalibrated_quals[valid_positions] = (
+        meanq[rg] +\
+        globaldeltaq[rg] +\
+        qscoredeltaq[rg, qcov] +\
+        dinucdeltaq[rg, qcov, dinuc] +\
         cycledeltaq[rg, qcov, cycle]).astype(np.int)
     recalibrated_quals = np.clip(recalibrated_quals, 0, utils.RescaledNormal.maxscore)
     return recalibrated_quals
@@ -57,12 +60,12 @@ def recalibrate_fastq(fastq, dqs, out, infer_rg = False):
     :class:`CovariateData` dqs. Out should be a file-like object.
     """
     rg = fastq if infer_rg is False else None
-    with pysam.FastxFile(uncorr) as fin:
+    with pysam.FastxFile(fastq) as fin:
         for fqread in fin:
             r = kbbq.read.ReadData.from_fastq(fqread, rg = rg)
             recalibrated_quals = recalibrate_read(r, dqs)
-            fqread.quality = list(recalibrated_quals)
-            out.write(str(fqread))
+            fqread.quality = utils.nparray_to_qualitystring(recalibrated_quals)
+            out.write(str(fqread) + '\n')
 
 def find_covariates(read_sources):
     """

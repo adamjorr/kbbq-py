@@ -190,6 +190,9 @@ class Covariate():
         self.errors[key] = value[0]
         self.total[key] = value[1]
 
+    def __str__(self):
+        return "E: " + str(self.errors) + '\n' + "T: " + str(self.total)
+
 class RGCovariate(Covariate):
     """
     A 1d covariate array in the read group dimension.
@@ -288,6 +291,9 @@ class QCovariate(Covariate):
         :type: int
         """
         return self.shape()[1]
+
+    def __str__(self):
+        return "RG:" + str(self.rgcov) + "\nQ:" + super().__str__()
 
 class CycleCovariate(Covariate):
     """
@@ -475,3 +481,5 @@ class CovariateData():
         """
         return self.dinuccov.num_dinucs()
 
+    def __str__(self):
+        return "\n".join([str(self.qcov), str(self.cyclecov), str(self.dinuccov)])
