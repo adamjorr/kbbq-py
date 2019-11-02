@@ -13,7 +13,8 @@ import sys
 def recalibrate(args):
     re.recalibrate(files = args.input, output = args.output, infer_rg = args.infer_rg,
         use_oq = args.use_oq, set_oq = args.set_oq, ksize = args.ksize,
-        memory = args.memory, alpha = args.alpha, gatkreport = args.gatkreport)
+        memory = args.memory, alpha = args.alpha, gatkreport = args.gatkreport,
+        corrected = args.corrected)
 
 def benchmark(args):
     bm.benchmark(bamfile = args.bam, fafile = args.reference,
@@ -69,10 +70,13 @@ def main():
         false positive rate is too high, increase the amount of memory available.")
     recalibrate_parser.add_argument('-a','--alpha', type = float, default = .1,
         required = False, help = "K-mer sampling rate to use.")
+    recalibrate_parser.add_argument('-c','--corrected', action = 'append', required = False,
+        help = "Corrected files. Should contain reads in the same order as the input files,\
+            but differences will be interpreted as errors for building the model.\
+            Specify as many times as input.")
     recalibrate_parser.add_argument('input', nargs = '+',
         help = 'Input files. Should be SAM, BAM, FASTQ or FASTA format. \
         Must not be a pipe.')
-    #TODO: gatkreport
     recalibrate_parser.set_defaults(command=recalibrate)
 
     #benchmark command

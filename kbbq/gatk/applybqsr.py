@@ -170,6 +170,26 @@ def get_delta_qs(meanq, rg_errs, rg_total, q_errs, q_total, pos_errs, pos_total,
 ModelDQs = collections.namedtuple('ModelDQs', ['mean','rg','q','cycle','dinuc'],
     module = __name__)
 
+def get_modelvecs_from_covariates(covariates):
+    """
+    Find the model vectors given covariate data.
+
+    The model vectors are: meanq, global_errs, global_total, q_errs, q_total,
+    pos_errs, pos_total, dinuc_errs, dinuc_total
+
+    :param covariates: covariate data
+    :type covariates: :class:`CovariateData`
+    :returns: model vectors
+    :rtype: tuple(:class:`numpy.ndarray`)
+    """
+    expected_errs = np.sum(utils.q_to_p(np.arange(covariates.qcov.num_qs()))[np.newaxis,:] * covariates.qcov.total, axis = 1)
+    meanq = utils.p_to_q(expected_errs / covariates.qcov.rgcov.total)
+    global_errs, global_total = covariates.qcov.rgcov.errors, covariates.qcov.rgcov.total
+    q_errs, q_total = covariates.qcov.errors, covariates.qcov.total
+    pos_errs, pos_total = covariates.cyclecov.errors, covariates.cyclecov.total
+    dinuc_errs, dinuc_total = covariates.dinuccov.errors, covariates.dinuccov.total
+    return meanq, global_errs, global_total, q_errs, q_total, pos_errs, pos_total, dinuc_errs, dinuc_total
+
 def get_modeldqs_from_covariates(covariates):
     """
     Find the covariate delta Q's given covariate data.
