@@ -11,10 +11,9 @@ import sys
 #helper commands that pass arguments to the proper functions
 
 def recalibrate(args):
-    re.recalibrate(files = args.input, output = args.output, infer_rg = args.infer_rg,
+    re.recalibrate(files = args.input, output = args.output, corrected = args.corrected, infer_rg = args.infer_rg,
         use_oq = args.use_oq, set_oq = args.set_oq, ksize = args.ksize,
-        memory = args.memory, alpha = args.alpha, gatkreport = args.gatkreport,
-        corrected = args.corrected)
+        memory = args.memory, alpha = args.alpha, gatkreport = args.gatkreport)
 
 def benchmark(args):
     bm.benchmark(bamfile = args.bam, fafile = args.reference,

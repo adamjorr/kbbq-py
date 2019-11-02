@@ -185,7 +185,7 @@ def generate_reads_from_files(files, bams, infer_rg = False, use_oq = False):
         for f in opened_files:
             f.close()
 
-def recalibrate(files, output, infer_rg = False, use_oq = False, set_oq = False, ksize = 32, memory = '3G', alpha = .1, gatkreport = None, corrected):
+def recalibrate(files, output, corrected, infer_rg = False, use_oq = False, set_oq = False, ksize = 32, memory = '3G', alpha = .1, gatkreport = None):
     #make these options later
     if output == []:
         output = [str(i.with_name(i.stem + '.kbbq' + i.suffix)) for i in [pathlib.Path(f) for f in files ]]
@@ -197,6 +197,8 @@ def recalibrate(files, output, infer_rg = False, use_oq = False, set_oq = False,
     if corrected != []:
         if len(files) != len(corrected):
             raise ValueError('One corrected file must be specified for each input.')
+        validate_files(corrected)
+        corrected_bams = [opens_as_bam(i) for i in corrected]
 
     if gatkreport is None or not pathlib.Path(gatkreport).is_file():
         #gatkreport not provided or the provided report doesn't exist
