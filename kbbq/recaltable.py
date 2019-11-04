@@ -465,7 +465,7 @@ class RecalibrationReport(GATKReport):
         self.tables[0].data = self.tables[0].data.set_index('Argument')
         self.tables[1].data = self.tables[1].data.astype({'QualityScore' : np.int, 'Count' : np.longlong, 'QuantizedScore' : np.int })
         self.tables[1].data = self.tables[1].data.set_index('QualityScore')
-        #self.tables[2].data = self.tables[2].data.astype(typer, errors = 'ignore')
+        self.tables[2].data = self.tables[2].data.astype({'Observations' : np.int})
         self.tables[2].data = self.tables[2].data.set_index('ReadGroup')
         #typer.pop('EstimatedQReported')
         #typer.update({'QualityScore' : np.int_})

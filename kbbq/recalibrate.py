@@ -6,6 +6,7 @@ import kbbq
 from kbbq import compare_reads as utils
 from kbbq import recaltable
 import kbbq.gatk.applybqsr
+import kbbq.gatk.bqsr
 import kbbq.read
 import kbbq.covariate
 import kbbq.bloom
@@ -211,6 +212,7 @@ def recalibrate(files, output, corrected, infer_rg = False, use_oq = False, set_
                 for (read, original), (corrected, original_c) in zip(itertools.chain.from_iterable(allreaddata), itertools.chain.from_iterable(correcteadreaddata)): #a single ReadData generator
                     read.errors = find_corrected_sites(read, corrected)
                     covariates.consume_read(read)
+            dqs = kbbq.gatk.applybqsr.get_modeldqs_from_covariates(covariates)
 
         else:
             utils.print_info("Loading hash")
@@ -281,9 +283,9 @@ def recalibrate(files, output, corrected, infer_rg = False, use_oq = False, set_
             utils.print_info(str(num_errors), "errors detected.")
         if gatkreport is not None:
             #if gatkreport doesn't exist, save the model to it
-            report = kbbq.bqsr.vectors_to_report(*kbbq.gatk.applybqsr.get_modelvecs_from_covariates(covariates), rg_order = list(kbbq.read.ReadData.rg_to_pu.values()))
+            report = kbbq.gatk.bqsr.vectors_to_report(*kbbq.gatk.applybqsr.get_modelvecs_from_covariates(covariates), rg_order = list(kbbq.read.ReadData.rg_to_pu.values()))
             report.write(gatkreport)
-                
+
     else:
         #gatkreport provided and exists
         #TODO: update to use new DQ / Covariate API
