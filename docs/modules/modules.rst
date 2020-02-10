@@ -51,3 +51,24 @@ kbbq.covariate
 .. automodule:: kbbq.covariate
 	:members:
 	:undoc-members:
+
+kbbq.gatk
+---------
+
+.. automodule:: kbbq.gatk
+    :members:
+    :undoc-members:
+
+kbbq.gatk.bqsr
+-------------------
+
+.. automodule:: kbbq.gatk.bqsr
+	:members:
+	:undoc-members:
+
+kbbq.gatk.applybqsr
+-------------------
+
+.. automodule:: kbbq.gatk.applybqsr
+	:members:
+	:undoc-members:
