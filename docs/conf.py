@@ -179,7 +179,7 @@ epub_exclude_files = ['search.html']
 
 # -- Extension configuration -------------------------------------------------
 autodoc_default_options = {
-    'members' : True,
+    'members' : None,
     'undoc-members' : None,
     'member-order' : 'groupwise',
     'special-members' : '__init__,__str__,__len__,__getitem__,__setitem__',
