@@ -12,7 +12,7 @@ Nodegraph.load(filename) loads from filename
 Nodegraph.hash(kmer) returns the hash of the k-mer
 Nodegraph.get_kmer_hashes(kmer) hashes each k
 khmer.calc_expected_collisions(nodegraph, force = False, max_false_pos = .15) will return false positive rate and issue a warning if it's too high.
-    when force is true, don't exit if false positive is higher than max.
+when force is true, don't exit if false positive is higher than max.
 #may also want to try a Nodetable at some point. It should have the same fns.
 
 ksize = 32
@@ -20,6 +20,7 @@ maxmem = khmer.khmer_args.memory_setting('8G')
 fake_args = namedtuple(max_memory_usage = maxmem, n_tables = 4)
 tablesize = calculate_graphsize(fake_args, 'nodegraph', multiplier = 1.0)
 nodegraph = khmer.Nodegraph(ksize, tablesize, fake_args.n_tables) 
+
 """
 
 import khmer

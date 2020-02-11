@@ -1,7 +1,4 @@
 """
-kbbq
-====
-
 A package for reference-free base quality score recalibration.
 """
 

@@ -1,8 +1,11 @@
 Module Reference
-================
+################
 
 .. contents::
 	:local:
+
+kbbq
+====
 
 .. automodule:: kbbq
     :members:
@@ -60,15 +63,29 @@ kbbq.gatk
     :undoc-members:
 
 kbbq.gatk.bqsr
--------------------
+**************
 
 .. automodule:: kbbq.gatk.bqsr
 	:members:
 	:undoc-members:
 
 kbbq.gatk.applybqsr
--------------------
+*******************
 
 .. automodule:: kbbq.gatk.applybqsr
+	:members:
+	:undoc-members:
+
+kbbq.bloom
+----------
+
+.. automodule:: kbbq.bloom
+	:members:
+	:undoc-members:
+
+kbbq.recalibrate
+----------------
+
+.. automodule:: kbbq.recalibrate
 	:members:
 	:undoc-members:
