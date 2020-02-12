@@ -201,6 +201,8 @@ class ReadData():
         Load read group IDs and PUs from the header of the
         pysam bamfileobj.
 
+        TODO: figure out what to do with this when there are no read groups in the header.
+
         Recalibration is done on a PU basis, so when building
         a model using reads in a BAM, the PU for each read is
         obtained by looking up the PU associated with its read

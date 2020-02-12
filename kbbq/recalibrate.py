@@ -74,7 +74,7 @@ def find_covariates(read_sources):
     them into a :class:`kbbq.covariate.CovariateData` object.
     """
     data = kbbq.covariate.CovariateData()
-    for r in itertools.chain.from_iterables(read_sources):
+    for r in itertools.chain.from_iterable(read_sources):
         data.consume_read(r)
     return data
 

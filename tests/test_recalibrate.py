@@ -31,6 +31,15 @@ def small_fq_read():
     return fqr
 
 @pytest.fixture()
+def small_fq_read_with_rg(small_fq_read):
+    small_fq_read.name = small_fq_read.name + '/1_RG:Z:bar'
+    return small_fq_read
+
+@pytest.fixture()
+def small_read_with_rg(small_fq_read_with_rg):
+    return kbbq.read.ReadData.from_fastq(small_fq_read_with_rg)
+
+@pytest.fixture()
 def small_fq_file(small_fq_read, tmp_path):
     small_fastq = tmp_path / 'small.fq'
     with small_fastq.open('w') as f:
@@ -38,84 +47,109 @@ def small_fq_file(small_fq_read, tmp_path):
     return str(small_fastq)
 
 @pytest.fixture()
-def small_fq_file_with_rg(small_fq_read, tmp_path):
+def small_read(small_fq_read, small_fq_file):
+    return kbbq.read.ReadData.from_fastq(small_fq_read, rg = small_fq_file)
+
+@pytest.fixture()
+def small_fq_file_with_rg(small_fq_read_with_rg, tmp_path):
     small_fastq = tmp_path / 'small_with_rg.fq'
-    small_fq_read.name = small_fq_read.name + '/1_RG:Z:bar'
     with small_fastq.open('w') as f:
-        f.write(str(small_fq_read))
+        f.write(str(small_fq_read_with_rg))
     return str(small_fastq)
 
 #this read is used below
-correct_read = pysam.FastxRecord(
+@pytest.fixture()
+def correct_read():
+    return pysam.FastxRecord(
         name = 'foo',
         sequence = 'ATG',
         quality = '\'\'#') #6, 6, 2
 
-correct_read_with_rg = pysam.FastxRecord(
+@pytest.fixture()
+def correct_read_with_rg():
+    return pysam.FastxRecord(
         name = 'foo/1_RG:Z:bar',
         sequence = 'ATG',
         quality = '\'\'#')
 
-def test_recalibrate_fastq(small_fq_file, small_fq_read, tmp_path):
+@pytest.fixture()
+def small_fq_dqs(small_read):
+    small_read.errors[1] = True
+    small_read.skips[small_read.qual < 6] = True
     covariates = kbbq.covariate.CovariateData()
-    sfq = kbbq.read.ReadData.from_fastq(small_fq_read, rg = small_fq_file)
-    sfq.errors[1] = True
-    sfq.skips[sfq.qual < 6] = True
-    covariates.consume_read(sfq)
-    dqs = kbbq.gatk.applybqsr.get_modeldqs_from_covariates(covariates)
-    out = tmp_path / 'out.txt'
+    covariates.consume_read(small_read)
+    return kbbq.gatk.applybqsr.get_modeldqs_from_covariates(covariates)
 
+@pytest.fixture()
+def small_fq_dqs_with_rg(small_read_with_rg):
+    small_read_with_rg.errors[1] = True
+    small_read_with_rg.skips[small_read_with_rg.qual < 6] = True
+    covariates = kbbq.covariate.CovariateData()
+    covariates.consume_read(small_read_with_rg)
+    return kbbq.gatk.applybqsr.get_modeldqs_from_covariates(covariates)
+
+def test_recalibrate_read(small_read_with_rg, small_fq_dqs_with_rg, correct_read_with_rg):
+    assert np.array_equal(kbbq.recalibrate.recalibrate_read(small_read_with_rg, small_fq_dqs_with_rg),
+        np.array(pysam.qualitystring_to_array(correct_read_with_rg.quality)))
+
+def test_recalibrate_fastq(small_fq_file, small_fq_dqs, correct_read, tmp_path):
+    out = tmp_path / 'out.txt'
     with out.open('w') as f:
-        recalibrate.recalibrate_fastq(small_fq_file, dqs, f)
+        recalibrate.recalibrate_fastq(small_fq_file, small_fq_dqs, f)
     with out.open('r') as f:
         assert f.read() == str(correct_read) + '\n'
 
-def test_recalibrate_fastq_with_rg(small_fq_file_with_rg, small_fq_read, tmp_path):
+def test_recalibrate_fastq_with_rg(small_fq_file_with_rg, small_fq_dqs_with_rg, correct_read_with_rg, tmp_path):
     #now test with infer_rg = True
-    covariates = kbbq.covariate.CovariateData()
-    sfq = kbbq.read.ReadData.from_fastq(small_fq_read)
-    sfq.errors[1] = True
-    sfq.skips[sfq.qual < 6] = True
-    covariates.consume_read(sfq)
-    dqs = kbbq.gatk.applybqsr.get_modeldqs_from_covariates(covariates)
     out = tmp_path / 'out.txt'
     with out.open('w') as f:
-        recalibrate.recalibrate_fastq(small_fq_file_with_rg, dqs, f, infer_rg = True)
+        recalibrate.recalibrate_fastq(small_fq_file_with_rg, small_fq_dqs_with_rg, f, infer_rg = True)
     with out.open('r') as f:
         assert f.read() == str(correct_read_with_rg) + '\n'    
 
     #TODO: we may want test 1000x this read to see a more realistic example
 
-def test_recalibrate_bam():
-    with pytest.raises(NotImplementedError):
-        recalibrate.recalibrate_bam(None)
+def test_find_covariates(small_read):
+    correct = kbbq.covariate.CovariateData()
+    correct.consume_read(small_read)
+    cov = kbbq.recalibrate.find_covariates([[small_read]])
+    assert cov == correct
 
-def test_recalibrate(uncorr_and_corr_fastq_files, capfd):
-    recalibrate.recalibrate(bam = None, fastq = uncorr_and_corr_fastq_files)
-    captured = capfd.readouterr()
-    assert captured.out == str(correct_read) + '\n'
+def test_opens_as_bam(small_fq_file, small_report, simple_vcf, simple_bed, simple_bam, simple_sam):
+    assert not kbbq.recalibrate.opens_as_bam(small_fq_file)
+    assert not kbbq.recalibrate.opens_as_bam(simple_vcf)
+    assert not kbbq.recalibrate.opens_as_bam(simple_bed)
+    assert kbbq.recalibrate.opens_as_bam(simple_bam)
+    assert kbbq.recalibrate.opens_as_bam(simple_sam)
 
-    with pytest.raises(NotImplementedError):
-        recalibrate.recalibrate(fastq = None, bam = 'foo')
+def test_load_headers_from_bams(simple_bam, tmp_path):
+    import importlib
+    importlib.reload(kbbq.read) #reset read data
+    with pysam.AlignmentFile(simple_bam,'rb') as bam: #load bam
+        newhead = bam.header.as_dict() #add a read group
+        newhead.setdefault('RG',list()).append({'ID':'foo','PU':'bar'})
+        with pysam.AlignmentFile(tmp_path/'out.bam','wb', header = newhead) as out:
+            for r in bam:
+                out.write(r)
+    #check rg loaded
+    bams = recalibrate.load_headers_from_bams([tmp_path/'out.bam'])
+    assert bams[0] == True
+    assert kbbq.read.ReadData.rg_to_pu['foo'] == 'bar'
+    assert kbbq.read.ReadData.rg_to_int['foo'] == 0
+    assert kbbq.read.ReadData.numrgs == 1
 
-    with pytest.raises(NotImplementedError):
-        recalibrate.recalibrate(fastq = None, bam = None, gatkreport = 'foo')
+# def test_recalibrate_main(uncorr_and_corr_fastq_files, monkeypatch, capfd):
+#     import sys
+#     with monkeypatch.context() as m:
+#         m.setattr(sys, 'argv', [sys.argv[0]] + ["recalibrate",'-f'] + list(uncorr_and_corr_fastq_files) )
+#         kbbq.__main__.main()
+#     captured = capfd.readouterr()
+#     assert captured.out == str(correct_read) + '\n'
 
-    with pytest.raises(ValueError):
-        recalibrate.recalibrate(fastq = None, bam = None, gatkreport = None)
+#     with pytest.raises(NotImplementedError), monkeypatch.context() as m:
+#         m.setattr(sys, 'argv', [sys.argv[0]] + ["recalibrate",'-b', 'foo'])
+#         kbbq.__main__.main()
 
-def test_recalibrate_main(uncorr_and_corr_fastq_files, monkeypatch, capfd):
-    import sys
-    with monkeypatch.context() as m:
-        m.setattr(sys, 'argv', [sys.argv[0]] + ["recalibrate",'-f'] + list(uncorr_and_corr_fastq_files) )
-        kbbq.__main__.main()
-    captured = capfd.readouterr()
-    assert captured.out == str(correct_read) + '\n'
-
-    with pytest.raises(NotImplementedError), monkeypatch.context() as m:
-        m.setattr(sys, 'argv', [sys.argv[0]] + ["recalibrate",'-b', 'foo'])
-        kbbq.__main__.main()
-
-    with pytest.raises(NotImplementedError), monkeypatch.context() as m:
-        m.setattr(sys, 'argv', [sys.argv[0]] + ["recalibrate",'-b', 'foo', '-g', 'bar'])
-        kbbq.__main__.main()
+#     with pytest.raises(NotImplementedError), monkeypatch.context() as m:
+#         m.setattr(sys, 'argv', [sys.argv[0]] + ["recalibrate",'-b', 'foo', '-g', 'bar'])
+#         kbbq.__main__.main()

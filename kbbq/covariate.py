@@ -191,6 +191,17 @@ class Covariate():
         self.errors[key] = value[0]
         self.total[key] = value[1]
 
+    def __eq__(self, other):
+        """
+        Equality test.
+        """
+        if isinstance(other, self.__class__):
+            return np.array_equal(self.errors, other.errors) and \
+                np.array_equal(self.total, other.total)
+        else:
+            return False
+
+
     def __str__(self):
         return "E: " + str(self.errors) + '\n' + "T: " + str(self.total)
 
@@ -295,6 +306,15 @@ class QCovariate(Covariate):
 
     def __str__(self):
         return "RG:" + str(self.rgcov) + "\nQ:" + super().__str__()
+
+    def __eq__(self, other):
+        """
+        Equality test.
+        """
+        if isinstance(other, self.__class__):
+            return super().__eq__(other) and self.rgcov == other.rgcov
+        else:
+            return False
 
 class CycleCovariate(Covariate):
     """
@@ -484,3 +504,13 @@ class CovariateData():
 
     def __str__(self):
         return "\n".join([str(self.qcov), str(self.cyclecov), str(self.dinuccov)])
+
+    def __eq__(self, other):
+        """
+        Equality test.
+        """
+        if isinstance(other, self.__class__):
+            return self.qcov == other.qcov and self.cyclecov == other.cyclecov and \
+                self.dinuccov == other.dinuccov
+        else:
+            return False
