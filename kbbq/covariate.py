@@ -42,7 +42,7 @@ class Covariate():
 
     .. warning::
        Don't assign directly to :attr:`errors` or :attr:`total`.
-       :meth:`shape` assumes both arrays have the same shape and
+       :attr:`shape` assumes both arrays have the same shape and
        only returns the shape of :attr:`total`. If the arrays'
        shapes become different somehow, :meth:`__getitem__`
        and :meth:`__setitem__` may start throwing errors unexpectedly.
@@ -62,6 +62,7 @@ class Covariate():
 
         * :attr:`errors` - :class:`numpy.ndarray` of the number of errors observed
         * :attr:`total` - :class:`numpy.ndarray` of the total number of observations
+        * :attr:`shape` - return the shape of the arrays.
 
 
     Methods
@@ -70,7 +71,6 @@ class Covariate():
         * :meth:`pad_axis` - Pad specified axis of both arrays
         * :meth:`pad_axis_to_fit` - Pad specified axis so the given index is valid
         * :meth:`increment` - Increment the given indices of each array.
-        * :meth:`shape` - return the shape of the arrays.
         * :meth:`__getitem__` - get number of errors and total observations at the given index
         * :meth:`__setitem__` - set errors and observations at the given index
 
@@ -153,6 +153,7 @@ class Covariate():
         np.add.at(self.errors, idx[0], value[0])
         np.add.at(self.total, idx[1], value[1])
 
+    @property
     def shape(self):
         """
         Return the shape of the underlying arrays.
