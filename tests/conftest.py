@@ -204,7 +204,9 @@ ReadGroup  QualityScore  CovariateValue  CovariateName  EventType  EmpiricalQual
 
 @pytest.fixture(scope = 'function')
 def exreaddata():
+    import importlib
     import kbbq.read as read
+    importlib.reload(read)
     import numpy as np
     yield read.ReadData( seq = np.array(['A','T','G']),
         qual = np.array([6,10,3]),
