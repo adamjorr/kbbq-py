@@ -213,7 +213,7 @@ def trim_bamread(read):
 
 def quantize(q_errs, q_total, maxscore = 93):
     """
-    this function doesn't match the GATK version but
+    This function doesn't match the GATK version, but
     it's not used so it's not a priority.
     """
     qe = np.sum(q_errs, axis = 0)
@@ -235,21 +235,30 @@ def vectors_to_report(meanq, global_errs, global_total, q_errs, q_total,
     represents the raw quality score, the final index is either the cycle or
     dinucleotide covariate.
 
-    :param np.array[:] meanq: Mean q for each read group
-    :param np.array[:] global_errs: Number of errors for each read group
-    :param np.array[:] global_total: Number of observations for each read group
-    :param np.array[:,:] q_errs: Number of errors for each read group and q
+    :param meanq: Mean q for each read group
+    :type meanq: :class:`numpy.array`[:]
+    :param global_errs: Number of errors for each read group
+    :type global_errs: :class:`numpy.array`[:]
+    :param global_total: Number of observations for each read group
+    :type global_total: :class:`numpy.array`[:]
+    :param q_errs: Number of errors for each read group and q
         score subset.
+    :type q_errs: :class:`numpy.array`[:,:]
     :param np.array[:,:] q_total: Number of observations for each read group
         and q score subset.
-    :param np.array[:,:,:] pos_errs: Number of errors for each read group, q,
+    :type q_total: :class:`numpy.array`[:,:]
+    :param pos_errs: Number of errors for each read group, q,
         and cycle subset.
-    :param np.array[:,:,:] pos_total: Number of observations for each read
+    :type pos_errs: :class:`numpy.array`[:,:,:]
+    :param pos_total: Number of observations for each read
         group, q, and cycle subset.
-    :param np.array[:,:,:] dinuc_errs: Number of errors for each read group, q,
+    :type pos_total: :class:`numpy.array`[:,:,:]
+    :param dinuc_errs: Number of errors for each read group, q,
         and dinucleotide subset.
-    :param np.array[:,:,:] dinuc_total: Number of observations for each read
+    :type dinuc_errs: :class:`numpy.array`[:,:,:]
+    :param dinuc_total: Number of observations for each read
         group, q, and dinucleotide subset.
+    :type dinuc_total: :class:`numpy.array`[:,:,:]
     :param list(str) rg_order: The order of read groups
     :param int maxscore: The maximum possible quality score
     :return: the recalibration table
