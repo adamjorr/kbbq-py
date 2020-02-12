@@ -244,7 +244,7 @@ def vectors_to_report(meanq, global_errs, global_total, q_errs, q_total,
     :param q_errs: Number of errors for each read group and q
         score subset.
     :type q_errs: :class:`numpy.array`[:,:]
-    :param np.array[:,:] q_total: Number of observations for each read group
+    :param q_total: Number of observations for each read group
         and q score subset.
     :type q_total: :class:`numpy.array`[:,:]
     :param pos_errs: Number of errors for each read group, q,
