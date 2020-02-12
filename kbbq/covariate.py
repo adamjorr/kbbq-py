@@ -108,7 +108,7 @@ class Covariate():
         :param int axis: axis to pad
         :param int idx: index to ensure is valid
         """
-        axislen = self.shape()[axis]
+        axislen = self.shape[axis]
         if idx < -axislen or idx >= axislen:
             #out of bounds
             if idx < 0:
@@ -235,7 +235,7 @@ class RGCovariate(Covariate):
         :return: largest rg + 1
         :type: int
         """
-        return self.shape()[0]
+        return self.shape[0]
 
 class QCovariate(Covariate):
     """
@@ -291,7 +291,7 @@ class QCovariate(Covariate):
         :return: largest q + 1
         :type: int
         """
-        return self.shape()[1]
+        return self.shape[1]
 
     def __str__(self):
         return "RG:" + str(self.rgcov) + "\nQ:" + super().__str__()
@@ -334,14 +334,14 @@ class CycleCovariate(Covariate):
             if n % 2 != 0:
                 raise ValueError('n should be even for the 2nd axis ' +
                     'of a CycleCovariate. n = {} was given.'.format(n))
-            oldlen = self.shape()[2]
+            oldlen = self.shape[2]
             newlen = oldlen + n
             if oldlen == 0:
                 super().pad_axis(axis = axis, n = n)
             else:
                 half_oldlen = int(oldlen / 2)                
-                newerrors = np.zeros(self.shape()[0:2] + (newlen,), dtype = np.int)
-                newtotal = np.zeros(self.shape()[0:2] + (newlen,), dtype = np.int)
+                newerrors = np.zeros(self.shape[0:2] + (newlen,), dtype = np.int)
+                newtotal = np.zeros(self.shape[0:2] + (newlen,), dtype = np.int)
                 newerrors[...,0:half_oldlen], newtotal[...,0:half_oldlen] = self[...,0:half_oldlen]
                 newerrors[...,-half_oldlen:], newtotal[...,-half_oldlen:] = self[...,-half_oldlen:]
                 self.errors = newerrors
@@ -358,7 +358,7 @@ class CycleCovariate(Covariate):
         :return: half the length of cycle vector
         :rtype: int
         """
-        return self.shape()[-1] / 2
+        return self.shape[-1] / 2
 
 class DinucCovariate(Covariate):
     """
@@ -377,7 +377,7 @@ class DinucCovariate(Covariate):
         :return: number of dinucleotides
         :rtype: int
         """
-        return self.shape()[-1]
+        return self.shape[-1]
 
 class CovariateData():
     """
