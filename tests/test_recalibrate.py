@@ -138,6 +138,29 @@ def test_load_headers_from_bams(simple_bam, tmp_path):
     assert kbbq.read.ReadData.rg_to_int['foo'] == 0
     assert kbbq.read.ReadData.numrgs == 1
 
+def test_validate_files(tmp_path):
+    import os
+    #raise if does not exist
+    shouldraise = tmp_path / "DOESNOTEXIST"
+    with pytest.raises(ValueError):
+        kbbq.recalibrate.validate_files([shouldraise])
+    if os.name == 'posix': #namedpipe only avail on unix
+        #raise if exists but isn't a regular file
+        namedpipe = tmp_path / "NAMEDPIPE"
+        os.mkfifo(namedpipe)
+        with pytest.raises(ValueError):
+            kbbq.recalibrate.validate_files([namedpipe])
+    #should also raise if it's a directory
+    with pytest.raises(ValueError):
+        kbbq.recalibrate.validate_files([tmp_path])
+    #do not raise if exists but is a regular file
+    noraise = tmp_path / "exists.txt"
+    noraise.write_text("FOO")
+    kbbq.recalibrate.validate_files([noraise])
+
+def test_open_outputs(tmp_path):
+    pass
+
 # def test_recalibrate_main(uncorr_and_corr_fastq_files, monkeypatch, capfd):
 #     import sys
 #     with monkeypatch.context() as m:
