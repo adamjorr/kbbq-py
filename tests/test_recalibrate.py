@@ -169,6 +169,23 @@ def test_open_outputs(simple_bam, simple_bam_reads, tmp_path):
         assert outputs[0].header['PG'][-1]['ID'] == 'kbbq'
         outputs[1].write('foo')
         outputs[2].write('bar')
+    #check that header adding works properly
+    with kbbq.recalibrate.open_outputs([output[0]], [output[0] + "out2.bam"], [True]) as outputs:
+        assert outputs[0].header['PG'][-1]['ID'] == 'kbbq.1'
+
+def test_yield_reads(simple_bam, simple_bam_reads, simple_fastq, simple_fastq_reads):
+    bamreaddata, bamreads = zip(*list(kbbq.recalibrate.yield_reads(pysam.AlignmentFile(simple_bam))))
+    for a,b in zip(bamreads, simple_bam_reads):
+        #no __eq__ for AlignedSegment objects :(
+        assert str(a) == str(b)
+
+    fqreaddata, fastqreads = zip(*list(kbbq.recalibrate.yield_reads(pysam.FastxFile(simple_fastq))))
+    for a,b in zip(fastqreads, simple_fastq_reads):
+        #no __eq__ for FastxProxy objects :(
+        assert str(a) == str(b)
+
+    with pytest.raises(ValueError):
+        foo, bar = kbbq.recalibrate.yield_reads(bamreaddata)
 
 # def test_recalibrate_main(uncorr_and_corr_fastq_files, monkeypatch, capfd):
 #     import sys
