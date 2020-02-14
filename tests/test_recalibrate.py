@@ -158,8 +158,17 @@ def test_validate_files(tmp_path):
     noraise.write_text("FOO")
     kbbq.recalibrate.validate_files([noraise])
 
-def test_open_outputs(tmp_path):
-    pass
+def test_open_outputs(simple_bam, simple_bam_reads, tmp_path):
+    files = [simple_bam, tmp_path / "fake.txt", tmp_path / "fake.txt.gz"]
+    output = [simple_bam + "out.bam", tmp_path / "fake.out", tmp_path / "fake.out.gz"]
+    bams = [True, False, False]
+    with kbbq.recalibrate.open_outputs(files, output, bams) as outputs:
+        for o in outputs:
+            assert not o.closed
+        outputs[0].write(simple_bam_reads[0])
+        assert outputs[0].header['PG'][-1]['ID'] == 'kbbq'
+        outputs[1].write('foo')
+        outputs[2].write('bar')
 
 # def test_recalibrate_main(uncorr_and_corr_fastq_files, monkeypatch, capfd):
 #     import sys
