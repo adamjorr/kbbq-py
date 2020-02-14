@@ -128,14 +128,25 @@ def open_outputs(files, output, bams):
         if b:
             with pysam.AlignmentFile(i) as fin:
                 header = fin.header.to_dict()
-                pgids = [x.get('ID','') for x in header['PG']]
-                suffixes = [int(x.split('.',1)[-1]) for x in pgids if x.startswith("kbbq")]
+                oldpg = header.get('PG',[])
+                pgids = [x.get('ID','') for x in oldpg]
+                kbbqids = [x for x in pgids if x.startswith("kbbq")]
+                suffixes = []
+                if len(kbbqids) > 0: #multiple IDs
+                    #one should have a suffix (but maybe not)
+                    for kid in kbbqids:
+                        suffix = 0
+                        try:
+                            suffix = int(kid.split('.',1)[-1])
+                        except ValueError:
+                            pass
+                        suffixes.append(suffix)
                 headerid = 'kbbq' if suffixes == [] else 'kbbq.' + str(max(suffixes) + 1)
-                header['PG'] = header['PG'] + [{'ID' : headerid, 'PN' : 'kbbq', 'CL' : ' '.join(sys.argv), 'VN' : kbbq.__version__}]
+                header['PG'] = oldpg + [{'ID' : headerid, 'PN' : 'kbbq', 'CL' : ' '.join(sys.argv), 'VN' : kbbq.__version__}]
             fout = pysam.AlignmentFile(str(o), mode = 'wb', header = header)
         else:
             if pathlib.Path(o).suffix == '.gz':
-                fout = gzip.open(str(o), 'w')
+                fout = gzip.open(str(o), 'wt')
             else:
                 fout = open(str(o), mode = 'wt')
         opened_outputs.append(fout)
