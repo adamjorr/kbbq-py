@@ -120,8 +120,7 @@ def open_outputs(files, output, bams):
     This function acts as a context manager. The outputs
     will automatically be closed once they go out of context.
 
-    See https://docs.python.org/3/library/contextlib.html for
-    more information.
+    See :py:mod:`contextlib` for more information.
     """
     opened_outputs = []
     for i, o, b in zip(files, output, bams):
@@ -197,10 +196,37 @@ def generate_reads_from_files(files, bams, infer_rg = False, use_oq = False):
         for f in opened_files:
             f.close()
 
+def get_dqs_from_corrected(files, bams, corrected, corrected_bams, infer_rg = False,
+        use_oq = False):
+    """
+    Get :class:`kbbq.gatk.applybqsr.ModelDQs` from corrected files.
+
+    :return: model DQs
+    :rtype: :class:`kbbq.gatk.applybqsr.ModelDQs`
+    :param files: input files to get reads to recalibrate
+    :type files: list(str)
+    :param bams: which inputs are bams
+    :type bams: list(bool)
+    :param corrected: corrected versions of each file
+    :type corrected: list(str)
+    :param corrected_bams: which corrected files are bams
+    :type corrected_bams: list(bool)
+    :param infer_rg: attempt to infer the read group for FASTQ files
+    :type infer_rg: bool
+    :param use_oq: attempt to use the OQ tag for read qualities in BAM files
+    :type use_oq: bool
+    """
+    utils.print_info("Finding errors from corrected files")
+    covariates = kbbq.covariate.CovariateData()
+    with generate_reads_from_files(files, bams, infer_rg, use_oq) as allreaddata, generate_reads_from_files(corrected, corrected_bams, infer_rg, use_oq) as correcteadreaddata: #a list of ReadData generators
+        for (read, original), (corrected, original_c) in zip(itertools.chain.from_iterable(allreaddata), itertools.chain.from_iterable(correcteadreaddata)): #a single ReadData generator
+            read.errors = find_corrected_sites(read, corrected)
+            covariates.consume_read(read)
+    dqs = kbbq.gatk.applybqsr.get_modeldqs_from_covariates(covariates)
+    return dqs
+
 def recalibrate(files, output, corrected, infer_rg = False, use_oq = False, set_oq = False, ksize = 32, memory = '3G', alpha = .1, gatkreport = None):
-    #make these options later
-    if output == []:
-        output = [str(i.with_name(i.stem + '.kbbq' + i.suffix)) for i in [pathlib.Path(f) for f in files ]]
+    #Check that inputs and outputs match.
     if len(files) != len(output):
         raise ValueError('One output must be specified for each input.')
     validate_files(files)
@@ -214,36 +240,33 @@ def recalibrate(files, output, corrected, infer_rg = False, use_oq = False, set_
 
     if gatkreport is None or not pathlib.Path(gatkreport).is_file():
         #gatkreport not provided or the provided report doesn't exist
+        #thus we need to train the model and output to file if specified
         if corrected != []:
-            if len(files) != len(corrected):
-                raise ValueError('One corrected file must be specified for each input.')
-            utils.print_info("Finding errors from corrected files")
-            covariates = kbbq.covariate.CovariateData()
-            with generate_reads_from_files(files, bams, infer_rg, use_oq) as allreaddata, generate_reads_from_files(corrected, corrected_bams, infer_rg, use_oq) as correcteadreaddata: #a list of ReadData generators
-                for (read, original), (corrected, original_c) in zip(itertools.chain.from_iterable(allreaddata), itertools.chain.from_iterable(correcteadreaddata)): #a single ReadData generator
-                    read.errors = find_corrected_sites(read, corrected)
-                    covariates.consume_read(read)
-            dqs = kbbq.gatk.applybqsr.get_modeldqs_from_covariates(covariates)
-
+            #get errors from a corrected file
+            dqs = get_dqs_from_corrected(files, bams, corrected, corrected_bams,
+                infer_rg, use_oq)
         else:
+            #get errors with a hash-based approach
             utils.print_info("Loading hash")
             graph = kbbq.bloom.create_empty_nodegraph(ksize = ksize, max_mem = memory)
+
+            # 1st pass: load hash
             with generate_reads_from_files(files, bams, infer_rg, use_oq) as allreaddata: #a list of ReadData generators
-                # 1st pass: load hash
                 for read, original in itertools.chain.from_iterable(allreaddata): #a single ReadData generator
                     kbbq.bloom.count_read(read, graph, sampling_rate = alpha)
 
+            #calculate and report stats
             fpr = khmer.calc_expected_collisions(graph, force = False, max_false_pos = .15)
             utils.print_info("False positive rate:", str(fpr))
             p_added = kbbq.bloom.p_kmer_added(sampling_rate = alpha, graph = graph)
             utils.print_info("Probability any k-mer was added:", str(p_added))
             thresholds = kbbq.bloom.calculate_thresholds(p_added, graph.ksize())
             utils.print_info("Error thresholds:", thresholds)
-            covariates = kbbq.covariate.CovariateData()
+
+            # 2nd pass: find trusted kmers
             utils.print_info("Finding trusted k-mers")
             trustgraph = kbbq.bloom.create_empty_nodegraph(ksize = ksize, max_mem = memory)
             with generate_reads_from_files(files, bams, infer_rg, use_oq) as allreaddata: #a list of ReadData generators
-                #pass 1.5: find trusted kmers
                 for read, original in itertools.chain.from_iterable(allreaddata): #a single ReadData generator
                     errors = kbbq.bloom.infer_read_errors(read, graph, thresholds)
                     #don't trust bad quality
@@ -252,15 +275,11 @@ def recalibrate(files, output, corrected, infer_rg = False, use_oq = False, set_
                     #find k-size blocks of non-errors and add to the trusted graph
                     kbbq.bloom.add_trusted_kmers(read, trustgraph)
 
-
+            # 3rd pass: find errors
             utils.print_info("Finding errors and building model")
-            num_error_free = 0
-            num_errors = 0
+            covariates = kbbq.covariate.CovariateData()
             with generate_reads_from_files(files, bams, infer_rg, use_oq) as allreaddata: #a list of ReadData generators
-                #2nd pass: find errors + build model
-                counter = 0
                 for read, original in itertools.chain.from_iterable(allreaddata): #a single ReadData generator
-                    counter = counter + 1
                     original_seq = read.seq.copy()
                     trusted_kmers = kbbq.bloom.kmers_in_graph(read,trustgraph)
                     if np.all(~trusted_kmers):
@@ -274,9 +293,7 @@ def recalibrate(files, output, corrected, infer_rg = False, use_oq = False, set_
                             continue
                     errors, multiple = kbbq.bloom.infer_errors_from_trusted_kmers(read, trustgraph) #this will alter read.seq
                     read.errors[errors] = True
-                    if np.all(~read.errors):
-                        num_error_free = num_error_free + 1
-                    else:
+                    if np.any(read.errors):
                         trusted_sites = np.zeros(len(read), dtype = np.bool)
                         t = kbbq.bloom.rolling_window(trusted_sites, trustgraph.ksize())
                         t[trusted_kmers,:] = True
@@ -285,13 +302,9 @@ def recalibrate(files, output, corrected, infer_rg = False, use_oq = False, set_
                             if not multiple:
                                 adjust = True
                         read.errors = kbbq.bloom.fix_overcorrection(read, ksize, adjust = adjust)
-                        num_errors = num_errors + np.sum(read.errors)
                     read.seq = original_seq
                     covariates.consume_read(read)
-
             dqs = kbbq.gatk.applybqsr.get_modeldqs_from_covariates(covariates)
-            utils.print_info(str(num_error_free), "reads are error free.")
-            utils.print_info(str(num_errors), "errors detected.")
         if gatkreport is not None:
             #if gatkreport doesn't exist, save the model to it
             report = kbbq.gatk.bqsr.vectors_to_report(*kbbq.gatk.applybqsr.get_modelvecs_from_covariates(covariates), rg_order = list(kbbq.read.ReadData.rg_to_pu.values()))
@@ -310,7 +323,7 @@ def recalibrate(files, output, corrected, infer_rg = False, use_oq = False, set_
     utils.print_info("Recalibrating reads")
     with generate_reads_from_files(files, bams, infer_rg, use_oq) as allreaddata, \
         open_outputs(files, output, bams) as opened_outputs: #a list of ReadData generators
-        #3rd pass: recalibrate
+        #4th pass: recalibrate
         for i, o in zip(allreaddata, opened_outputs):
             for read, original in i:
                 recalibrated_quals = recalibrate_read(read, dqs)
