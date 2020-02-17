@@ -7,10 +7,13 @@ import kbbq.recalibrate as re
 import kbbq.plot
 import argparse
 import sys
+import pathlib
 
 #helper commands that pass arguments to the proper functions
 
 def recalibrate(args):
+    if args.output == []:
+        args.output = [str(i.with_name(i.stem + '.kbbq' + i.suffix)) for i in [pathlib.Path(f) for f in args.files ]]
     re.recalibrate(files = args.input, output = args.output, corrected = args.corrected, infer_rg = args.infer_rg,
         use_oq = args.use_oq, set_oq = args.set_oq, ksize = args.ksize,
         memory = args.memory, alpha = args.alpha, gatkreport = args.gatkreport)

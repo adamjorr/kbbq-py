@@ -236,30 +236,26 @@ def vectors_to_report(meanq, global_errs, global_total, q_errs, q_total,
     dinucleotide covariate.
 
     :param meanq: Mean q for each read group
-    :type meanq: :class:`numpy.array`[:]
+    :type meanq: :class:`numpy.ndarray` [:]
     :param global_errs: Number of errors for each read group
-    :type global_errs: :class:`numpy.array`[:]
+    :type global_errs: :class:`numpy.ndarray` [:]
     :param global_total: Number of observations for each read group
-    :type global_total: :class:`numpy.array`[:]
-    :param q_errs: Number of errors for each read group and q
-        score subset.
-    :type q_errs: :class:`numpy.array`[:,:]
-    :param q_total: Number of observations for each read group
-        and q score subset.
-    :type q_total: :class:`numpy.array`[:,:]
-    :param pos_errs: Number of errors for each read group, q,
-        and cycle subset.
-    :type pos_errs: :class:`numpy.array`[:,:,:]
-    :param pos_total: Number of observations for each read
-        group, q, and cycle subset.
-    :type pos_total: :class:`numpy.array`[:,:,:]
-    :param dinuc_errs: Number of errors for each read group, q,
-        and dinucleotide subset.
-    :type dinuc_errs: :class:`numpy.array`[:,:,:]
-    :param dinuc_total: Number of observations for each read
-        group, q, and dinucleotide subset.
-    :type dinuc_total: :class:`numpy.array`[:,:,:]
-    :param list(str) rg_order: The order of read groups
+    :type global_total: :class:`numpy.ndarray` [:]
+    :param q_errs: Number of errors for each read group and q score subset.
+    :type q_errs: :class:`numpy.ndarray` [:,:]
+    :param q_total: Number of observations for each read group and q score subset.
+    :type q_total: :class:`numpy.ndarray` [:,:]
+    :param pos_errs: Number of errors for each read group, q, and cycle subset.
+    :type pos_errs: :class:`numpy.ndarray` [:,:,:]
+    :param pos_total: Number of observations for each read group, q, and cycle subset.
+    :type pos_total: :class:`numpy.ndarray` [:,:,:]
+    :param dinuc_errs: Number of errors for each read group, q, and dinucleotide subset.
+    :type dinuc_errs: :class:`numpy.ndarray` [:,:,:]
+    :param dinuc_total: Number of observations for each read group, q, and dinucleotide
+        subset.
+    :type dinuc_total: :class:`numpy.ndarray` [:,:,:]
+    :param rg_order: The order of read groups
+    :type rg_order: list(str)
     :param int maxscore: The maximum possible quality score
     :return: the recalibration table
     :rtype: :class:`kbbq.recaltable.RecalibrationReport`
