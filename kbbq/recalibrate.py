@@ -176,8 +176,7 @@ def generate_reads_from_files(files, bams, infer_rg = False, use_oq = False):
     This function acts as a context manager. The files
     will automatically be closed once they go out of context.
 
-    See https://docs.python.org/3/library/contextlib.html for
-    more information.
+    See :py:mod:`contextlib` for more information.
     """
     opened_files = [pysam.AlignmentFile(i) if b else pysam.FastxFile(i) for i,b in zip(files,bams)]
     generators = []
@@ -283,10 +282,10 @@ def recalibrate(files, output, corrected, infer_rg = False, use_oq = False, set_
                     original_seq = read.seq.copy()
                     trusted_kmers = kbbq.bloom.kmers_in_graph(read,trustgraph)
                     if np.all(~trusted_kmers):
-                        l, b, p = kbbq.bloom.fix_one(read.seq, trustgraph)
-                        if l > 0:
-                            read.seq[p] = b
-                            read.errors[p] = True
+                        length, base, pos = kbbq.bloom.fix_one(read.seq, trustgraph)
+                        if length > 0:
+                            read.seq[pos] = base
+                            read.errors[pos] = True
                         else:
                             #cant find anything, keep going
                             covariates.consume_read(read)
