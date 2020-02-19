@@ -228,7 +228,25 @@ def test_get_dqs_from_corrected(simple_fastq_reads):
         assert np.array_equal(dqs.mean[1], meanq)
         assert np.array_equal(dqs.rg[1:2], utils.gatk_delta_q(dqs.mean[1:2], np.array([1]), np.array([len(r)])))
 
+def test_load_subsampled_hash(simple_bam):
+    with kbbq.recalibrate.generate_reads_from_files([simple_bam], [True]) as reads:
+        graph, thresholds = kbbq.recalibrate.load_subsampled_hash(reads[0], 9, '250M', 1)
+    with kbbq.recalibrate.generate_reads_from_files([simple_bam], [True]) as reads:
+        for read, original in reads[0]:
+            assert np.all(kbbq.bloom.kmers_in_graph(read, graph))
 
+def test_find_trusted_kmers(simple_bam):
+    with kbbq.recalibrate.generate_reads_from_files([simple_bam], [True]) as reads:
+        graph, thresholds = kbbq.recalibrate.load_subsampled_hash(reads[0],4,'250M',1)
+        thresholds = thresholds-1 #the only way we can get a trusted kmer
+    with kbbq.recalibrate.generate_reads_from_files([simple_bam], [True]) as reads:
+        trustgraph = kbbq.recalibrate.find_trusted_kmers(reads[0], graph, 4, '250M', thresholds)
+    with kbbq.recalibrate.generate_reads_from_files([simple_bam], [True]) as reads:
+        for read, original in reads[0]:
+            assert np.all(kbbq.bloom.kmers_in_graph(read, trustgraph))
+
+def test_fill_read_errors(read, trustgraph):
+    pass
 
 # def test_recalibrate_main(uncorr_and_corr_fastq_files, monkeypatch, capfd):
 #     import sys
