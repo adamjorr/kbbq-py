@@ -285,7 +285,7 @@ def fill_read_errors(read, trustgraph):
     """
     Fill the errors attribute of the given :class:`ReadData` object.
 
-    This will modify the input.
+    This will modify the input read.
 
     :param read: read to modify
     :type read: :class:`ReadData`
