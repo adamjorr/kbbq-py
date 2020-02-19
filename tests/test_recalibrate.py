@@ -9,6 +9,7 @@ import pysam
 import numpy as np
 import sys
 import kbbq.gatk.applybqsr
+import kbbq.compare_reads as utils
 
 def test_find_corrected_sites(simple_fastq_reads):
     for fqr in simple_fastq_reads:
@@ -186,6 +187,48 @@ def test_yield_reads(simple_bam, simple_bam_reads, simple_fastq, simple_fastq_re
 
     with pytest.raises(ValueError):
         foo, bar = kbbq.recalibrate.yield_reads(bamreaddata)
+
+def test_generate_reads_from_files(simple_bam, simple_bam_reads, simple_fastq, simple_fastq_reads, tmp_path):
+    with pytest.raises(ValueError):
+        with kbbq.recalibrate.generate_reads_from_files(simple_bam, [True]) as bamreads:
+            for (d,a),b in zip(*bamreads, simple_bam_reads):
+                assert str(a) == str(b)
+
+    with kbbq.recalibrate.generate_reads_from_files([simple_bam], [True]) as bamreads:
+        for (d,a),b in zip(*bamreads, simple_bam_reads):
+            assert str(a) == str(b)    
+
+    reads_with_rg = tmp_path / 'reads_with_rg.fq'
+    with reads_with_rg.open('w') as f:
+        with kbbq.recalibrate.generate_reads_from_files([simple_fastq], [False]) as fqreads:
+            for (d,a),b in zip(*fqreads, simple_fastq_reads):
+                assert str(a) == str(b)
+                a.name = a.name + '/1_RG:Z:foo'
+                f.write(str(a) + '\n')
+
+    with kbbq.recalibrate.generate_reads_from_files([str(reads_with_rg)], [False], infer_rg = True) as fqreads:
+        for (d,a),b in zip(*fqreads, simple_fastq_reads):
+            b.name = b.name + '/1_RG:Z:foo'
+            assert str(a) == str(b)
+            assert d.rg == 'foo'
+
+def test_get_dqs_from_corrected(simple_fastq_reads):
+    for fqr in simple_fastq_reads:
+        fqr2 = pysam.FastxRecord(name = fqr.name, sequence = fqr.sequence, quality = fqr.quality)
+        edited_seq = list(fqr2.sequence)
+        edited_seq[5] = 'C'
+        fqr2.sequence = ''.join(edited_seq)
+        correct = np.zeros(len(edited_seq), dtype = np.bool)
+        correct[5] = True
+        r = kbbq.read.ReadData.from_fastq(fqr)
+        r2 = kbbq.read.ReadData.from_fastq(fqr2)
+        dqs = kbbq.recalibrate.get_dqs_from_corrected([(r, fqr)],[(r2, fqr2)])
+        print(r.get_rg_int())
+        meanq = utils.p_to_q(np.sum(utils.q_to_p(r.qual))/len(r))
+        assert np.array_equal(dqs.mean[1], meanq)
+        assert np.array_equal(dqs.rg[1:2], utils.gatk_delta_q(dqs.mean[1:2], np.array([1]), np.array([len(r)])))
+
+
 
 # def test_recalibrate_main(uncorr_and_corr_fastq_files, monkeypatch, capfd):
 #     import sys
