@@ -172,17 +172,21 @@ ModelDQs = collections.namedtuple('ModelDQs', ['mean','rg','q','cycle','dinuc'],
 ModelDQs.__doc__ += """
     A class to hold the model delta Q's and enforce a consistent ordering.
     """
-ModelDQs.mean.__doc__ += """The mean Q for each read group.
-    1-dimensional :class:`np.ndarray` with length equal to the number of read groups."""
-ModelDQs.rg.__doc__ += """Shift from the mean for each read group. 1-dimensional
-    :class:`np.ndarray` with length equal to the number of read groups."""
-ModelDQs.q.__doc__ += """Shift from the mean for each quality score. 2-dimensional
-    :class:`np.ndarray` with shape (number of read groups, number of quality scores)"""
-ModelDQs.cycle.__doc__ += """Shift from the mean for each quality score. 3-dimensional
-    :class:`np.ndarray` with shape (number of read groups, number of quality scores,
-    number of cycles)"""
-ModelDQs.dinuc.__doc__ += """Shift from the mean for each quality score. 3-dimensional
-    :class:`np.ndarray` with shape (number of read groups, number of quality scores,
+ModelDQs.mean.__doc__ += """ The mean Q for each read group.
+    1-dimensional :class:`numpy.ndarray` with length equal to the number of read groups.
+    """
+ModelDQs.rg.__doc__ += """ Shift from the mean for each read group. 1-dimensional
+    :class:`numpy.ndarray` with length equal to the number of read groups.
+    """
+ModelDQs.q.__doc__ += """ Shift from the mean for each quality score. 2-dimensional
+    :class:`numpy.ndarray` with shape (number of read groups, number of quality scores)
+    """
+ModelDQs.cycle.__doc__ += """ Shift from the mean for each quality score. 3-dimensional
+    :class:`numpy.ndarray` with shape (number of read groups, number of quality scores,
+    number of cycles)
+    """
+ModelDQs.dinuc.__doc__ += """ Shift from the mean for each quality score. 3-dimensional
+    :class:`numpy.ndarray` with shape (number of read groups, number of quality scores,
     number of cycles)"""
 
 def get_modelvecs_from_covariates(covariates):
