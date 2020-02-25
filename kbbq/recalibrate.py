@@ -177,6 +177,10 @@ def generate_reads_from_files(files, bams, infer_rg = False, use_oq = False):
     will automatically be closed once they go out of context.
 
     See :py:mod:`contextlib` for more information.
+
+    :return: list of generators of (read, original) pairs
+    :rtype: list(generator(:class:`ReadData`, :class:`pysam.AlignedSegment` or
+        :class:`pysam.FastqProxy`))
     """
     if isinstance(files, str):
         raise ValueError(f"This function accepts a list of files as its first \
@@ -235,7 +239,7 @@ def load_subsampled_hash(readsource, ksize, memory, alpha):
     :param alpha: sampling rate
     :type alpha: double
     :return: subsampled k-mer hash and thresholds
-    :rtype: (:class:`khmer.Nodegraph` , :class:`numpy.ndarray` (int))
+    :rtype: ( :class:`khmer.Nodegraph` , :class:`numpy.ndarray` (int) )
     """
     utils.print_info("Loading hash")
     graph = kbbq.bloom.create_empty_nodegraph(ksize = ksize, max_mem = memory)
