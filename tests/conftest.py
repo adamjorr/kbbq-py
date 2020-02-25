@@ -133,6 +133,23 @@ def simple_bam_reads(simple_bam):
     import pysam
     return list(pysam.AlignmentFile(simple_bam,'rb'))
 
+@pytest.fixture()
+def simple_bam_pairs(simple_bam):
+    import kbbq
+    import kbbq.recalibrate
+    import itertools
+    with kbbq.recalibrate.generate_reads_from_files([simple_bam], [True]) as reads:
+        ret = list(itertools.chain.from_iterable(reads))
+    return ret
+
+# This doesn't work if you need simple_bam_pairs and simple_bam_graph in the same fn!
+@pytest.fixture()
+def simple_bam_graph(simple_bam_pairs):
+    import kbbq
+    import kbbq.recalibrate
+    return kbbq.recalibrate.load_subsampled_hash(simple_bam_pairs, 4, '250M', 1)
+# 
+
 #################################
 
 # Benchmark fixtures

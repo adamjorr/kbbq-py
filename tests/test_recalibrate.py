@@ -245,8 +245,39 @@ def test_find_trusted_kmers(simple_bam):
         for read, original in reads[0]:
             assert np.all(kbbq.bloom.kmers_in_graph(read, trustgraph))
 
-def test_fill_read_errors(read, trustgraph):
-    pass
+def test_fill_read_errors(simple_bam_pairs):
+    """
+    This needs to be made more detailed.
+    """
+    pairs = list(simple_bam_pairs)
+    graph, thresholds = kbbq.recalibrate.load_subsampled_hash(pairs, 4, '250M', 1)
+
+    for read, original in pairs:
+        kbbq.recalibrate.fill_read_errors(read, graph)
+        assert np.all(~read.errors)
+
+def test_get_dqs_with_hashes(simple_bam_pairs):
+    """
+    We need to modify this test to actually check whether the DQ calculation is correct
+    instead of just the mean.
+    """
+    graph, thresholds = kbbq.recalibrate.load_subsampled_hash(simple_bam_pairs, 4, '250M', 1)
+
+    dqs = kbbq.recalibrate.get_dqs_with_hashes(simple_bam_pairs, graph)
+    totallen = sum([len(r) for r, _ in simple_bam_pairs])
+    meanq = utils.p_to_q(np.sum([np.sum(utils.q_to_p(r.qual)) for r, _ in simple_bam_pairs])/totallen)
+    assert dqs.mean[simple_bam_pairs[0][0].get_rg_int()] == meanq
+
+def test_recalibrate_and_write(simple_bam_pairs, tmp_path, simple_bam_header):
+    read, original = simple_bam_pairs[0]
+    rgs = read.get_rg_int() + 1
+    dqs = kbbq.gatk.applybqsr.ModelDQs(np.array([20] * rgs), np.array([0] * rgs), np.zeros([rgs,100]), np.zeros([rgs,100,100]), np.zeros([rgs,100,100]))
+    set_oq = False
+    outfile = tmp_path / 'recalibrated.sam'
+    with pysam.AlignmentFile(str(outfile),'w', header = simple_bam_header) as out:
+        kbbq.recalibrate.recalibrate_and_write(read, original, dqs, out, set_oq)
+    filecontents = outfile.read_text()
+    assert filecontents.split('\n')[-2].split()[-1] == '5' * len(read)
 
 # def test_recalibrate_main(uncorr_and_corr_fastq_files, monkeypatch, capfd):
 #     import sys
