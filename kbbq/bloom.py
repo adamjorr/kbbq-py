@@ -75,7 +75,6 @@ def overlapping_kmers_in_graph(read, graph):
     Get the number of kmers overlapping each read position that are in the graph.
 
     The returned array has length len(read).
-    This only behaves well for len(seq) > 2ksize.
     """
     ksize = graph.ksize()
     kmers = kmers_in_graph(read, graph)
@@ -91,14 +90,12 @@ def overlapping_kmers_possible(read, ksize):
     For example, position 1 will always have only 1 overlapping kmer, position 2 will
     have 2, etc.
     """
-    assert ksize <= len(read)
-    assert len(read) > 2 * ksize
+    if ksize > len(read):
+        raise ValueError(f"ksize {ksize} too small for read with length {len(read)}. \
+            ksize must be <= the read length.")
     num_possible = np.zeros(len(read), dtype = np.int)
-    #each base is overlapped by < k kmers
-    num_possible[np.arange(ksize - 1)] = np.arange(ksize - 1) + 1
-    num_possible[-np.arange(ksize - 1)-1] = np.arange(ksize - 1) + 1
-    #each base is overlapped by k kmers
-    num_possible[ksize - 1 : len(read) - ksize + 1] = ksize
+    koverlaps = rolling_window(num_possible, ksize)
+    np.add.at(koverlaps, Ellipsis, 1)
     return num_possible
 
 def p_kmer_added(sampling_rate, graph):
@@ -188,12 +185,9 @@ def add_trusted_kmers(read, graph):
     """
     Add trusted kmers to graph.
     """
-    # #https://rigtorp.se/2011/01/01/rolling-statistics-numpy.html
     ksize = graph.ksize()
     hashes = np.array(graph.get_kmer_hashes(np.str.join('',read.seq)), dtype = np.ulonglong)
-    errors = np.lib.stride_tricks.as_strided(read.errors,
-        shape = (len(read.errors) - ksize + 1, ksize),
-        strides = read.errors.strides * 2) #2D array of shape (nkmers, ksize)
+    errors = rolling_window(read.errors, ksize)
     trusted_kmers = np.all(~errors, axis = 1)
     for h in hashes[trusted_kmers]:
         graph.count(h.item())
@@ -218,6 +212,10 @@ def find_longest_trusted_block(trusted_kmers):
     return segment_pairs[longest_trusted,0], segment_pairs[longest_trusted,1]
 
 def infer_errors_from_trusted_kmers(read, graph):
+    """
+    Return an array of errors and a bool describing whether multiple corrections were
+    made.
+    """
     trusted_kmers = kmers_in_graph(read, graph)
     errors = np.zeros(len(read), dtype = np.bool)
     multiple = False
@@ -307,10 +305,10 @@ def correction_len(seq, graph, right = True):
     counts = np.zeros(len(bases), dtype = np.int)
     if right:
         idx = (0,-1)
-        possible_fixes = range(largest_possible_fix)
+        possible_fixes = list(range(largest_possible_fix))
     else:
         idx = (-1,0)
-        possible_fixes = range(-1,-largest_possible_fix-1, -1)
+        possible_fixes = list(range(-1,-largest_possible_fix-1, -1))
     for b, base in enumerate(bases):
         kmers[idx] = base #kmers[0,-1] or kmers[-1,0]
         for i in possible_fixes:
@@ -435,6 +433,9 @@ def rolling_window(a, window):
 
     From https://rigtorp.se/2011/01/01/rolling-statistics-numpy.html
     """
+    if window > a.shape[-1]:
+        raise ValueError(f"Window size {window} is too large for array with last \
+            dimension of size {a.shape[-1]}")
     shape = a.shape[:-1] + (a.shape[-1] - window + 1, window)
     strides = a.strides + (a.strides[-1],)
     return np.lib.stride_tricks.as_strided(a, shape=shape, strides=strides)
