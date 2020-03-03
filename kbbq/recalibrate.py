@@ -280,7 +280,7 @@ def find_trusted_kmers(readsource, graph, ksize, memory, thresholds):
         errors = kbbq.bloom.infer_read_errors(read, graph, thresholds)
         #don't trust bad quality
         errors[read.qual <= 6] = True
-        read.errors = errors
+        read.errors[:] = errors[:]
         #find k-size blocks of non-errors and add to the trusted graph
         kbbq.bloom.add_trusted_kmers(read, trustgraph)
     return trustgraph
@@ -305,7 +305,6 @@ def fill_read_errors(read, trustgraph):
             read.errors[pos] = True
         else:
             # if we can't find anything, stop
-            covariates.consume_read(read)
             return
     #find errors. read.seq will be altered in the process
     errors, multiple = kbbq.bloom.infer_errors_from_trusted_kmers(read, trustgraph)
@@ -318,8 +317,8 @@ def fill_read_errors(read, trustgraph):
         if not np.any(np.logical_and(trusted_sites, original_seq != read.seq)):
             if not multiple:
                 adjust = True
-        read.errors = kbbq.bloom.fix_overcorrection(read, ksize, adjust = adjust)
-    read.seq = original_seq
+        read.errors[:] = kbbq.bloom.fix_overcorrection(read, trustgraph.ksize(), adjust = adjust)[:]
+    read.seq[:] = original_seq[:]
     return
 
 def get_dqs_with_hashes(readsource, trustgraph):
@@ -382,7 +381,7 @@ def recalibrate(files, output, corrected, infer_rg = False, use_oq = False, set_
     validate_files(files)
     bams = load_headers_from_bams(files)
 
-    if corrected != []:
+    if corrected != None:
         if len(files) != len(corrected):
             raise ValueError('One corrected file must be specified for each input.')
         validate_files(corrected)
@@ -391,7 +390,7 @@ def recalibrate(files, output, corrected, infer_rg = False, use_oq = False, set_
     if gatkreport is None or not pathlib.Path(gatkreport).is_file():
         #gatkreport not provided or the provided report doesn't exist
         #thus we need to train the model and output to file if specified
-        if corrected != []:
+        if corrected != None:
             #get errors from a corrected file
             with generate_reads_from_files(files, bams, infer_rg, use_oq) as allreaddata, generate_reads_from_files(corrected, corrected_bams, infer_rg, use_oq) as correcteadreaddata: #a list of ReadData generators
                     dqs = get_dqs_from_corrected(itertools.chain.from_iterable(allreaddata), itertools.chain.from_iterable(correcteadreaddata))
