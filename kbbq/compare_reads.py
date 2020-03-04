@@ -353,4 +353,4 @@ def get_rg_to_pu(bamfileobj):
     return rg_to_pu
 
 def nparray_to_qualitystring(a, offset = 33):
-    return "".join((a + offset).astype(np.uint32).view('U1'))
+    return (a + offset).astype(np.uint32).tostring().decode('utf32')

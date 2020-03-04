@@ -29,6 +29,8 @@ import numpy as np
 import scipy.stats
 import collections
 
+overlapcache = {}
+
 def create_empty_nodegraph(ksize = 32, max_mem = '8G'):
     """
     Create an empty nodegraph. From this point, fill it from a file or start filling
@@ -50,7 +52,7 @@ def count_read(read, graph, sampling_rate):
     #     shape = (len(read.seq) - ksize + 1, ksize),
     #     strides = read.seq.strides * 2) #2D array of shape (nkmers, ksize)
     #probably will be fastest to get all hashes in C then select the ones i want
-    hashes = np.array(graph.get_kmer_hashes(np.str.join('',read.seq)), dtype = np.ulonglong)
+    hashes = np.array(graph.get_kmer_hashes(read.seq.tostring().decode('utf32')), dtype = np.ulonglong)
     sampled = np.random.choice([True, False],
         size = hashes.shape,
         replace = True,
@@ -66,7 +68,7 @@ def kmers_in_graph(read, graph):
 
     The returned array has length len(read) - ksize + 1
     """
-    ingraph = np.array(graph.get_kmer_counts(np.str.join('',read.seq)), dtype = np.bool)
+    ingraph = np.array(graph.get_kmer_counts(read.seq.tostring().decode('utf32')), dtype = np.bool)
     ingraph[np.any(rolling_window(read.seq, graph.ksize()) == 'N', axis = 1)] = False
     return ingraph
 
@@ -89,14 +91,19 @@ def overlapping_kmers_possible(read, ksize):
 
     For example, position 1 will always have only 1 overlapping kmer, position 2 will
     have 2, etc.
+
+    This is cached.
     """
     if ksize > len(read):
         raise ValueError(f"ksize {ksize} too small for read with length {len(read)}. \
             ksize must be <= the read length.")
-    num_possible = np.zeros(len(read), dtype = np.int)
-    koverlaps = rolling_window(num_possible, ksize)
-    np.add.at(koverlaps, Ellipsis, 1)
-    return num_possible
+    if len(read) not in overlapcache:
+        num_possible = np.zeros(len(read), dtype = np.int)
+        koverlaps = rolling_window(num_possible, ksize)
+        np.add.at(koverlaps, Ellipsis, 1)
+        num_possible.flags.writeable = False
+        overlapcache[len(read)] = num_possible
+    return overlapcache[len(read)]
 
 def p_kmer_added(sampling_rate, graph):
     """
@@ -186,7 +193,7 @@ def add_trusted_kmers(read, graph):
     Add trusted kmers to graph.
     """
     ksize = graph.ksize()
-    hashes = np.array(graph.get_kmer_hashes(np.str.join('',read.seq)), dtype = np.ulonglong)
+    hashes = np.array(graph.get_kmer_hashes(read.seq.tostring().decode('utf32')), dtype = np.ulonglong)
     errors = rolling_window(read.errors, ksize)
     trusted_kmers = np.all(~errors, axis = 1)
     for h in hashes[trusted_kmers]:
@@ -313,7 +320,7 @@ def correction_len(seq, graph, right = True):
         kmers[idx] = base #kmers[0,-1] or kmers[-1,0]
         for i in possible_fixes:
             # print(np.str.join('',kmers[i]), i)
-            if not graph.get(np.str.join('',kmers[i])):
+            if not graph.get(kmers[i].tostring().decode('utf32')):
                 if right:
                     counts[b] = i
                 else:
@@ -376,7 +383,7 @@ def fix_one(seq, graph):
         kmers = rolling_window(modified_seq, ksize)
         for b in bases:
             modified_seq[i] = b
-            trusted_kmers = np.array(graph.get_kmer_counts(np.str.join('',modified_seq)), dtype = np.bool)
+            trusted_kmers = np.array(graph.get_kmer_counts(modified_seq.tostring().decode('utf32')), dtype = np.bool)
             start_pos = int(min(max(i - ksize/2 + 1, 0), len(seq) - ksize))
             if trusted_kmers[start_pos]:
                 num_in_graph = np.sum(trusted_kmers[start_pos:])
