@@ -9,6 +9,7 @@ pytest-cov = "*"
 coverage = "*"
 sphinx = "*"
 sphinx_rtd_theme = "*"
+cython = "*"
 
 [packages]
 numpy = "*"
@@ -18,7 +19,7 @@ scikit-learn = "*"
 pysam = "*"
 matplotlib = "*"
 seaborn = "*"
-khmer = "*"
+khmer = {git = "https://github.com/dib-lab/khmer.git"}
 
 [requires]
 python_version = "3.8"
