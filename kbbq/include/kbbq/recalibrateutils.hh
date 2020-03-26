@@ -2,7 +2,10 @@
 #define RECALIBRATEUTILS_H
 
 #include <vector>
-#include "readutils.h"
+#include <string>
+#include "readutils.hh"
+#include "covariateutils.hh"
+#include "bloom.hh"
 
 namespace recalibrateutils{
 
@@ -23,6 +26,7 @@ struct dq_t
 
 std::vector<int> recalibrate_read(CReadData read, dq_t dqs, int minscore = 6);
 
+bloom::bloomary_t subsample_kmers(std::string filename, int ksize, double alpha);
 
 }
 

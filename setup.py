@@ -4,6 +4,13 @@ import kbbq
 #see https://packaging.python.org/tutorials/packaging-projects/
 #see https://packaging.python.org/guides/distributing-packages-using-setuptools/
 
+# In [11]: site.getsitepackages()                                                 
+# Out[11]: ['/usr/lib/python3.8/site-packages']
+
+# In [12]: site.getusersitepackages()                                             
+# Out[12]: '/home/adam/.local/lib/python3.8/site-packages'
+
+
 with open("README.md", 'r') as fh:
     long_description = fh.read()
 

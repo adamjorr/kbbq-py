@@ -48,7 +48,7 @@ public:
 	CDinucCovariate(size_t rgs, size_t qlen, size_t dilen):
 		std::vector<std::vector<CCovariate>>(rgs, std::vector<CCovariate>(qlen, CCovariate(dilen)))
 		{}
-	void consume_read(const CReadData& read);
+	void consume_read(const CReadData& read, int minscore = 6);
 }
 
 class CCovariateData():
@@ -60,7 +60,7 @@ protected:
 	CDinucCovariate dicov;
 public:
 	CCovariateData(){};
-	void consume_read(const CReadData& read);
+	void consume_read(const CReadData& read, int minscore);
 }
 
 }
