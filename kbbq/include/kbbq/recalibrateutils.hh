@@ -6,6 +6,7 @@
 #include "readutils.hh"
 #include "covariateutils.hh"
 #include "bloom.hh"
+#include "htsiter.hh"
 
 namespace recalibrateutils{
 
@@ -26,7 +27,14 @@ struct dq_t
 
 std::vector<int> recalibrate_read(CReadData read, dq_t dqs, int minscore = 6);
 
-bloom::bloomary_t subsample_kmers(std::string filename, int ksize, double alpha);
+typedef std::array<std::vector<uint64_t>, 1<<PREFIXBITS-1> kmer_cache_t;
+
+//subsample kmers, hash them, and add them to a suffix tree
+//read chunksize kmers at once. if chunksize = 0, read them all
+kmer_cache_t subsample_kmers(KmerSubsampler& s, int chunksize = 0);
+
+//add kmers in a given cache to the given assembly of bloom filters.
+void add_kmers_to_bloom(kmer_cache_t kmers, bloom::bloomary_t& filters);
 
 }
 

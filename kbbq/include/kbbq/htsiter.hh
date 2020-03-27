@@ -5,6 +5,7 @@
 #include "minionrng/minion.hpp"
 
 //unsigned char* s = bam_get_seq(bamrecord);
+namespace htsiter{
 
 class BamFile{
 public:
@@ -51,8 +52,8 @@ public:
 	minion::Random rng;
 	std::bernoulli_distribution d;
 	std::string readseq = "";
-	std::vector<std::string> kmers;
-	size_t readpos = 0;
+	std::vector<uint64_t> kmers;
+	size_t cur_kmer = 0;
 	int k;
 	KmerSubsampler(std::string filename): KmerSubsampler(filename, 32){}
 	KmerSubsampler(std::string filename, int k): KmerSubsampler(filename, k, .15){}
@@ -61,21 +62,28 @@ public:
 	
 	//return the next kmer
 	//once the file is finished iterating and there are no remaining kmers,
-	//return the empty string.
-	std::string next_kmer(){
-		if(readpos + k <= readpos.length()){ //there's enough for a kmer
-			return readseq.substr(readpos++, k); //return the kmer and increment
-		}else{
-			readseq = file.next_str(); //get the next read
-			readpos = 0; //reset the position
-			return readseq.empty() ? readseq : this->next_kmer(); //if readseq empty, return empty
-			//otherwise try again.
+	//return 0. That means you should check readseq.empty() if you get a 0!
+	uint64_t next_kmer(){
+		if(cur_kmer < kmers.length()){
+			return kmers[cur_kmer++]; //return the current kmer and advance
+		} else {
+			readseq = file.next_str();
+			if(readseq.empty()){
+				return 0; //no more sequences
+			} else {
+				hashes = bloom::hash_seq(readseq, k); //get new vector of hashes
+				cur_kmer = 0; //reset current kmer
+				return this->next_kmer(); //try again
+			}	
 		}
 	}
 
-	std::string next(){
-		std::string kmer = this->next_kmer();
-		if(!kmer.empty()){
+	//return the next kmer that survives sampling
+	//once there are no more kmers return 0.
+	// check to see if readseq.empty() if you get a 0 result!
+	uint64_t next(){
+		uint64_t kmer = this->next_kmer();
+		if(!readseq.empty()){
 			if(d(rng)){ //sampled
 				return kmer;
 			}
@@ -83,6 +91,8 @@ public:
 				return this->next();
 			}
 		}
-		return kmer; // empty
+		return 0; // empty
 	}
+}
+
 }
