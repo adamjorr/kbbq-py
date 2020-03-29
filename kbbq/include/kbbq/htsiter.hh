@@ -3,11 +3,24 @@
 #include <random>
 #include "include/htslib/htslib/hts.h"
 #include "minionrng/minion.hpp"
+#include "readutils.hh"
+#include <zlib.h>
+KSEQ_INIT(gzFile, gzread);
+
 
 //unsigned char* s = bam_get_seq(bamrecord);
 namespace htsiter{
 
-class BamFile{
+class HTSFile{
+public:
+	HTSFile();
+	~HTSFile();
+	virtual int next()=0;
+	virtual std::string next_str()=0;
+	virtual readutils::CReadData get()=0;
+}
+
+class BamFile: public HTSFile{
 public:
 	samFile *sf;
 	hts_idx_t *idx;
@@ -31,34 +44,43 @@ public:
 	// to use: while (ret = BamFile.next() >= 0){//do something with this->r}
 	int next(){return sam_itr_next(sf, itr, r);}
 	// return next read as a string. if there are no more, return the empty string.
-	std::string next_str(){this->next() >= 0 ? std::string(bam_get_seq(r)) : ""}
-
+	std::string next_str(){return this->next() >= 0 ? std::string(bam_get_seq(r)) : ""}
+	//
+	readutils::CReadData get(){return readutils::CReadData(this->r);}
 
 }; //end of BamFile class
 
-class FastqFile
+class FastqFile: public HTSFile
 {
 public:
-	FastqFile();
-	~FastqFile();
-	
+	gzFile fh;
+	kseq_t* r;
+	FastqFile(std::string filename){
+		fh = gzopen(filename.c_str(),"r")
+		r = kseq_init(fh);
+	};
+	~FastqFile(){
+		kseq_destroy(r);
+		gzclose(fh);
+	}
+	int next(){return kseq_read(r);}
+	std::string next_str(){return this->next() >= 0? std::string(this->r->seq.s): ""}
+	readutils::CReadData get(){return readutils::CReadData(this->r);}
 };
 
-//FileType needs a next_str() method that returns a non-empty string on success.
-template <typename FileType>
 class KmerSubsampler{
 public:
-	FileType file;
+	HTSFile* file;
 	minion::Random rng;
 	std::bernoulli_distribution d;
 	std::string readseq = "";
 	std::vector<uint64_t> kmers;
 	size_t cur_kmer = 0;
 	int k;
-	KmerSubsampler(std::string filename): KmerSubsampler(filename, 32){}
-	KmerSubsampler(std::string filename, int k): KmerSubsampler(filename, k, .15){}
-	KmerSubsampler(std::string filename, int k, double alpha): KmerSubsampler(filename, k, alpha, minion::create_uint64_seed(minion::create_seed_seq())){}
-	KmerSubsampler(std::string filename, int k, double alpha, uint64_t seed): file(filename), k(k), d(alpha) {rng.seed(seed);}
+	KmerSubsampler(HTSFile* file): KmerSubsampler(file, 32){}
+	KmerSubsampler(HTSFile* file, int k): KmerSubsampler(file, k, .15){}
+	KmerSubsampler(HTSFile* file, int k, double alpha): KmerSubsampler(file, k, alpha, minion::create_uint64_seed(minion::create_seed_seq())){}
+	KmerSubsampler(HTSFile* file, int k, double alpha, uint64_t seed): file(file), k(k), d(alpha) {rng.seed(seed);}
 	
 	//return the next kmer
 	//once the file is finished iterating and there are no remaining kmers,
@@ -71,10 +93,10 @@ public:
 			if(readseq.empty()){
 				return 0; //no more sequences
 			} else {
-				hashes = bloom::hash_seq(readseq, k); //get new vector of hashes
+				kmers = bloom::hash_seq(readseq, k); //get new vector of hashes
 				cur_kmer = 0; //reset current kmer
 				return this->next_kmer(); //try again
-			}	
+			}
 		}
 	}
 

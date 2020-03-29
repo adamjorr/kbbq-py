@@ -38,7 +38,10 @@ static std::vector<uint64_t> hash_seq(std::string seq, int k);
 // static void subsample_and_insert(Bloom& b, std::vector<uint64_t> hashes, double alpha, minion::Random& rng);
 
 //subsample the hashes and insert into the proper bloom filter based on the prefix.
+//htsiter::KmerSubsampler is the prefferred way to do this.
 static void subsample_and_insert(bloomary_t bfs, std::vector<uint64_t> hashes, double alpha);
+
+std::array<std::vector<int>,2> overlapping_kmers_in_bf(std::string seq, bloomary_t b);
 
 class Bloom
 {

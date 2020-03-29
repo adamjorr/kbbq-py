@@ -57,7 +57,7 @@ cdef pair[vector[int], vector[int]] c_overlapping_kmers_in_graph(string s, CpNod
             if kmers[i]:
                 incount = incount + 1
             else:
-                notincount = notincount - 1
+                notincount = notincount + 1
         possible = incount + notincount
         ingraph.push_back(incount)
         possiblevec.push_back(possible)

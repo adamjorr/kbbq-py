@@ -27,21 +27,6 @@ namespace bloom
 		}
 	}
 
-	//in the yak implementation,
-	//each prefix goes to an independent filter to make things thread safe
-	//so each thread should be responsible for a prefix.
-	//that means to use this properly, the vector hashes should all want to be added to the single
-	//bloom filter b. (and should all have the same prefix)
-	static void subsample_and_insert(Bloom& b, std::vector<uint64_t> hashes, double alpha, minion::Random& rng){
-		std::bernoulli_distribution dist(alpha);
-		for(uint64_t h: hashes){
-			if(dist(rng)){ //random sample; dist(rng) evaluates to true with probability alpha
-				b.insert(h);
-			}
-		}
-
-	}
-
 	static void subsample_and_insert(bloomary_t bfs, std::vector<uint64_t> hashes, double alpha, minion::Random& rng){
 		int mask = (1<<PREFIXBITS)-1;
 		std::bernoulli_distribution dist(alpha);
@@ -51,6 +36,71 @@ namespace bloom
 			}
 		}
 	}
+
+	std::array<std::vector<int>,2> overlapping_kmers_in_bf(std::string seq, bloomary_t b, int k = 31){
+		int i, l; //i is the character index, l is the length of the current stretch of non-N bases
+		uint64_t x[2];
+		uint64_t mask = (1ULL<<k*2) - 1;
+		uint64_t shift = (k-1) * 2;
+		std::vector<bool> kmers; //kmer indices are in l space
+		std::vector<int> inbf(seq.length()); //inbf and possible indices are in i space.
+		std::vector<int> possible(seq.length());
+		int n_in;
+		int n_out;
+		kmers.reserve(seq.length() - k + 1); //whether the kmer ENDING in that position is in the BF
+		for (i = l = 0, x[0] = x[1] = 0; i < seq.length(); ++i) {
+			int c = seq_nt4_table[seq[i]];
+			if (c < 4) { // not an "N" base
+				x[0] = (x[0] << 2 | c) & mask;                  // forward strand
+				x[1] = x[1] >> 2 | (uint64_t)(3 - c) << shift;  // reverse strand
+				if (++l >= k) { // we find a k-mer
+					// n_possible = n_possible + 1 <= k ? n_possible + 1 : k;
+					// possible[i-k] = n_possible;
+					uint64_t y = x[0] < x[1]? x[0] : x[1];
+					uint64_t h = yak_hash64(y, mask);
+					bool k_in = b[h&((1<<PREFIXBITS)-1)].query(h>>PREFIXBITS);
+					kmers.push_back(k_in);
+					if(k_in){
+						n_in++; //n_in += !!k_in; n_out += !!!k_in
+					} else{
+						n_out++;
+					}
+					//we have a long enough stretch of kmers that the old ones start to matter
+					if(l >= 2 * k){ //l-k>=k;
+						if(kmers[l-k-1]){
+							n_in--;
+						} else {
+							n_out--;
+						}
+					}
+
+					inbf[i -k + 1] = n_in;
+					possible[i -k + 1] = n_in + n_out; //n_possible = n_in + n_out
+				} else {
+					kmers.push_back(false);
+				}
+			} else{
+				l = 0, x[0] = x[1] = 0, n_possible = 0; // if there is an "N", restart
+				kmers.clear();
+			}
+		}
+		if(l >= k){ //we ended with a full kmer so we have to deal with the end positions
+			for(; i < seq.length()+k; ++i){
+				if(++l >= 2 * k){ //l-k>=k;
+					if(kmers[l-k-1]){
+						n_in--;
+					} else {
+						n_out--;
+					}
+				}
+				inbf[i - k + 1] = n_in;
+				possible[i - k + 1] = n_in + n_out;
+			}
+		}
+		std::array<std::vector<int>,2> ret = {inbf, possible};
+		return ret;
+	}
+
 
 	Bloom::Bloom(int nshift, int nhashes): nshift(nshift), nhashes(nhashes) {
 		//nshift + YAK_BLK_SHIFT should be less than 64 (nshift <= 55)

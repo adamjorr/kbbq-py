@@ -33,6 +33,8 @@ namespace readutils{
 			int get_rg_int();
 			std::string get_pu();
 			std::vector<bool> not_skipped_errors();
+			//fill errors attribute given the bloom filter and thresholds.
+			void infer_read_errors(bloom::bloom_ary_t b, std::vector<int> thresholds);
 			static void load_rgs_from_bamfile(bam_hdr_t* header);
 
 	};

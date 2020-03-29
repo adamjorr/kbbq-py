@@ -37,7 +37,7 @@ namespace readutils{
 	}
 	// if second is >1, that means infer.
 
-	CReadData::CReadData(kseq_t* fastqrecord, std::string rg, int second, std::string namedelimiter){
+	CReadData::CReadData(kseq_t* fastqrecord, std::string rg = "", int second = 2, std::string namedelimiter = "_"){
 		this->seq = std::string(fastqrecord->seq.s);
 		// this->qual.assign(fastqrecord->qual.s, fastqrecord->qual.l);
 		std::string quals(fastqrecord->qual.s);
@@ -150,6 +150,15 @@ namespace readutils{
 			unskipped[i] = (unskipped[i] && this->errors[i]);
 		}
 		return unskipped;
+	}
+
+	void CReadData::infer_read_errors(bloom::bloom_ary_t b, std::vector<int> thresholds, int k){
+		overlapping = bloom::overlapping_kmers_in_bf(this->seq, b, k);
+		std::vector<int> in = overlapping[0];
+		std::vector<int> possible = overlapping[1];
+		for(int i = 0; i < errors.length(); ++i){
+			this->errors[i] = (in[i] <= thresholds[possible[i]] || this->qual[i] <= 6);
+		}
 	}
 }
 
