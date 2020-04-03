@@ -12,6 +12,9 @@
 // KSEQ_INIT(BGZF *, bgzf_read)
 
 namespace readutils{
+
+	int correction_len(bloom::bloom_ary_t& t, int k);
+
 	class CReadData{
 		private:
 			static std::unordered_map<std::string, std::string> rg_to_pu;
@@ -34,8 +37,12 @@ namespace readutils{
 			std::string get_pu();
 			std::vector<bool> not_skipped_errors();
 			//fill errors attribute given the bloom filter and thresholds.
-			void infer_read_errors(bloom::bloom_ary_t b, std::vector<int> thresholds);
+			void infer_read_errors(bloom::bloom_ary_t& b, std::vector<int> thresholds);
+			//fix one error and return the length of kmers it fixed
+			int correct_one(bloom::bloom_ary_t& t, int k);
 			static void load_rgs_from_bamfile(bam_hdr_t* header);
+			void get_errors(bloom::bloom_ary_t& trusted, int k, int minqual = 6);
+			std::vector<int> recalibrate(CCovariateData data, int minqual = 6);
 
 	};
 }

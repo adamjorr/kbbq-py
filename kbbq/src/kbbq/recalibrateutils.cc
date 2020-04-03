@@ -25,7 +25,7 @@ void add_kmers_to_bloom(kmer_cache_t& kmers, bloom::bloomary_t& filters){
 	}
 }
 
-kmer_cache_t find_trusted_kmers(HTSFile* file, bloom::bloomary_t& sampled, std::vector<int> thresholds, chunksize = -1){
+kmer_cache_t find_trusted_kmers(HTSFile* file, bloom::bloomary_t& sampled, std::vector<int> thresholds, uint64_t chunksize = -1){
 	uint64_t counted;
 	kmer_cache_t ret;
 	uint64_t x[2];
@@ -58,6 +58,16 @@ kmer_cache_t find_trusted_kmers(HTSFile* file, bloom::bloomary_t& sampled, std::
 		}
 	}
 	return ret;
+}
+
+covariateutils::CCovariateData get_covariatedata(HTSFile* file, bloom::bloomary_t& trusted, int k){
+	CCovariateData data;
+	while(file->next() >= 0){
+		readutils::CReadData read = file->get();
+		read.get_errors(trusted, k);
+		data.consume_read(read);
+	}
+	return data;
 }
 
 }

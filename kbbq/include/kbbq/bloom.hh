@@ -1,6 +1,7 @@
 #ifndef KBBQ_BLOOM_HH
 #define KBBQ_BLOOM_HH
 #include <cstdint>
+#include <utility>
 #include "yak/yak.h"
 #include "yak/yak-priv.h" //provides yak_hash64()
 #include "include/htslib/htslib/hts.h"
@@ -42,6 +43,21 @@ static std::vector<uint64_t> hash_seq(std::string seq, int k);
 static void subsample_and_insert(bloomary_t bfs, std::vector<uint64_t> hashes, double alpha);
 
 std::array<std::vector<int>,2> overlapping_kmers_in_bf(std::string seq, bloomary_t b);
+
+//return the total number of kmers in b
+int nkmers_in_bf(std::string seq, bloomary_t b, int k);
+
+//return the INCLUSIVE indices bounding the largest stretch of trusted sequence
+//if the first value is -1, there are no trusted kmers.
+//if the 2nd value is -1 (== std::string::npos), until the end of the string is trusted.
+//thus the whole string being trusted looks like {0, std::string::npos}
+//while no part of the string being trusted looks like {std::string::npos, std::string::npos}
+std::array<size_t,2> find_longest_trusted_seq(std::string seq, bloomary_t b, int k);
+
+//find the longest possible fix for the kmer at position (k-1) until the end
+//return the best character (multiple in case of a tie) and the length of the fix.
+//if the length of the fix is 0, no fix was found and correction should end.
+std::pair<std::vector<char>, int> find_longest_fix(std::string seq, bloomary_t& t, int k)
 
 class Bloom
 {

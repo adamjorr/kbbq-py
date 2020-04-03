@@ -18,6 +18,18 @@ namespace covariateutils{
 		}
 	}
 
+	rgdq_t CRGCovariate::delta_q(int prior, int max){
+		rgdq_t dq(this->size());
+		for(int i = 0; i < this->size(); ++i){ //i is rgs here
+			for(int possible = 0; possible < MAXQ+1; possible++){
+				int diff = std::abs(prior - possible);
+				long double prior_prob = normal_prior[diff];
+				long double p = recalibrateutils::q_to_p(possible);
+				
+			}
+		}
+	}
+
 	void CQCovariate::consume_read(const CReadData& read){
 		int rg = read.get_rg_int();
 		int q;
@@ -77,14 +89,23 @@ namespace covariateutils{
 		// seq_nt16_int[]: 4 bit -> 2 bits (0/1/2/3)
 	}
 
-	void CCovariateData::consume_read(const CReadData& read, int minscore){
+	void CCovariateData::consume_read(const CReadData& read, int minscore = 6){
 		rgcov.consume_read(read);
 		qcov.consume_read(read);
 		cycov.consume_read(read);
 		dicov.consume_read(read, minscore);
 	}
 
-
+	dq_t get_dqs(covariateutils::CCovariateData){
+		std::vector<long double> expected_errors(data.qcov.size(),0);
+		meanq_t meanq(data.qcov.size(),0);
+		for(int rg = 0; rg < data.qcov.size(); ++rg){
+			for(int q = 0; q < data.qcov[rg].size(); ++q){
+				expected_errors[rg] += q_to_p(q) * data.qcov[rg][q][1];
+			}
+			meanq[rg] = p_to_q(expected_errors[rg] / data.rgcov[rg][1]);
+		}
+	}
 
 
 
