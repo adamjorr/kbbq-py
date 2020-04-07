@@ -3,6 +3,8 @@
 
 namespace recalibrateutils{
 
+using htsiter;
+
 //if the number of reads doesn't fit in a uint64_t call this twice :)
 kmer_cache_t subsample_kmers(KmerSubsampler& s, uint64_t chunksize = -1){
 	uint64_t kmer = 0;
@@ -68,6 +70,22 @@ covariateutils::CCovariateData get_covariatedata(HTSFile* file, bloom::bloomary_
 		data.consume_read(read);
 	}
 	return data;
+}
+
+void recalibrate_and_write(HTSFile* in, dq_t dqs, std::string outfn){
+	if(in->open_out(outfn) < 0){
+		//error!! TODO
+		return;
+	}
+	while(in->next() >= 0){
+		readutils::CReadData read = in->get();
+		read.recalibrate(dqs);
+		in->recalibrate(read.qual);
+		if(in->write() < 0){
+			//error! TODO
+			return;
+		}
+	}
 }
 
 }

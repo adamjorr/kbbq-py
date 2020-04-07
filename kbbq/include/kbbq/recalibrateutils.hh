@@ -49,9 +49,8 @@ inline int p_to_q(long double p, int maxscore = 42){return p > 0 ? (int)(-10 * s
 //this can be parallelized easily since each read is independent
 covariateutils::CCovariateData get_covariatedata(HTSFile* file, bloom::bloomary_t& trusted);
 
-dq_t get_dqs(covariateutils::CCovariateData);
-
 //recalibrate all reads given the CovariateData
+void recalibrate_and_write(HTSFile* in, dq_t dqs, std::string outfn);
 
 }
 

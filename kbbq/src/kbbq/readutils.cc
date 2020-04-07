@@ -321,10 +321,25 @@ namespace readutils{
 		this->seq = original_seq;
 	}
 
-	std::vector<int> CReadData::recalibrate(CCovariateData data, int minqual = 6){
+	std::vector<int> CReadData::recalibrate(dq_t dqs, int minqual = 6){
+		std::vector<int> recalibrated(this->seq.length());
+		int rg = this->get_rg_int();
 		for(int i = 0; i < this->seq.length(); ++i){
-			
+			int q = this->qual[i];
+			if(q >= minqual){
+				recalibrated[i] = dqs.meanq[rg] + dqs.rgdq[rg] + dqs.qscoredq[rg][q] +
+				dqs.cycledq[rg][q][this->second][i];
+				if(i > 0){
+					int first = seq_nt4_table[this->seq[i-1]];
+					int second = seq_nt4_table[this->seq[i]];
+					if(first < 4 && second < 4){
+						int8_t dinuc = dinuc_to_int(first, second);
+						recalibrated[i] += dqs.dinucdq[rg][q][dinuc];
+					}
+				}
+			}
 		}
+		return recalibrated;
 	}
 }
 

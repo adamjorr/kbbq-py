@@ -42,7 +42,7 @@ namespace readutils{
 			int correct_one(bloom::bloom_ary_t& t, int k);
 			static void load_rgs_from_bamfile(bam_hdr_t* header);
 			void get_errors(bloom::bloom_ary_t& trusted, int k, int minqual = 6);
-			std::vector<int> recalibrate(CCovariateData data, int minqual = 6);
+			std::vector<int> recalibrate(dq_t dqs, int minqual = 6);
 
 	};
 }

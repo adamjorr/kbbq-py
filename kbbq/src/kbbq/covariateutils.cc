@@ -18,16 +18,26 @@ namespace covariateutils{
 		}
 	}
 
-	rgdq_t CRGCovariate::delta_q(int prior, int max){
+	//TODO: fix priors
+	rgdq_t CRGCovariate::delta_q(meanq_t prior){
 		rgdq_t dq(this->size());
 		for(int i = 0; i < this->size(); ++i){ //i is rgs here
+			int map_q = 0; //maximum a posteriori q
+			int best_posterior = 0;
 			for(int possible = 0; possible < MAXQ+1; possible++){
-				int diff = std::abs(prior - possible);
+				int diff = std::abs(prior[i] - possible);
 				long double prior_prob = normal_prior[diff];
 				long double p = recalibrateutils::q_to_p(possible);
-				
+				long double loglike = log_binom_pmf(*this[i][0], *this[i][1], p);
+				long double posterior = prior_prob + loglike;
+				if(posterior > best_posterior){
+					map_q = possible;
+					best_posterior = posterior;
+				}
 			}
+			dq[i] = map_q - prior[i];
 		}
+		return dq;
 	}
 
 	void CQCovariate::consume_read(const CReadData& read){
@@ -41,6 +51,30 @@ namespace covariateutils{
 				this[rg][q].increment(std::array<int,2>((int)read.errors[i], (int)read.skips[i]));
 			}
 		}
+	}
+
+	qscoredq_t CQCovariate::delta_q(prior1_t prior){
+		qscoredq_t dq(this->size());
+		for(int i = 0; i < this->size(); ++i){ //i is rgs here
+			dq[i] = std::vector(*this[i].size());
+			for(int j = 0; j < *this[i].size(); ++j){ //j is q's here
+				int map_q = 0; //maximum a posteriori q
+				int best_posterior = 0;
+				for(int possible = 0; possible < MAXQ+1; possible++){
+					int diff = std::abs(prior[i] - possible);
+					long double prior_prob = normal_prior[diff];
+					long double p = recalibrateutils::q_to_p(possible);
+					long double loglike = log_binom_pmf(*this[i][j][0], *this[i][j][1], p);
+					long double posterior = prior_prob + loglike;
+					if(posterior > best_posterior){
+						map_q = possible;
+						best_posterior = posterior;
+					}
+				}
+				dq[i][j] = map_q - prior[i];
+			}
+		}
+		return dq;
 	}
 
 	void CCycleCovariate::consume_read(const CReadData& read){
@@ -57,6 +91,35 @@ namespace covariateutils{
 				this[rg][q][read.second][i].increment(std::array<int,2>((int)read.errors[i], 1));
 			}
 		}
+	}
+
+	cycledq_t CCycleCovariate::delta_q(prior2_t prior){
+		cycledq_t dq(this->size()); //rg -> q -> fwd(0)/rev(1) -> cycle -> values
+		for(int i = 0; i < this->size(); ++i){ //i is rgs here
+			dq[i] = std::vector(*this[i].size());
+			for(int j = 0; j < *this[i].size(); ++j){ //j is q's here
+				for(int k = 0; k < 2; ++k){ //fwd/rev
+					dq[i][j][k] = std::vector(*this[i][j][k].size());
+					for(l = 0; l < *this[i][j][k].size()){ //cycle value
+						int map_q = 0; //maximum a posteriori q
+						int best_posterior = 0;
+						for(int possible = 0; possible < MAXQ+1; possible++){
+							int diff = std::abs(prior[i][j] - possible);
+							long double prior_prob = normal_prior[diff];
+							long double p = recalibrateutils::q_to_p(possible);
+							long double loglike = log_binom_pmf(*this[i][j][k][l][0], *this[i][j][k][l][1], p);
+							long double posterior = prior_prob + loglike;
+							if(posterior > best_posterior){
+								map_q = possible;
+								best_posterior = posterior;
+							}
+						}
+						dq[i][j][k][l] = map_q - prior[i][j];
+					}
+				}
+			}
+		}
+		return dq;
 	}
 
 	//make sure first and second are 2 bit encoded nucleotides.
@@ -89,6 +152,33 @@ namespace covariateutils{
 		// seq_nt16_int[]: 4 bit -> 2 bits (0/1/2/3)
 	}
 
+	dinucdq_t CDinucCovariate::delta_q(prior2_t prior){
+		dinucdq_t dq(this->size()); //rg -> q -> fwd(0)/rev(1) -> cycle -> values
+		for(int i = 0; i < this->size(); ++i){ //i is rgs here
+			dq[i] = std::vector(*this[i].size());
+			for(int j = 0; j < *this[i].size(); ++j){ //j is q's here
+				dq[i][j] = std::vector(*this[i][j].size());
+				for(k = 0; k < *this[i][j].size()){ //k is dinuc
+					int map_q = 0; //maximum a posteriori q
+					int best_posterior = 0;
+					for(int possible = 0; possible < MAXQ+1; possible++){
+						int diff = std::abs(prior[i][j] - possible);
+						long double prior_prob = normal_prior[diff];
+						long double p = recalibrateutils::q_to_p(possible);
+						long double loglike = log_binom_pmf(*this[i][j][k][0], *this[i][j][k][1], p);
+						long double posterior = prior_prob + loglike;
+						if(posterior > best_posterior){
+							map_q = possible;
+							best_posterior = posterior;
+						}
+					}
+					dq[i][j][k] = map_q - prior[i][j];
+				}
+			}
+		}
+		return dq;
+	}
+
 	void CCovariateData::consume_read(const CReadData& read, int minscore = 6){
 		rgcov.consume_read(read);
 		qcov.consume_read(read);
@@ -96,15 +186,32 @@ namespace covariateutils{
 		dicov.consume_read(read, minscore);
 	}
 
-	dq_t get_dqs(covariateutils::CCovariateData){
-		std::vector<long double> expected_errors(data.qcov.size(),0);
-		meanq_t meanq(data.qcov.size(),0);
-		for(int rg = 0; rg < data.qcov.size(); ++rg){
-			for(int q = 0; q < data.qcov[rg].size(); ++q){
-				expected_errors[rg] += q_to_p(q) * data.qcov[rg][q][1];
+	dq_t CCovariateData::get_dqs(){
+		dq_t dq;
+		std::vector<long double> expected_errors(this->qcov.size(),0);
+		meanq_t meanq(this->qcov.size(),0);
+		for(int rg = 0; rg < this->qcov.size(); ++rg){
+			for(int q = 0; q < this->qcov[rg].size(); ++q){
+				expected_errors[rg] += q_to_p(q) * this->qcov[rg][q][1];
 			}
-			meanq[rg] = p_to_q(expected_errors[rg] / data.rgcov[rg][1]);
+			meanq[rg] = p_to_q(expected_errors[rg] / this->rgcov[rg][1]);
 		}
+		dq.meanq = meanq;
+		dq.rgdq = this->rgcov.delta_q(meanq);
+		prior1_t rgprior(this->qcov.size());
+		for(int rg = 0; rg < this->qcov.size(); ++rg){
+			qprior[rg].push_back(meanq[rg] + dq.rgdq[rg]);
+		}
+		dq.qscoredq = this->qcov.delta_q(rgprior);
+		prior2_t qprior(this->qcov.size())
+		for(int rg = 0; rg < this->qcov.size(); ++rg){
+			for(int q = 0; q < this->qcov[rg].size(); ++q){
+				qprior.push_back(meanq[rg] + dq.qscoredq[rg][q]);
+			}
+		}
+		dq.cycledq = this->cycov.delta_q(qprior);
+		dq.dinucdq = this->dicov.delta_q(qprior);
+		return dq;
 	}
 
 
