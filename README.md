@@ -2,13 +2,13 @@
 
 [![codecov](https://codecov.io/gh/adamjorr/kbbq-py/branch/master/graph/badge.svg)](https://codecov.io/gh/adamjorr/kbbq-py)
 [![CircleCI](https://circleci.com/gh/adamjorr/kbbq-py.svg?style=svg)](https://circleci.com/gh/adamjorr/kbbq-py)
-[![Documentation Status](https://readthedocs.org/projects/kbbq-py/badge/?version=latest)](https://kbbq-py.readthedocs.io/en/latest/?badge=latest)
+[![Documentation Status](https://readthedocs.org/projects/kbbq/badge/?version=latest)](https://kbbq.readthedocs.io/en/latest/?badge=latest)
 
 k-mer based base quality recalibration
 
 This is a python prototype of kbbq; the C++ version can be found at https://www.github.com/adamjorr/kbbq
 
-The full documentation can be found here: https://kbbq-py.readthedocs.io/
+The full documentation can be found here: https://kbbq.readthedocs.io/
 
 ## Installation
 
